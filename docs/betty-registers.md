@@ -76,7 +76,7 @@ the monitor's 0-through-15 dump loop.
 
 ## Bring-up behavior
 
-For the first serial-console milestone, implement only the observable contract:
+The current driver implements the observable contract used by the boot path:
 
 1. Dino accepts an SF0 command at `+0x080`.
 2. It raises/completes the expected SF0/SF1 handshake flags in interrupt bank
@@ -85,11 +85,12 @@ For the first serial-console milestone, implement only the observable contract:
    `sibSf0Status` at `+0x088`.
 4. Betty writes update writable shadows; register 12 remains a plausible,
    stable ID.
-5. The monitor's `BettyTest` write/readback sequence completes without
-   entering its failure loop.
+5. Betty ID register 12 reads as revision `0x1002`, one of the two revisions
+   accepted by `touch_init`.
 
-This is deliberately narrower than emulating the touch ADC or audio path. The
-production driver already provides the next ground truth:
+This remains deliberately narrower than emulating the touch ADC or audio path.
+Driving the monitor's complete `BettyTest` readback suite is still an open
+Phase 3 acceptance test. The production driver provides the next ground truth:
 `SibCmdTakeAdcReading` writes register 10, and
 `SibCmdEnableBettyInt` maintains registers 2 and 3 through shadow values.
 
@@ -99,7 +100,8 @@ With the SDK ELF extracted as described in
 [`rom-layout.md`](rom-layout.md):
 
 ```sh
-elf=roms/sdk/Program_Files/debug/apollo/MagicCAP-USA
+magic_cap_assets="$HOME/fun/magic-cap-assets"
+elf="$magic_cap_assets/sdk/extracted/Program_Files/debug/apollo/MagicCAP-USA"
 
 mips-linux-gnu-objdump -d \
   --start-address=0x13c02a80 --stop-address=0x13c03820 "$elf"

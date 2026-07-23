@@ -29,51 +29,62 @@ Its InstallShield cabinets contain these particularly useful Apollo artifacts:
 | `Program Files/include/MemoryMapDino.asm.h` | Link/download memory-map constants |
 
 The SDK's ROM image is byte-identical to the separately published image. Keep
-all extracted SDK and ROM files under `roms/`, which is git-ignored.
+all persistent binary inputs outside the Git repositories under
+`~/fun/magic-cap-assets/`. This avoids committing copyrighted binaries without
+making research inputs ephemeral.
 
 ### Download the ROM and flasher image
 
-Run these commands from the repository root. They download the files into the
-git-ignored `roms/` directory; none of the resulting binaries should be added
-to Git.
+Run these commands from the repository root. They keep the files in a
+persistent sibling research directory and arrange the ROM as MAME expects;
+none of the resulting binaries should be added to Git.
 
 ```sh
-mkdir -p roms
+magic_cap_assets="$HOME/fun/magic-cap-assets"
+mkdir -p "$magic_cap_assets/roms/datarover840"
 
 curl --fail --location \
-  --output roms/MagicCap-USA.zip \
+  --output "$magic_cap_assets/roms/MagicCap-USA.zip" \
   https://joshcarter.com/magic_cap/packages/MagicCap-USA.zip
-unzip -j -o roms/MagicCap-USA.zip MagicCap-USA.image -d roms
+unzip -j -o "$magic_cap_assets/roms/MagicCap-USA.zip" \
+  MagicCap-USA.image \
+  -d "$magic_cap_assets/roms/datarover840"
+mv "$magic_cap_assets/roms/datarover840/MagicCap-USA.image" \
+  "$magic_cap_assets/roms/datarover840/magiccap-usa.image"
 
 curl --fail --location \
-  --output roms/DataRover840FRomFlasher.gz \
+  --output "$magic_cap_assets/roms/DataRover840FRomFlasher.gz" \
   https://joshcarter.com/magic_cap/packages/DataRover840FRomFlasher.gz
-gzip --decompress --keep roms/DataRover840FRomFlasher.gz
+gzip --decompress --keep \
+  "$magic_cap_assets/roms/DataRover840FRomFlasher.gz"
 ```
 
 Verify the extracted files:
 
 ```sh
-echo '94785cb334f14eac00ed200af014c35972b4f25694103bc6a49b3afa280a6f1b  roms/MagicCap-USA.image' \
-  | sha256sum --check
-echo '16fe122872e295ee03be4be1322013a6e504997d9996997c8c7b0997ec65c5f7  roms/DataRover840FRomFlasher' \
-  | sha256sum --check
+echo '94785cb334f14eac00ed200af014c35972b4f25694103bc6a49b3afa280a6f1b  magiccap-usa.image' \
+  | (cd "$magic_cap_assets/roms/datarover840" && sha256sum --check)
+echo '16fe122872e295ee03be4be1322013a6e504997d9996997c8c7b0997ec65c5f7  DataRover840FRomFlasher' \
+  | (cd "$magic_cap_assets/roms" && sha256sum --check)
 
-python3 tools/rom_info.py roms/MagicCap-USA.image \
-  --flasher roms/DataRover840FRomFlasher
+python3 tools/rom_info.py \
+  "$magic_cap_assets/roms/datarover840/magiccap-usa.image" \
+  --flasher "$magic_cap_assets/roms/DataRover840FRomFlasher"
 ```
 
 `WinDownload.exe` is not needed by the emulator, but the archived tool can be
 obtained separately when its serial protocol needs investigation:
 
 ```sh
+magic_cap_assets="$HOME/fun/magic-cap-assets"
+mkdir -p "$magic_cap_assets/tools/windownload"
 curl --fail --location \
-  --output roms/WinDownload.zip \
+  --output "$magic_cap_assets/tools/WinDownload.zip" \
   https://joshcarter.com/magic_cap/packages/WinDownload.zip
-mkdir -p roms/windownload
-unzip -j -o roms/WinDownload.zip -d roms/windownload
-echo 'da69f8d0ddc5309e47a63316dbe1c7cd52c1dab3722fa4d8b2072c7c3d369eeb  roms/windownload/WinDownload.exe' \
-  | sha256sum --check
+unzip -j -o "$magic_cap_assets/tools/WinDownload.zip" \
+  -d "$magic_cap_assets/tools/windownload"
+echo 'da69f8d0ddc5309e47a63316dbe1c7cd52c1dab3722fa4d8b2072c7c3d369eeb  WinDownload.exe' \
+  | (cd "$magic_cap_assets/tools/windownload" && sha256sum --check)
 ```
 
 ### Download and extract the SDK analysis files
@@ -82,18 +93,19 @@ The SDK is inside a larger Archive.org bundle. Download it and extract the
 three InstallShield cabinet parts:
 
 ```sh
+magic_cap_assets="$HOME/fun/magic-cap-assets"
+mkdir -p "$magic_cap_assets/sdk/installer"
 curl --fail --location \
-  --output roms/Datarover840.zip \
+  --output "$magic_cap_assets/sdk/Datarover840.zip" \
   https://archive.org/download/DataRover840/Datarover840.zip
-echo '4455c41a681006b6cac791c639014b87739c2513212078708cd9efaaf554d839  roms/Datarover840.zip' \
-  | sha256sum --check
+echo '4455c41a681006b6cac791c639014b87739c2513212078708cd9efaaf554d839  Datarover840.zip' \
+  | (cd "$magic_cap_assets/sdk" && sha256sum --check)
 
-mkdir -p roms/sdk-installer
-unzip -j -o roms/Datarover840.zip \
+unzip -j -o "$magic_cap_assets/sdk/Datarover840.zip" \
   'DataRover 840/Developer/IcrasSoftwareDevelopmentKit3.2/data1.cab' \
   'DataRover 840/Developer/IcrasSoftwareDevelopmentKit3.2/data1.hdr' \
   'DataRover 840/Developer/IcrasSoftwareDevelopmentKit3.2/data2.cab' \
-  -d roms/sdk-installer
+  -d "$magic_cap_assets/sdk/installer"
 ```
 
 Install `unshield` using the host package manager (`apt install unshield` on
@@ -101,7 +113,8 @@ Debian/Ubuntu or `brew install unshield` on macOS), then extract only the
 high-value analysis files. All three cabinet parts must remain together:
 
 ```sh
-unshield -d roms/sdk x roms/sdk-installer/data1.cab \
+unshield -d "$magic_cap_assets/sdk/extracted" \
+  x "$magic_cap_assets/sdk/installer/data1.cab" \
   MagicCAP-USA \
   MagicCap-USA.debug.x \
   MagicCAP-USA.image \
@@ -120,13 +133,13 @@ unshield -d roms/sdk x roms/sdk-installer/data1.cab \
 Confirm the two principal Apollo artifacts:
 
 ```sh
-echo '4a97da908226f3f6a803b82aa2a69a32a601f6c985c682f28b28502a91802962  roms/sdk/Program_Files/debug/apollo/MagicCAP-USA' \
-  | sha256sum --check
-echo '09aabfbdfd8d977260bb71c89b64357575478799d97813cbc7c2582118d63de8  roms/sdk/Program_Files/debug/apollo/MagicCap-USA.debug.x' \
-  | sha256sum --check
+echo '4a97da908226f3f6a803b82aa2a69a32a601f6c985c682f28b28502a91802962  MagicCAP-USA' \
+  | (cd "$magic_cap_assets/sdk/extracted/Program_Files/debug/apollo" && sha256sum --check)
+echo '09aabfbdfd8d977260bb71c89b64357575478799d97813cbc7c2582118d63de8  MagicCap-USA.debug.x' \
+  | (cd "$magic_cap_assets/sdk/extracted/Program_Files/debug/apollo" && sha256sum --check)
 
 readelf --file-header --program-headers \
-  roms/sdk/Program_Files/debug/apollo/MagicCAP-USA
+  "$magic_cap_assets/sdk/extracted/Program_Files/debug/apollo/MagicCAP-USA"
 ```
 
 ## The `.image` file is raw ROM data

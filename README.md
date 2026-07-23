@@ -22,7 +22,10 @@ Sources: [PDA Museum](https://pdamuseum.eu/pda/datarover840/), [Old VCR teardown
 The USA ROM image (build 3.1.2j) comes from the [Rosemary Software Archive](https://joshcarter.com/magic_cap/packages/) (`MagicCap-USA.zip` → `MagicCap-USA.image`, 4,528,151 bytes, dated 2000-05-04).
 
 - sha256: `94785cb334f14eac00ed200af014c35972b4f25694103bc6a49b3afa280a6f1b`
-- **Not committed to this repo** — it's copyrighted General Magic software (abandonware, but still). Keep it in `roms/` locally; that directory is git-ignored.
+- **Not committed to this repo** — it's copyrighted General Magic software
+  (abandonware, but still). Keep persistent local downloads outside the Git
+  checkout under `~/fun/magic-cap-assets/`; the MAME-ready ROM path is
+  `~/fun/magic-cap-assets/roms/datarover840/magiccap-usa.image`.
 - Exact ROM, flasher, WinDownload, and SDK acquisition/extraction commands are
   kept in [`docs/rom-layout.md`](docs/rom-layout.md#download-the-rom-and-flasher-image).
 
@@ -85,19 +88,29 @@ Repo, README, survey of existing parts (this document).
   and modem symbols for continued behavioral work.
 - ~~Deliver `docs/memory-map.md` and `docs/betty-registers.md`.~~ ✅
 
-### Phase 2 — Minimal machine bring-up
-- Toolchain smoke test first: build stock MAME on this machine with `SOURCES=` scoped to a single small driver, confirming the edit-build-run loop is fast enough before writing any driver code.
-- MAME skeleton driver: `mips1` (R3000A BE for now) + 4 MB RAM + ROM mapping.
-- Run until the first unimplemented hardware access; use MAME's unmapped-access logging + debugger to iterate.
-- Stub the IDT monitor's UART first — a serial console is likely the earliest sign of life and a debugging channel thereafter.
+### Phase 2 — Minimal machine bring-up ✅
+- ~~Toolchain smoke test first: build stock MAME on this machine with
+  `SOURCES=` scoped to a single small driver, confirming the edit-build-run
+  loop is fast enough before writing any driver code.~~ ✅
+- ~~MAME skeleton driver: big-endian R3900 + 4 MB RAM + ROM mapping.~~ ✅
+- ~~Run until the first unimplemented hardware access; use MAME's
+  unmapped-access logging + debugger to iterate.~~ ✅
+- ~~Stub the IDT monitor's UART first.~~ ✅ The monitor reaches an interactive
+  `<IDT>` prompt, and its output is captured by the regression harness.
 
 ### Phase 3 — Display & Betty
-- Implement enough of Betty (interrupts, GPIO, timers) for the boot to proceed.
+- ~~Implement enough of Betty (interrupts, GPIO, timers) for the boot to
+  proceed.~~ ✅ A 16-register Betty shadow, SIB completion flags, RTC,
+  power-good, stop-timer completion, and absent-card GPIO state reach
+  `BootCap`.
 - **Use the ROM's own diagnostics as the test suite**: locate the IDT monitor's self-test/readback routines (the `... readback: 0x%x (0x%x)` family found in Phase 1) and drive them via the serial console; each passing readback is an acceptance test for the corresponding Betty register.
-- Regression harness in `tools/`: run the emulator headless, capture serial output up to a boot checkpoint, and diff against a known-good log — so hardware-model regressions surface as text diffs, not "the screen looks off".
-- Find and render the framebuffer: 480×320, 2bpp grayscale, 120-byte stride,
-  at the top 38,400 bytes of RAM.
-- First milestone: **Magic Cap boot screen renders**.
+- ~~Regression harness in `tools/`: run the emulator headless, capture serial
+  output up to a boot checkpoint, and diff against a known-good log.~~ ✅ See
+  `python3 tools/serial_regression.py`.
+- ~~Find and render the framebuffer: 480×320, 2bpp grayscale, 120-byte stride,
+  at the top 38,400 bytes of RAM.~~ ✅
+- ~~First milestone: **Magic Cap boot screen renders**.~~ ✅ The ROM's centered
+  top-hat startup artwork is visible in the `LCD` view.
 
 ### Phase 4 — Interactive desk
 - Touchscreen (ADC via Betty) → MAME pointer input.
@@ -122,13 +135,16 @@ We don't own a DataRover 840, so correctness is judged by external signals only:
 ## Repo layout
 
 ```
-roms/       ROM images — git-ignored, bring your own (see links above)
+roms/       Optional git-ignored compatibility path; persistent assets live outside the repo
 docs/       RE notes: memory map, Betty registers, boot flow
 tools/      analysis scripts (ROM splitting, checksums, string maps)
 mame/       driver code (initially patches/fork notes against upstream MAME)
 ```
 
 Driver development happens in the MAME fork at [ddanila/mame](https://github.com/ddanila/mame) (cloned as a sibling of this repo, `../mame`, work happens on the `custom` branch, never on `master`); this repo tracks notes and patches.
+
+The reproducible build, launch, monitor-selection, serial-regression, and
+snapshot commands are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
 
 ## License
 

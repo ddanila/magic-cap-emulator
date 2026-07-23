@@ -28,10 +28,21 @@ MIPS kseg1 (uncached) aliases; for these addresses the bus/physical address is
 | `0x28000000` | platform KUser window | 64 MiB max | PC Card slot 2 | SDK memory map |
 | `0xff000010` | implementation-specific | `0x90` | Dino hardware breakpoints | SDK constant; not needed for bring-up |
 
-The initial driver can map RAM at zero, an 8 MiB ROM region at
-`0x13c00000`, its kseg1 alias, and the reset alias. Unpopulated bytes in the ROM
-region must read as `0xff`; the published image occupies only its first
-`0x451817` bytes.
+The current driver maps RAM at zero, an 8 MiB ROM region at `0x13c00000`, its
+kseg1 alias, and the reset alias. Unpopulated bytes in the ROM region read as
+`0xff`; the published image occupies only its first `0x451817` bytes.
+
+### Vector-page remapping
+
+`SetupVectorDispatching` copies the 512-byte ROM page at `0x13e96400` to RAM
+at `0x00000200`, then sets bit 25 of Dino memory configuration register 0.
+After that transition, accesses to `0x13e96400`–`0x13e965ff` target the RAM
+copy. Magic Cap patches the copied dispatch stub, including
+`RestoreSystemGlobalPointer` at `0x13e96410`.
+
+The driver models this region switch explicitly. Treating the entire ROM as
+immutable lets boot reach `BootCap`, but it fails as soon as the operating
+system attempts to patch its exception dispatch page.
 
 ### Reset alias lifetime
 
@@ -121,6 +132,27 @@ and an encoded end address to `+0x034`.
 Betty is **not** this register block. It is an external device reached through
 Dino's SIB subframe registers; see [`betty-registers.md`](betty-registers.md).
 
+### Implemented bring-up semantics
+
+The current behavioral model implements the subset observed on the verified
+boot path:
+
+- UART A/B transmitter-ready and transmitter-empty status; UART A is wired to
+  the generic terminal for the IDT monitor.
+- Write-to-clear Dino interrupt status banks.
+- Synchronous Magic Bus completion.
+- SIB SF0/SF1 command completion and continuous frame/sound-receive flags
+  while SIB is enabled.
+- A 32,768 Hz RTC counter and the ROM-observed timer-clear transition.
+- Read-only power-good input plus cold-start/VCC power state.
+- Synchronous stop-timer completion used by the low-level Betty reset.
+- Power-on mode input bit 3: high boots Magic Cap, low stays in the IDT
+  monitor.
+- Video high-buffer selection and 480×320, 2 bpp framebuffer scanout.
+
+These are deliberately boot-oriented behaviors, not a claim that all Dino
+timing and interrupt semantics are complete.
+
 ## Glacier blocks
 
 The monitor initializes two custom 16-bit GPIO/interrupt blocks at
@@ -177,7 +209,8 @@ After following the SDK extraction instructions in
 (`binutils-mips-linux-gnu` on Debian/Ubuntu) and run:
 
 ```sh
-elf=roms/sdk/Program_Files/debug/apollo/MagicCAP-USA
+magic_cap_assets="$HOME/fun/magic-cap-assets"
+elf="$magic_cap_assets/sdk/extracted/Program_Files/debug/apollo/MagicCAP-USA"
 
 mips-linux-gnu-readelf -h -l -S "$elf"
 mips-linux-gnu-nm -n "$elf" |
