@@ -33,8 +33,15 @@ class SerialRegressionTests(unittest.TestCase):
     def test_monitor_config_selects_idt_monitor(self) -> None:
         config = serial_regression.monitor_config()
 
+        self.assertIn('tag=":terminal:keyboard" enabled="1"', config)
         self.assertIn('tag=":BOOT_MODE"', config)
         self.assertIn('defvalue="8" value="0"', config)
+
+    def test_betty_checkpoint_calls_rom_diagnostic(self) -> None:
+        checkpoint = serial_regression.CHECKPOINTS["betty"]
+
+        self.assertEqual(checkpoint["command"], r"call 13c076b0\n")
+        self.assertEqual(checkpoint["seconds"], 8)
 
 
 if __name__ == "__main__":

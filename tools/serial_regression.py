@@ -23,6 +23,20 @@ DEFAULT_WORKDIR = (
 )
 EXPECTED_SERIAL = REPO_ROOT / "tests" / "data" / "idt-monitor.txt"
 UART_TX_PATTERN = re.compile(rb"UARTA TX:\s+([0-9a-fA-F]{2})\b")
+CHECKPOINTS = {
+    "monitor": {
+        "expected": EXPECTED_SERIAL,
+        "output": "idt-monitor.txt",
+        "seconds": 3,
+    },
+    "betty": {
+        "expected": REPO_ROOT / "tests" / "data" / "betty-test.txt",
+        "output": "betty-test.txt",
+        "seconds": 8,
+        "command": r"call 13c076b0\n",
+        "delay": 4,
+    },
+}
 
 
 def extract_uart_bytes(mame_log: bytes) -> bytes:
@@ -45,11 +59,12 @@ def canonicalize_terminal(data: bytes) -> str:
 
 
 def monitor_config() -> str:
-    """Return a MAME system configuration with the option key asserted."""
+    """Return a monitor-mode MAME configuration with its keyboard enabled."""
     return """<?xml version="1.0"?>
 <mameconfig version="10">
     <system name="datarover840">
         <input>
+            <keyboard tag=":terminal:keyboard" enabled="1" />
             <port tag=":BOOT_MODE" type="CONFIG"
                   mask="8" defvalue="8" value="0" />
         </input>
@@ -81,11 +96,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--seconds",
         type=int,
-        default=3,
-        help="emulated seconds to run (default: 3)",
+        help="emulated seconds to run (default depends on checkpoint)",
+    )
+    parser.add_argument(
+        "--checkpoint",
+        choices=CHECKPOINTS,
+        default="monitor",
+        help="serial checkpoint to verify (default: monitor)",
     )
     args = parser.parse_args(argv)
-    if args.seconds <= 0:
+    if args.seconds is not None and args.seconds <= 0:
         parser.error("--seconds must be positive")
     return args
 
@@ -94,6 +114,8 @@ def run_regression(args: argparse.Namespace) -> int:
     mame = args.mame.expanduser().resolve()
     rompath = args.rompath.expanduser().resolve()
     workdir = args.workdir.expanduser().resolve()
+    checkpoint = CHECKPOINTS[args.checkpoint]
+    seconds = args.seconds or checkpoint["seconds"]
 
     if not mame.is_file():
         print(f"error: MAME executable not found: {mame}", file=sys.stderr)
@@ -121,9 +143,19 @@ def run_regression(args: argparse.Namespace) -> int:
         "none",
         "-nothrottle",
         "-seconds_to_run",
-        str(args.seconds),
+        str(seconds),
         "-oslog",
     ]
+    if "command" in checkpoint:
+        command.extend(
+            [
+                "-natural",
+                "-autoboot_delay",
+                str(checkpoint["delay"]),
+                "-autoboot_command",
+                str(checkpoint["command"]),
+            ]
+        )
     try:
         completed = subprocess.run(
             command,
@@ -131,7 +163,7 @@ def run_regression(args: argparse.Namespace) -> int:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             check=False,
-            timeout=max(30, args.seconds * 10),
+            timeout=max(30, seconds * 10),
         )
     except OSError as error:
         print(f"error: unable to run MAME: {error}", file=sys.stderr)
@@ -142,7 +174,7 @@ def run_regression(args: argparse.Namespace) -> int:
 
     workdir.mkdir(parents=True, exist_ok=True)
     raw_log = workdir / "mame-oslog.txt"
-    serial_log = workdir / "idt-monitor.txt"
+    serial_log = workdir / str(checkpoint["output"])
     raw_log.write_bytes(completed.stdout)
     actual = canonicalize_terminal(extract_uart_bytes(completed.stdout))
     serial_log.write_text(actual, encoding="utf-8")
@@ -154,18 +186,19 @@ def run_regression(args: argparse.Namespace) -> int:
         )
         return 2
 
-    expected = EXPECTED_SERIAL.read_text(encoding="utf-8")
+    expected_path = Path(checkpoint["expected"])
+    expected = expected_path.read_text(encoding="utf-8")
     if actual != expected:
         diff = difflib.unified_diff(
             expected.splitlines(keepends=True),
             actual.splitlines(keepends=True),
-            fromfile=str(EXPECTED_SERIAL),
+            fromfile=str(expected_path),
             tofile=str(serial_log),
         )
         sys.stdout.writelines(diff)
         return 1
 
-    print(f"PASS: serial checkpoint matches {EXPECTED_SERIAL}")
+    print(f"PASS: serial checkpoint matches {expected_path}")
     print(f"Captured serial: {serial_log}")
     return 0
 

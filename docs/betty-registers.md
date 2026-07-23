@@ -89,8 +89,16 @@ The current driver implements the observable contract used by the boot path:
    accepted by `touch_init`.
 
 This remains deliberately narrower than emulating the touch ADC or audio path.
-Driving the monitor's complete `BettyTest` readback suite is still an open
-Phase 3 acceptance test. The production driver provides the next ground truth:
+The complete ROM diagnostic now runs as a regression:
+
+```sh
+python3 tools/serial_regression.py --checkpoint betty
+```
+
+The harness enters `call 13c076b0` at the IDT prompt. Every failed comparison
+branches to `StayHere`; a returned status and second `<IDT>` prompt therefore
+prove that the sequence completed. The production driver provides the next
+ground truth:
 `SibCmdTakeAdcReading` writes register 10, and
 `SibCmdEnableBettyInt` maintains registers 2 and 3 through shadow values.
 

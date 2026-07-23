@@ -103,7 +103,11 @@ Repo, README, survey of existing parts (this document).
   proceed.~~ ✅ A 16-register Betty shadow, SIB completion flags, RTC,
   power-good, stop-timer completion, and absent-card GPIO state reach
   `BootCap`.
-- **Use the ROM's own diagnostics as the test suite**: locate the IDT monitor's self-test/readback routines (the `... readback: 0x%x (0x%x)` family found in Phase 1) and drive them via the serial console; each passing readback is an acceptance test for the corresponding Betty register.
+- ~~**Use the ROM's own diagnostics as the test suite**: locate and drive the
+  IDT monitor's Betty self-test/readback routine through the serial
+  console.~~ ✅ `python3 tools/serial_regression.py --checkpoint betty` calls
+  the ROM's `BettyTest`; every failed comparison branches to `StayHere`, while
+  the passing checkpoint returns to the `<IDT>` prompt.
 - ~~Regression harness in `tools/`: run the emulator headless, capture serial
   output up to a boot checkpoint, and diff against a known-good log.~~ ✅ See
   `python3 tools/serial_regression.py`.

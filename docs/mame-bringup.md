@@ -124,11 +124,15 @@ Run the analysis-tool unit tests and exact serial checkpoint comparison:
 cd "$HOME/fun/magic-cap-emulator"
 python3 -m unittest discover -s tests -v
 python3 tools/serial_regression.py
+python3 tools/serial_regression.py --checkpoint betty
 ```
 
 The serial harness writes generated configuration and logs under
 `~/fun/magic-cap-assets/runtime/serial-regression/`. Override its defaults with
-`--mame`, `--rompath`, `--workdir`, or `--seconds`.
+`--mame`, `--rompath`, `--workdir`, or `--seconds`. The `betty` checkpoint
+uses the monitor's `call` command to execute the ROM's own `BettyTest` at
+`0x13c076b0`. A failed register readback enters the ROM's `StayHere` loop;
+returning to the `<IDT>` prompt is therefore the acceptance condition.
 
 ## Native LCD snapshot
 

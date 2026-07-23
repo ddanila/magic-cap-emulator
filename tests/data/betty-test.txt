@@ -1,0 +1,12 @@
+IDT System Integration Manager Ver. 4.0 Feb, 1992
+Copyright 1992 Integrated Device Technology, Inc.
+Modifications - Copyright 1997 General Magic, Inc.
+*** Hosted Version 4.23 Dec 5, 1997 ***
+Profiler initialized
+Memory: 4194304 (0x400000), Icache: 4096 (0x1000), Dcache: 1024 (0x400)
+Toshiba Core - id: 0x2200
+Platform: Apollo
+For help enter '?'
+<IDT>call 13c076b0
+Called routine returned 0 decimal  0x0 hex
+<IDT>
