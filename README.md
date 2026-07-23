@@ -139,7 +139,7 @@ Repo, README, survey of existing parts (this document).
   isolated arithmetic regression; see [`docs/tx39-cpu.md`](docs/tx39-cpu.md).
 - PC Card slots (linear flash card images — the flasher-card image from the archive is a ready-made test), package installation (`.pkg` files from the archive).
 - Serial/modem → PPP bridge for the true endgame: **Magic Cap on the internet**, running the archived Web Browser 4.0.
-- 840F flash variant, Japan ROM, MAME upstream submission.
+- 840F flash variant, Japan ROM.
 
 ## Verification (no real hardware)
 
