@@ -65,10 +65,11 @@ registers, which makes these number/name pairs high confidence:
 | 14 | unknown | retain a 16-bit shadow initially |
 | 15 | unknown | retain a 16-bit shadow initially |
 
-Register 4 is repeatedly cleared, filled with `0xffff`, and cleared again
-during `touch_init` before the positive/negative interrupt-enable probes. That
-strongly suggests interrupt status or interrupt acknowledge, but the current
-evidence does not justify assigning a final name or write semantics yet.
+Register 4 is repeatedly exercised during `touch_init`, but its final role is
+not yet proven. Register 5 must retain ordinary writes: the ROM diagnostic
+writes `0x0028` and requires the same value on readback. Pen edges are
+therefore not modeled as register-4/5 status; they update `IOData` and the
+documented Dino SIB interrupt/pending state.
 
 The SDK debug records also expose a 16-entry `bettyShadowRegs` array in the
 production SIB globals, confirming the register-file size independently of
@@ -88,7 +89,13 @@ The current driver implements the observable contract used by the boot path:
 5. Betty ID register 12 reads as revision `0x1002`, one of the two revisions
    accepted by `touch_init`.
 
-This remains deliberately narrower than emulating the touch ADC or audio path.
+The production path now also implements the six ADC samples used by the touch
+macro. `TouchCfg` values `0x0a12` and `0x0a48` select X and Y; the remaining
+arrangements return pressure/contact samples. Main and backup battery ADC
+channels 24 and 28 return nominal in-range values. MAME lightgun axes supply
+the pen coordinates, and button edges propagate through Betty `IOData`, Dino
+SIB pending state, and the normal interrupt dispatcher. Audio remains
+unimplemented.
 The complete ROM diagnostic now runs as a regression:
 
 ```sh

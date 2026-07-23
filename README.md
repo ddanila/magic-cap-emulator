@@ -117,10 +117,17 @@ Repo, README, survey of existing parts (this document).
   top-hat startup artwork is visible in the `LCD` view.
 
 ### Phase 4 — Interactive desk
-- Touchscreen (ADC via Betty) → MAME pointer input.
-- RTC, NVRAM/persistent storage so the OS keeps state.
+- ~~Touchscreen (ADC via Betty) → MAME pointer input.~~ ✅ Pointer presses
+  drive Betty's six-sample touch macro, including the ROM's three-point
+  calibration flow.
+- ~~RTC, NVRAM/persistent storage so the OS keeps state.~~ ✅ Main DRAM and
+  Dino's 32,768 Hz RTC are battery-backed. The power button enters
+  suspend-to-RAM and a second press wakes the CPU.
 - Sound (Betty SoundCfg) as stretch.
-- Milestone: **navigate the Magic Cap desk with the mouse**.
+- ~~Milestone: **navigate the Magic Cap desk with the mouse**.~~ ✅ The bare
+  hat is the early splash; the later circled-hat `Magic Cap™ / Touch the
+  screen to begin` scene is interactive. After upper-left, lower-right, and
+  center calibration taps, build 3.1.2j reaches the workbench.
 
 ### Phase 5 — Beyond
 - TX39 core fidelity: add R3900 extensions to MAME's `mips1` if the ROM actually uses them.

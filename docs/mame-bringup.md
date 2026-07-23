@@ -66,13 +66,21 @@ LCD:
 cd "$HOME/fun/mame"
 ./datarover datarover840 \
   -rompath "$HOME/fun/magic-cap-assets/roms" \
-  -window -skip_gameinfo -view LCD
+  -window -skip_gameinfo -view LCD \
+  -lightgun_device mouse
 ```
 
-The current verified milestone is the centered top-hat startup artwork on a
-white 480×320 LCD. It can take noticeably longer than ten wall-clock seconds
-to reach ten emulated seconds because the R3900 interpreter is not yet fast
-enough for real-time execution.
+Boot first shows a small bare top hat. That is only the early splash. The
+interactive welcome scene is the larger hat inside a dark circle with
+`Magic Cap™` and `Touch the screen to begin`. Click it, then click the three
+calibration targets in order: upper-left, lower-right, center. The verified
+result is the Magic Cap 3.1.2j workbench. A main-battery warning can appear
+over the desk while the battery model is still being refined.
+
+`-lightgun_device mouse` maps the host pointer to the resistive pen axes.
+Press **End** for the DataRover power button; a normal press enters
+suspend-to-RAM rather than destroying the battery-backed heap, and another
+press wakes the CPU.
 
 The driver exposes three video views under **Tab → Video Options**:
 
@@ -125,6 +133,7 @@ cd "$HOME/fun/magic-cap-emulator"
 python3 -m unittest discover -s tests -v
 python3 tools/serial_regression.py
 python3 tools/serial_regression.py --checkpoint betty
+python3 tools/desk_regression.py
 ```
 
 The serial harness writes generated configuration and logs under
@@ -133,6 +142,14 @@ The serial harness writes generated configuration and logs under
 uses the monitor's `call` command to execute the ROM's own `BettyTest` at
 `0x13c076b0`. A failed register readback enters the ROM's `StayHere` loop;
 returning to the `<IDT>` prompt is therefore the acceptance condition.
+
+The desk harness starts with a fresh isolated NVRAM directory, taps the
+welcome scene and all three calibration targets, and verifies the native
+framebuffer checkpoint (`0x003f6a00`, checksum `0x62d64ba4`). It also writes a
+native LCD PNG. Every run keeps its Lua script, MAME output, NVRAM, and
+snapshot under a timestamped directory in
+`~/fun/magic-cap-assets/runtime/desk-regression/`; no binary artifact is
+written to this Git checkout.
 
 ## Native LCD snapshot
 
@@ -162,8 +179,12 @@ the separate serial-terminal view.
 | RAM | Monitor reports 4,194,304 bytes |
 | Serial | Exact banner and interactive `<IDT>` prompt pass the headless regression |
 | Magic Cap entry | MAME debugger reaches ELF symbol `BootCap` at `0x13c1d120` |
-| Display | Live Dino buffer register points at `0x003f6a00`; top-hat artwork renders in the LCD view |
+| Early splash | The bare top hat renders before the interactive UI |
+| Welcome | Circled hat, `Magic Cap™`, and `Touch the screen to begin` render and accept a pen tap |
+| Calibration | Upper-left, lower-right, and center targets accept synthesized Betty ADC samples |
+| Workbench | Live Dino buffer `0x003f6a00` reaches deterministic checksum `0x62d64ba4` |
+| Persistence | 4 MiB DRAM and Dino RTC use external NVRAM files; power-button sleep stops and wakes the CPU |
 
-The machine remains marked `MACHINE_NOT_WORKING`: touch, persistent state,
-complete Betty diagnostics, sound, PC Cards, modem/networking, and additional
-TX39 fidelity are later plan items.
+The machine remains marked `MACHINE_NOT_WORKING`: sound, PC Cards,
+modem/networking, complete wake-path interaction, and additional TX39
+fidelity are later plan items.

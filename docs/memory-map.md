@@ -143,12 +143,16 @@ boot path:
 - Synchronous Magic Bus completion.
 - SIB SF0/SF1 command completion and continuous frame/sound-receive flags
   while SIB is enabled.
-- A 32,768 Hz RTC counter and the ROM-observed timer-clear transition.
-- Read-only power-good input plus cold-start/VCC power state.
+- A battery-backed 32,768 Hz RTC counter, alarm and rollover interrupts,
+  freeze/clear controls, and a separate persistent clock record.
+- Read-only power-good input plus cold-start/VCC power state. Clearing VCC
+  with StopCpu suspends the R3900; an on-button edge restores VCC and wakes it.
 - Synchronous stop-timer completion used by the low-level Betty reset.
 - Power-on mode input bit 3: high boots Magic Cap, low stays in the IDT
   monitor.
 - Video high-buffer selection and 480×320, 2 bpp framebuffer scanout.
+- Main DRAM backed by MAME NVRAM, kept in the external runtime directory
+  selected with `-nvram_directory`.
 
 These are deliberately boot-oriented behaviors, not a claim that all Dino
 timing and interrupt semantics are complete.

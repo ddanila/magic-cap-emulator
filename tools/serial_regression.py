@@ -125,7 +125,9 @@ def run_regression(args: argparse.Namespace) -> int:
         return 2
 
     config_dir = workdir / "cfg"
+    nvram_dir = workdir / "nvram" / args.checkpoint
     config_dir.mkdir(parents=True, exist_ok=True)
+    nvram_dir.mkdir(parents=True, exist_ok=True)
     (config_dir / "datarover840.cfg").write_text(
         monitor_config(), encoding="utf-8"
     )
@@ -137,6 +139,8 @@ def run_regression(args: argparse.Namespace) -> int:
         str(rompath),
         "-cfg_directory",
         str(config_dir),
+        "-nvram_directory",
+        str(nvram_dir),
         "-video",
         "none",
         "-sound",
