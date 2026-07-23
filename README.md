@@ -23,6 +23,8 @@ The USA ROM image (build 3.1.2j) comes from the [Rosemary Software Archive](http
 
 - sha256: `94785cb334f14eac00ed200af014c35972b4f25694103bc6a49b3afa280a6f1b`
 - **Not committed to this repo** — it's copyrighted General Magic software (abandonware, but still). Keep it in `roms/` locally; that directory is git-ignored.
+- Exact ROM, flasher, WinDownload, and SDK acquisition/extraction commands are
+  kept in [`docs/rom-layout.md`](docs/rom-layout.md#download-the-rom-and-flasher-image).
 
 ### What initial inspection shows
 

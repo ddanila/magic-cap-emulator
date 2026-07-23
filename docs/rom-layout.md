@@ -31,6 +31,96 @@ Its InstallShield cabinets contain these particularly useful Apollo artifacts:
 The SDK's ROM image is byte-identical to the separately published image. Keep
 all extracted SDK and ROM files under `roms/`, which is git-ignored.
 
+### Download the ROM and flasher image
+
+Run these commands from the repository root. They download the files into the
+git-ignored `roms/` directory; none of the resulting binaries should be added
+to Git.
+
+```sh
+mkdir -p roms
+
+curl --fail --location \
+  --output roms/MagicCap-USA.zip \
+  https://joshcarter.com/magic_cap/packages/MagicCap-USA.zip
+unzip -j -o roms/MagicCap-USA.zip MagicCap-USA.image -d roms
+
+curl --fail --location \
+  --output roms/DataRover840FRomFlasher.gz \
+  https://joshcarter.com/magic_cap/packages/DataRover840FRomFlasher.gz
+gzip --decompress --keep roms/DataRover840FRomFlasher.gz
+```
+
+Verify the extracted files:
+
+```sh
+echo '94785cb334f14eac00ed200af014c35972b4f25694103bc6a49b3afa280a6f1b  roms/MagicCap-USA.image' \
+  | sha256sum --check
+echo '16fe122872e295ee03be4be1322013a6e504997d9996997c8c7b0997ec65c5f7  roms/DataRover840FRomFlasher' \
+  | sha256sum --check
+
+python3 tools/rom_info.py roms/MagicCap-USA.image \
+  --flasher roms/DataRover840FRomFlasher
+```
+
+`WinDownload.exe` is not needed by the emulator, but the archived tool can be
+obtained separately when its serial protocol needs investigation:
+
+```sh
+curl --fail --location \
+  --output roms/WinDownload.zip \
+  https://joshcarter.com/magic_cap/packages/WinDownload.zip
+mkdir -p roms/windownload
+unzip -j -o roms/WinDownload.zip -d roms/windownload
+echo 'da69f8d0ddc5309e47a63316dbe1c7cd52c1dab3722fa4d8b2072c7c3d369eeb  roms/windownload/WinDownload.exe' \
+  | sha256sum --check
+```
+
+### Download and extract the SDK analysis files
+
+The SDK is inside a larger Archive.org bundle. Download it and extract the
+three InstallShield cabinet parts:
+
+```sh
+curl --fail --location \
+  --output roms/Datarover840.zip \
+  https://archive.org/download/DataRover840/Datarover840.zip
+echo '4455c41a681006b6cac791c639014b87739c2513212078708cd9efaaf554d839  roms/Datarover840.zip' \
+  | sha256sum --check
+
+mkdir -p roms/sdk-installer
+unzip -j -o roms/Datarover840.zip \
+  'DataRover 840/Developer/IcrasSoftwareDevelopmentKit3.2/data1.cab' \
+  'DataRover 840/Developer/IcrasSoftwareDevelopmentKit3.2/data1.hdr' \
+  'DataRover 840/Developer/IcrasSoftwareDevelopmentKit3.2/data2.cab' \
+  -d roms/sdk-installer
+```
+
+Install `unshield` using the host package manager (`apt install unshield` on
+Debian/Ubuntu or `brew install unshield` on macOS), then extract only the
+high-value analysis files. All three cabinet parts must remain together:
+
+```sh
+unshield -d roms/sdk x roms/sdk-installer/data1.cab \
+  MagicCAP-USA \
+  MagicCap-USA.debug.x \
+  MagicCAP-USA.image \
+  MemoryMapDino.asm.h \
+  MipsCPU.h
+```
+
+Confirm the two principal Apollo artifacts:
+
+```sh
+echo '4a97da908226f3f6a803b82aa2a69a32a601f6c985c682f28b28502a91802962  roms/sdk/Program_Files/debug/apollo/MagicCAP-USA' \
+  | sha256sum --check
+echo '09aabfbdfd8d977260bb71c89b64357575478799d97813cbc7c2582118d63de8  roms/sdk/Program_Files/debug/apollo/MagicCap-USA.debug.x' \
+  | sha256sum --check
+
+readelf --file-header --program-headers \
+  roms/sdk/Program_Files/debug/apollo/MagicCAP-USA
+```
+
 ## The `.image` file is raw ROM data
 
 `MagicCAP-USA.image` starts directly with executable big-endian MIPS code:
@@ -60,13 +150,6 @@ Therefore the initial emulator ROM region should be 8 MiB, pre-filled with
 `0xff`, with the `.image` loaded at region offset zero. Splitting even/odd bytes
 for the two physical mask-ROM chips is not necessary unless physical chip dumps
 surface later.
-
-Run the local verifier against separately obtained files:
-
-```sh
-python3 tools/rom_info.py roms/MagicCap-USA.image \
-  --flasher roms/DataRover840FRomFlasher
-```
 
 ## CPU address
 
