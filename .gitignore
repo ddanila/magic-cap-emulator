@@ -1,0 +1,9 @@
+# ROM images are copyrighted — never commit them
+roms/
+
+# OS noise
+.DS_Store
+
+# scratch files
+*.tmp
+scratch/
