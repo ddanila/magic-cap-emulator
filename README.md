@@ -123,7 +123,10 @@ Repo, README, survey of existing parts (this document).
 - ~~RTC, NVRAM/persistent storage so the OS keeps state.~~ ✅ Main DRAM and
   Dino's 32,768 Hz RTC are battery-backed. The power button enters
   suspend-to-RAM and a second press wakes the CPU.
-- Sound (Betty SoundCfg) as stretch.
+- ~~Sound output (Betty `SoundCfgB` and Dino's sound-hold FIFO) as stretch.~~
+  ✅ The ROM's own 750 Hz startup tone is rendered as signed 16-bit mono at
+  the 11.025 kHz rate programmed by Dino. Buffered SIB DMA remains future
+  work.
 - ~~Milestone: **navigate the Magic Cap desk with the mouse**.~~ ✅ The bare
   hat is the early splash; the later circled-hat `Magic Cap™ / Touch the
   screen to begin` scene is interactive. After upper-left, lower-right, and

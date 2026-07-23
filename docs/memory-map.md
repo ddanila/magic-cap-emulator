@@ -141,8 +141,10 @@ boot path:
   the generic terminal for the IDT monitor.
 - Write-to-clear Dino interrupt status banks.
 - Synchronous Magic Bus completion.
-- SIB SF0/SF1 command completion and continuous frame/sound-receive flags
-  while SIB is enabled.
+- SIB SF0/SF1 command completion and continuous frame flags while SIB is
+  enabled.
+- The sound-hold FIFO's two signed 16-bit mono samples, its service interrupt,
+  and sample timing derived from Dino's 9.216 MHz SIB clock/divisor.
 - A battery-backed 32,768 Hz RTC counter, alarm and rollover interrupts,
   freeze/clear controls, and a separate persistent clock record.
 - Read-only power-good input plus cold-start/VCC power state. Clearing VCC

@@ -94,8 +94,13 @@ macro. `TouchCfg` values `0x0a12` and `0x0a48` select X and Y; the remaining
 arrangements return pressure/contact samples. Main and backup battery ADC
 channels 24 and 28 return nominal in-range values. MAME lightgun axes supply
 the pen coordinates, and button edges propagate through Betty `IOData`, Dino
-SIB pending state, and the normal interrupt dispatcher. Audio remains
-unimplemented.
+SIB pending state, and the normal interrupt dispatcher.
+
+For audio, `SibServerBootBeep` writes `SoundCfgB = 0x8006`, selects Dino's
+11.025 kHz divisor, and supplies two signed 16-bit mono samples per write to
+the Dino sound-hold register. The driver models that path and gates samples
+on `SoundCfgB` bit 15; the ROM's startup tone is covered by
+`tools/sound_regression.py`. Buffered SIB sound DMA is not yet modeled.
 The complete ROM diagnostic now runs as a regression:
 
 ```sh
