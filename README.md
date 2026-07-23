@@ -57,6 +57,7 @@ Fallback if MAME iteration feels heavy: a minimal standalone C/Rust harness reus
 Repo, README, survey of existing parts (this document).
 
 ### Phase 1 — ROM understanding
+- **Hunt for the DataRover SDK** (start: [archive.org DataRover840](https://archive.org/details/DataRover840), Josh Carter's developer docs). The ROM contains `*** Hosted Version ***` / `*** Stand-Alone Version ***` strings — Magic Cap 3.x apparently had a hosted build for development. SDK headers, a hosted simulator, or download-tool docs would shortcut a lot of reverse engineering (register names, `.image` format).
 - Resolve the image format question (4.3 MB image vs 8 MB ROM; compare with `DataRover840FRomFlasher.gz` layout; check the SDK's WinDownload tool docs).
 - Load into Ghidra (BE MIPS, ROM at physical `0x1FC0_0000`, reset vector `0xBFC0_0000` — verify against the monitor's jump targets, which sit in the `0xBFC0_xxxx` range).
 - Annotate the IDT monitor: memory sizing, cache init, Betty probing → extract the **hardware register map** (Betty at `0x10C0_xxxx`, LCD controller, framebuffer location, timers, UARTs, interrupt sources).
@@ -64,6 +65,7 @@ Repo, README, survey of existing parts (this document).
 - Deliverable: `docs/memory-map.md`, `docs/betty-registers.md`.
 
 ### Phase 2 — Minimal machine bring-up
+- Toolchain smoke test first: build stock MAME on this machine with `SOURCES=` scoped to a single small driver, confirming the edit-build-run loop is fast enough before writing any driver code.
 - MAME skeleton driver: `mips1` (R3000A BE for now) + 4 MB RAM + ROM mapping.
 - Run until the first unimplemented hardware access; use MAME's unmapped-access logging + debugger to iterate.
 - Stub the IDT monitor's UART first — a serial console is likely the earliest sign of life and a debugging channel thereafter.
