@@ -94,6 +94,8 @@ tools/      analysis scripts (ROM splitting, checksums, string maps)
 mame/       driver code (initially patches/fork notes against upstream MAME)
 ```
 
+Driver development happens in the MAME fork at [ddanila/mame](https://github.com/ddanila/mame) (cloned as a sibling of this repo, `../mame`, work happens on the `custom` branch, never on `master`); this repo tracks notes and patches.
+
 ## License
 
 Code and notes here: MIT. MAME driver code follows MAME's licensing. ROM images remain © General Magic and are not distributed here.
