@@ -87,6 +87,14 @@ Repo, README, survey of existing parts (this document).
 - Serial/modem → PPP bridge for the true endgame: **Magic Cap on the internet**, running the archived Web Browser 4.0.
 - 840F flash variant, Japan ROM, MAME upstream submission.
 
+## Verification (no real hardware)
+
+We don't own a DataRover 840, so correctness is judged by external signals only:
+
+- **Screen appearance** vs. photos/screenshots of Magic Cap 3.x in the wild ([PDA Museum](https://pdamuseum.eu/pda/datarover840/), [Old VCR](http://oldvcr.blogspot.com/2022/12/magic-cap-from-magic-link-to-datarover.html), [Pen Computing review](http://www.pencomputing.com/magic_cap/data_rover_840.html)) and the 68K Magic Cap Simulator's UI as a behavioral reference.
+- **The ROM's own voice**: the IDT boot monitor and Magic Cap debug builds talk over the serial port — an emulated UART console is our primary instrument for everything that happens before (and behind) the screen.
+- **Internal consistency**: diagnostics in the ROM (Betty register readback tests, memory sizing) passing is itself evidence the hardware model is right.
+
 ## Repo layout
 
 ```
