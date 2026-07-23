@@ -72,6 +72,8 @@ Repo, README, survey of existing parts (this document).
 
 ### Phase 3 — Display & Betty
 - Implement enough of Betty (interrupts, GPIO, timers) for the boot to proceed.
+- **Use the ROM's own diagnostics as the test suite**: locate the IDT monitor's self-test/readback routines (the `... readback: 0x%x (0x%x)` family found in Phase 1) and drive them via the serial console; each passing readback is an acceptance test for the corresponding Betty register.
+- Regression harness in `tools/`: run the emulator headless, capture serial output up to a boot checkpoint, and diff against a known-good log — so hardware-model regressions surface as text diffs, not "the screen looks off".
 - Find and render the framebuffer: 480×320, presumably 4bpp grayscale.
 - First milestone: **Magic Cap boot screen renders**.
 
