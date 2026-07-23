@@ -135,6 +135,7 @@ python3 tools/serial_regression.py
 python3 tools/serial_regression.py --checkpoint betty
 python3 tools/desk_regression.py
 python3 tools/sound_regression.py
+python3 tools/tx39_regression.py
 ```
 
 The serial harness writes generated configuration and logs under
@@ -157,6 +158,12 @@ the mixed output to a persistent WAV capture. It verifies that the ROM's
 hardware-generated startup tone is present near 750 Hz for roughly 60 ms.
 The WAV, generated Lua, NVRAM, and log remain under
 `~/fun/magic-cap-assets/runtime/sound-regression/`.
+
+The TX39 harness executes signed and unsigned multiply/add instructions from
+uncached RAM and verifies `rd`, `HI`, and `LO`. Its generated inputs and log
+remain under `~/fun/magic-cap-assets/runtime/tx39-regression/`; the CPU audit
+and reference-manual download command are in
+[`tx39-cpu.md`](tx39-cpu.md).
 
 ## Native LCD snapshot
 
@@ -194,5 +201,5 @@ the separate serial-terminal view.
 | Sound | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
 
 The machine remains marked `MACHINE_NOT_WORKING`: buffered sound DMA,
-PC Cards, modem/networking, complete wake-path interaction, and additional
-TX39 fidelity are later plan items.
+PC Cards, modem/networking, and complete wake-path interaction are later plan
+items.

@@ -133,7 +133,10 @@ Repo, README, survey of existing parts (this document).
   center calibration taps, build 3.1.2j reaches the workbench.
 
 ### Phase 5 — Beyond
-- TX39 core fidelity: add R3900 extensions to MAME's `mips1` if the ROM actually uses them.
+- ~~TX39 core fidelity: add R3900 extensions to MAME's `mips1` if the ROM
+  actually uses them.~~ ✅ The modem DSP contains 792 TX39 `MADD`
+  instructions. The R3900 device now implements `MADD`/`MADDU`, with an
+  isolated arithmetic regression; see [`docs/tx39-cpu.md`](docs/tx39-cpu.md).
 - PC Card slots (linear flash card images — the flasher-card image from the archive is a ready-made test), package installation (`.pkg` files from the archive).
 - Serial/modem → PPP bridge for the true endgame: **Magic Cap on the internet**, running the archived Web Browser 4.0.
 - 840F flash variant, Japan ROM, MAME upstream submission.
