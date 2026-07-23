@@ -105,8 +105,16 @@ unshield -d roms/sdk x roms/sdk-installer/data1.cab \
   MagicCAP-USA \
   MagicCap-USA.debug.x \
   MagicCAP-USA.image \
+  Dino.asm.h \
+  Dino.h \
+  Gen2MFS.asm.h \
+  Gen2MFS.h \
+  Hardware.asm.h \
+  Hardware.h \
   MemoryMapDino.asm.h \
-  MipsCPU.h
+  MipsCPU.h \
+  Platform.h \
+  PlatformDefines.h
 ```
 
 Confirm the two principal Apollo artifacts:
@@ -181,13 +189,17 @@ The ELF is unstripped and includes source paths and symbols such as
 `MemorySize`, `HardResetBetty`, `DisplayServer_BootBlit`, and
 `SerialInterfaceMemServer_ReinitializeClass`. It should be the primary static
 analysis input; the raw `.image` remains the byte-level source used by MAME.
+The resulting hardware map and the commands used to reproduce it are recorded
+in [`memory-map.md`](memory-map.md) and
+[`betty-registers.md`](betty-registers.md).
 
 MIPS maps virtual `0xb3c00000` through kseg1 to physical `0x13c00000`. The CPU
 still begins at the architectural reset vector `0xbfc00000`, so the skeleton
 driver also needs a reset-time alias of the start of ROM at physical
-`0x1fc00000`. Whether that alias persists after the board's address remapper is
-configured remains an open hardware question and should be settled from early
-monitor accesses.
+`0x1fc00000`. The first word's pseudo-direct `j` lands at `0xb3c0001c`, so
+software needs the reset alias only for that instruction and its delay slot.
+Whether the hardware continues decoding the alias is immaterial to the
+observed boot path.
 
 [archive]: https://archive.org/details/DataRover840
 [packages]: https://joshcarter.com/magic_cap/packages/

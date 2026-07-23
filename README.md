@@ -10,8 +10,8 @@ An attempt to build an open-source emulator for the [General Magic DataRover 840
 | Cache | 4 KB I-cache, 1 KB D-cache |
 | RAM | 4 MB (2× Hitachi 51W16160TT-6) |
 | ROM | 8 MB mask ROM (2× OKI, labeled PIC31H / PIC31L); the 840F variant uses flash instead |
-| Display | 480×320 LCD, 16-level grayscale, backlit, resistive touchscreen |
-| Peripheral ASIC | Custom General Magic chip, codename **"Betty"** (GPIO, touch, ADC, sound, telecom, interrupt routing — from ROM strings) |
+| Display | 480×320 grayscale LCD, backlit, resistive touchscreen (this ROM configures a 2bpp framebuffer) |
+| Peripheral hardware | TX39 **"Dino"** integrated peripherals plus General Magic **"Betty"** SIB ASIC (GPIO, touch, ADC, sound, telecom) |
 | I/O | 14.4k modem, 2× PC Card (PCMCIA) slots, IrDA, Magic Bus, mic + speaker |
 | OS | Magic Cap 3.1 (build 3.1.2j in the archived ROMs) |
 
@@ -31,7 +31,12 @@ The USA ROM image (build 3.1.2j) comes from the [Rosemary Software Archive](http
 - **Big-endian MIPS.** The image begins with valid BE MIPS-I code: `0x08F00007` = `j 0x...` over the embedded `"IDT MONITOR "` signature.
 - Boots into the **IDT boot monitor** (© 1992 Integrated Device Technology, build dated Dec 5, 1997) before Magic Cap proper.
 - The monitor knows two platforms (`BigBoard2`, `Sputnik2`) and probes for a **"Sony Core"** vs **"Toshiba Core"** CPU — matching the Magic Link → DataRover hardware lineage.
-- Diagnostic strings enumerate **Betty** ASIC registers: `IOData`, `IODir`, `TelecomCfgA/B`, `SoundCfgA/B`, `TouchCfg`, `AdcCfg`, `PosIntEn`, `NegIntEn`. Early code accesses `0xB0C0_xxxx` (kseg1 → physical `0x10C0_0000` region), giving us a first anchor for the peripheral memory map.
+- The `0xB0C0_xxxx` block (kseg1 → physical `0x10C0_0000`) is the
+  TX39 **Dino** peripheral module: video, UARTs, timers, interrupts, GPIO, and
+  SIB. The external **Betty** ASIC exposes 16-bit registers over Dino's SIB;
+  it is not directly memory mapped. See
+  [`docs/memory-map.md`](docs/memory-map.md) and
+  [`docs/betty-registers.md`](docs/betty-registers.md).
 - **The image-format question is resolved.** The `.image` is raw, linear ROM
   content based at physical `0x13C0_0000`; the 8 MB flasher-card image contains
   a 1 KB header, the exact `.image` bytes, then erased (`0xFF`) space. The
@@ -69,13 +74,16 @@ Repo, README, survey of existing parts (this document).
   build, an unstripped Apollo MIPS ELF, debugger data, and platform headers.
 - ~~Resolve the image format question (4.3 MB image vs 8 MB ROM).~~ ✅ See
   [`docs/rom-layout.md`](docs/rom-layout.md) and `tools/rom_info.py`.
-- Load the SDK's unstripped ELF into Ghidra (BE MIPS, ROM at physical
-  `0x13C0_0000`, uncached alias `0xB3C0_0000`). Cross-check it against the raw
-  image and determine the lifetime of the reset-vector alias at physical
-  `0x1FC0_0000`.
-- Annotate the IDT monitor: memory sizing, cache init, Betty probing → extract the **hardware register map** (Betty at `0x10C0_xxxx`, LCD controller, framebuffer location, timers, UARTs, interrupt sources).
-- Locate Magic Cap kernel entry, and its device drivers (touch, display, modem) as ground truth for peripheral behavior.
-- Deliverable: `docs/memory-map.md`, `docs/betty-registers.md`.
+- ~~Analyze the SDK's unstripped BE MIPS ELF, cross-check its ROM map, and
+  determine the reset-vector alias lifetime.~~ ✅ The first reset jump moves
+  execution from `0xBFC0_0000` to the normal `0xB3C0_001C` ROM alias.
+- ~~Annotate the early monitor and extract the initial hardware register
+  map.~~ ✅ Dino, both Glaciers, UARTs, interrupts, the 2bpp framebuffer, and
+  Betty's SIB protocol are documented.
+- ~~Locate the Magic Cap entry and its initial hardware drivers.~~ ✅ The ELF
+  exposes `BootCap`, display, Dino/Glacier, SIB/Betty, touch, serial, sound,
+  and modem symbols for continued behavioral work.
+- ~~Deliver `docs/memory-map.md` and `docs/betty-registers.md`.~~ ✅
 
 ### Phase 2 — Minimal machine bring-up
 - Toolchain smoke test first: build stock MAME on this machine with `SOURCES=` scoped to a single small driver, confirming the edit-build-run loop is fast enough before writing any driver code.
@@ -87,7 +95,8 @@ Repo, README, survey of existing parts (this document).
 - Implement enough of Betty (interrupts, GPIO, timers) for the boot to proceed.
 - **Use the ROM's own diagnostics as the test suite**: locate the IDT monitor's self-test/readback routines (the `... readback: 0x%x (0x%x)` family found in Phase 1) and drive them via the serial console; each passing readback is an acceptance test for the corresponding Betty register.
 - Regression harness in `tools/`: run the emulator headless, capture serial output up to a boot checkpoint, and diff against a known-good log — so hardware-model regressions surface as text diffs, not "the screen looks off".
-- Find and render the framebuffer: 480×320, presumably 4bpp grayscale.
+- Find and render the framebuffer: 480×320, 2bpp grayscale, 120-byte stride,
+  at the top 38,400 bytes of RAM.
 - First milestone: **Magic Cap boot screen renders**.
 
 ### Phase 4 — Interactive desk
