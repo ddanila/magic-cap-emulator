@@ -30,7 +30,11 @@ The USA ROM image (build 3.1.2j) comes from the [Rosemary Software Archive](http
 - Boots into the **IDT boot monitor** (© 1992 Integrated Device Technology, build dated Dec 5, 1997) before Magic Cap proper.
 - The monitor knows two platforms (`BigBoard2`, `Sputnik2`) and probes for a **"Sony Core"** vs **"Toshiba Core"** CPU — matching the Magic Link → DataRover hardware lineage.
 - Diagnostic strings enumerate **Betty** ASIC registers: `IOData`, `IODir`, `TelecomCfgA/B`, `SoundCfgA/B`, `TouchCfg`, `AdcCfg`, `PosIntEn`, `NegIntEn`. Early code accesses `0xB0C0_xxxx` (kseg1 → physical `0x10C0_0000` region), giving us a first anchor for the peripheral memory map.
-- Open question: the image is ~4.3 MB while the device has 8 MB ROM — need to determine whether this is a download-container format (it's the SDK "WinDownload" serial-flash image), a partial dump, or one of two chips.
+- **The image-format question is resolved.** The `.image` is raw, linear ROM
+  content based at physical `0x13C0_0000`; the 8 MB flasher-card image contains
+  a 1 KB header, the exact `.image` bytes, then erased (`0xFF`) space. The
+  archived Icras SDK also contains an unstripped MIPS ELF with symbols and
+  source paths. See [`docs/rom-layout.md`](docs/rom-layout.md).
 
 ## What already exists (survey, July 2026)
 
@@ -57,9 +61,16 @@ Fallback if MAME iteration feels heavy: a minimal standalone C/Rust harness reus
 Repo, README, survey of existing parts (this document).
 
 ### Phase 1 — ROM understanding
-- **Hunt for the DataRover SDK** (start: [archive.org DataRover840](https://archive.org/details/DataRover840), Josh Carter's developer docs). The ROM contains `*** Hosted Version ***` / `*** Stand-Alone Version ***` strings — Magic Cap 3.x apparently had a hosted build for development. SDK headers, a hosted simulator, or download-tool docs would shortcut a lot of reverse engineering (register names, `.image` format).
-- Resolve the image format question (4.3 MB image vs 8 MB ROM; compare with `DataRover840FRomFlasher.gz` layout; check the SDK's WinDownload tool docs).
-- Load into Ghidra (BE MIPS, ROM at physical `0x1FC0_0000`, reset vector `0xBFC0_0000` — verify against the monitor's jump targets, which sit in the `0xBFC0_xxxx` range).
+- ~~**Hunt for the DataRover SDK.**~~ ✅ The
+  [archive.org DataRover840](https://archive.org/details/DataRover840)
+  bundle contains the complete Icras SDK 3.2, including the hosted Win32
+  build, an unstripped Apollo MIPS ELF, debugger data, and platform headers.
+- ~~Resolve the image format question (4.3 MB image vs 8 MB ROM).~~ ✅ See
+  [`docs/rom-layout.md`](docs/rom-layout.md) and `tools/rom_info.py`.
+- Load the SDK's unstripped ELF into Ghidra (BE MIPS, ROM at physical
+  `0x13C0_0000`, uncached alias `0xB3C0_0000`). Cross-check it against the raw
+  image and determine the lifetime of the reset-vector alias at physical
+  `0x1FC0_0000`.
 - Annotate the IDT monitor: memory sizing, cache init, Betty probing → extract the **hardware register map** (Betty at `0x10C0_xxxx`, LCD controller, framebuffer location, timers, UARTs, interrupt sources).
 - Locate Magic Cap kernel entry, and its device drivers (touch, display, modem) as ground truth for peripheral behavior.
 - Deliverable: `docs/memory-map.md`, `docs/betty-registers.md`.

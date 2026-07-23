@@ -1,9 +1,14 @@
-# ROM images are copyrighted — never commit them
-roms/
+# Copyrighted firmware and locally extracted SDK artifacts.
+roms/*
+!roms/.gitkeep
+
+# Python test/tool caches.
+__pycache__/
+*.py[cod]
 
 # OS noise
 .DS_Store
 
-# scratch files
+# Scratch files
 *.tmp
 scratch/
