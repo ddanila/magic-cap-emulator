@@ -1,6 +1,6 @@
 # DataRover 840 / Magic Cap Emulator
 
-An attempt to build an open-source emulator for the [General Magic DataRover 840](https://pdamuseum.eu/pda/datarover840/) — the last and best Magic Cap communicator (1998), running Magic Cap 3.1 on a MIPS CPU. No emulator for this machine exists anywhere today; the only way people run Magic Cap in 2026 is the 68K-era *Magic Cap Simulator* inside a classic Mac emulator, which is a different OS build for different hardware.
+An attempt to build an open-source emulator for the [General Magic DataRover 840](https://pdamuseum.eu/pda/datarover840/) — the last and best Magic Cap communicator (1998), running Magic Cap 3.1 on a MIPS CPU. No emulator for this machine exists anywhere today; the only way people run Magic Cap in 2026 is a *Magic Cap Simulator* (a native Mac recompile of the OS, not a hardware emulator) inside a classic Mac emulator — see [The Magic Cap Simulators](#the-magic-cap-simulators) below.
 
 ## The machine
 
@@ -56,8 +56,23 @@ Reusable open-source parts:
 - **MAME framework** — screen/LCD rendering, touch/pointer input, PCMCIA slot devices, serial/modem devices, RTC devices, save states, debugger with MIPS disassembly. Most of an emulator's boring 80% for free.
 - **Toshiba TX39-family datasheets** on Bitsavers — [TMPR39xx family overview](http://www.bitsavers.org/components/toshiba/_dataSheet/TMPR39xx-family.pdf), TMPR3904/3912/3922 manuals (the 3902's documented siblings; the 3902 itself appears undocumented publicly, so sibling datasheets + ROM reverse engineering fill the gap).
 - **Ghidra** — free RE suite with solid big-endian MIPS-I support for static analysis of the ROM.
-- **Reference behavior**: the [Magic Cap Simulator](https://www.macintoshrepository.org/1316-magic-cap-simulator-1-0) under Basilisk II ([Adafruit guide](https://learn.adafruit.com/magic-cap-the-smartphone-os-from-the-90s/hardware-and-legacy)) shows what a booted Magic Cap should look/behave like.
+- **Reference behavior**: the Magic Cap Simulators — see the dedicated section below.
 - **Community knowledge**: [Old VCR blog](http://oldvcr.blogspot.com/2022/12/magic-cap-from-magic-link-to-datarover.html), [Josh Carter's FAQs](https://joshcarter.com/magic_cap/) (incl. developer docs and the 840F flasher, useful for understanding ROM layout), [comp.os.magic-cap archives](https://groups.google.com/g/comp.os.magic-cap), [archive.org DataRover 840 software](https://archive.org/details/DataRover840).
+
+## The Magic Cap Simulators
+
+Two distinct simulators exist, and the difference matters:
+
+- **Magic Cap Simulator 1.0** ([Macintosh Repository](https://www.macintoshrepository.org/1316-magic-cap-simulator-1-0)) — Magic Cap **1.x**, the Sony Magic Link / Motorola Envoy era. 68K, runs under Basilisk II ([Adafruit guide](https://learn.adafruit.com/magic-cap-the-smartphone-os-from-the-90s/hardware-and-legacy)). UI and internals diverge noticeably from 3.1; treat it as a curiosity.
+- **The Rosemary SDK simulator** — Magic Cap **3.x**, part of the actual DataRover development environment (PowerPC, Mac OS 7.5.5+, CodeWarrior Pro era; needs SheepShaver/QEMU rather than Basilisk II). The SDK is on Macintosh Garden per [Old VCR's TLS post](http://oldvcr.blogspot.com/2023/01/bringing-tls-to-magic-cap-datarover.html); the SDK tools documentation is on the resurrected [datarover.com](http://www.datarover.com/Develop/MagicCap/Docs/Tools/CWMagic/Simulator.html) (self-signed cert). **This is the reference that matches our target OS version.**
+
+A simulator is a native Mac recompile of the same portable Magic Cap source tree our MIPS ROM was built from — not a hardware emulator. It says nothing about the TX39, Betty, or timing, but it is a **debug build with introspection tools** the device ROM lacks, which makes it useful well beyond "what should the screen look like":
+
+- **Runtime object-model ground truth.** The simulator's Inspector and `Dump Package` / `Dump Inspector Target Deep` commands write full text descriptions (ObjectMaker syntax) of any live object — object IDs, fields, flags, class names. The same object structures live in our ROM's persistent store; dumps from the simulator are a labeled map for interpreting them. SDK headers (`Indexicals.h`, class definition files) give the complete class hierarchy and indexical numbering. This complements the unstripped Apollo ELF: the ELF names the code, the simulator dumps describe the *data*.
+- **A specification of the hardware abstraction boundary.** The simulator's Hardware menu is effectively the list of what the portable OS expects from the platform layer: power on/off, warm reset, two card slots, phone-line connect/incoming-call events, hardware keyboard attach, memory sizing. Anything *not* simulated there is device-specific — a useful razor for deciding whether a Betty behavior is OS-visible or board plumbing.
+- **Acceptance-test material.** The debug runtime carries a hidden Testing Scene, an "Execute Standard System" self-test, and action journaling/replay. If the device ROM retains any of these, triggering them inside the emulated DataRover is a strong internal-consistency signal (same philosophy as the `BettyTest` checkpoint).
+- **An end-to-end package loop.** The SDK builds packages; the simulator runs them natively; PCLink (already working in this driver) installs them onto the emulated DataRover. Building a trivial package and comparing its behavior side by side closes the loop from source to emulated device.
+- **Debug-build details**: `Assert` / `Whisper` / `Log` / `DebugMessage` macros are compiled in only in the simulator ("ignored on communicators"), and "Simulate Device Contrast" confirms the 16-gray LCD rendering expectations.
 
 ## Approach
 
@@ -160,7 +175,8 @@ Repo, README, survey of existing parts (this document).
 
 We don't own a DataRover 840, so correctness is judged by external signals only:
 
-- **Screen appearance** vs. photos/screenshots of Magic Cap 3.x in the wild ([PDA Museum](https://pdamuseum.eu/pda/datarover840/), [Old VCR](http://oldvcr.blogspot.com/2022/12/magic-cap-from-magic-link-to-datarover.html), [Pen Computing review](http://www.pencomputing.com/magic_cap/data_rover_840.html)) and the 68K Magic Cap Simulator's UI as a behavioral reference.
+- **Screen appearance** vs. photos/screenshots of Magic Cap 3.x in the wild ([PDA Museum](https://pdamuseum.eu/pda/datarover840/), [Old VCR](http://oldvcr.blogspot.com/2022/12/magic-cap-from-magic-link-to-datarover.html), [Pen Computing review](http://www.pencomputing.com/magic_cap/data_rover_840.html)) and the Rosemary (Magic Cap 3.x) Simulator's UI as a behavioral reference — see [The Magic Cap Simulators](#the-magic-cap-simulators).
+- **Simulator object dumps**: the Rosemary simulator's Inspector/`Dump Package` output describes the same object structures our ROM stores — a cross-check for persistent-store interpretation, and its Testing Scene / "Execute Standard System" self-test (if retained in the device ROM) is more ROM-provided diagnostics to drive.
 - **The ROM's own voice**: the IDT boot monitor and Magic Cap debug builds talk over the serial port — an emulated UART console is our primary instrument for everything that happens before (and behind) the screen.
 - **Internal consistency**: diagnostics in the ROM (Betty register readback tests, memory sizing) passing is itself evidence the hardware model is right.
 
