@@ -30,8 +30,13 @@ The USA ROM image (build 3.1.2j) comes from the [Rosemary Software Archive](http
   (abandonware, but still). Keep persistent local downloads outside the Git
   checkout under `~/fun/magic-cap-assets/`; the MAME-ready ROM path is
   `~/fun/magic-cap-assets/roms/datarover840/magiccap-usa.image`.
-- Exact ROM, flasher, WinDownload, and SDK acquisition/extraction commands are
-  kept in [`docs/rom-layout.md`](docs/rom-layout.md#download-the-rom-and-flasher-image).
+- These inputs are hobbyist-hosted and could disappear, so the local mirror is
+  the dependency rather than the download: `tools/fetch_assets.sh all` fetches
+  and checksum-verifies every research input (USA/Japan ROMs, 840F flasher,
+  packages, the original Windows tools, the TX39 manual, and the SDK's Apollo
+  ELF), and `--verify` re-checks the mirror without any network access. Exact
+  per-file provenance is in
+  [`docs/rom-layout.md`](docs/rom-layout.md#mirror-everything-at-once).
 
 Key facts established by analysis (details in [`docs/`](docs/)):
 
@@ -100,10 +105,6 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
 
 ### Open questions
 
-- **Mirror the hobbyist-hosted assets.** The 3.1.2j USA/Japan ROM images and
-  the [TX39 Core Architecture manual](https://archive.org/details/manualzilla-id-7260633)
-  live on personal/community hosts that could disappear; keep local copies in
-  `~/fun/magic-cap-assets/` so bring-up never depends on a live download.
 - **Diff the 4/7/98 development ROM against the 3.1.2j release.** The Mac
   Rosemary SDK ships a dated development ROM image; it may carry extra debugger
   hooks or assertions the release image lacks. Comparing memory map, debug
@@ -147,7 +148,7 @@ We don't own a DataRover 840, so correctness is judged by external signals only:
 
 ```
 docs/       RE notes: memory map, Betty registers, ROM layout, bring-up, PCLink, modem, TX39 CPU
-tools/      headless regression harnesses and analysis scripts (ROM info, serial, desk, sound, TX39, PC Card, PCLink, modem), plus start_manual.sh for interactive play
+tools/      headless regression harnesses and analysis scripts (ROM info, serial, desk, sound, TX39, PC Card, PCLink, modem), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play
 tests/      unit tests for the tools, with captured serial fixtures
 roms/       optional git-ignored compatibility path; persistent assets live outside the repo in ~/fun/magic-cap-assets/
 ```

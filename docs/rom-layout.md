@@ -32,6 +32,29 @@ all persistent binary inputs outside the Git repositories under
 `~/fun/magic-cap-assets/`. This avoids committing copyrighted binaries without
 making research inputs ephemeral.
 
+### Mirror everything at once
+
+These inputs live on personal and community hosts that could disappear, so the
+local mirror under `~/fun/magic-cap-assets/` is the real dependency, not the
+download. `tools/fetch_assets.sh` reproduces and checks it:
+
+```sh
+cd "$HOME/fun/magic-cap-emulator"
+tools/fetch_assets.sh all       # ROMs, packages, Windows tools, manual, SDK
+tools/fetch_assets.sh --verify  # check the existing mirror, download nothing
+```
+
+It is idempotent (an asset whose checksum matches is not re-fetched), takes
+group names (`rom japan packages wintools manual sdk`), and re-extracts from
+the local containers when only an extracted file is missing. Extracted-artifact
+checksums are hard assertions; a container archive that upstream re-packed is
+reported as a warning, since the payload is what matters. The SDK group needs
+`unshield`; everything else needs only `curl` and `unzip`.
+
+The rest of this document records what each input is and where it came from.
+The per-file commands below remain the provenance for the checksums the script
+enforces.
+
 ### Download the ROM and flasher image
 
 Run these commands from the repository root. They keep the files in a

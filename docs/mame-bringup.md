@@ -22,7 +22,12 @@ brew install sdl2 sdl2_ttf coreutils
 ```
 
 `coreutils` supplies the `sha256sum` and `nproc` used by these docs
-(equivalently, use `shasum -a 256` and `sysctl -n hw.ncpu`). The
+(equivalently, use `shasum -a 256` and `sysctl -n hw.ncpu`). Current macOS
+also ships its own `/sbin/sha256sum`, which has no `--check` option and can
+shadow the Homebrew one; where a doc pipes into `sha256sum --check`, use
+`shasum -a 256 -c` instead, or just run `tools/fetch_assets.sh`, which picks
+a working implementation itself. Add `unshield` to the `brew install` line
+when extracting the SDK cabinets. The
 `mips-linux-gnu-*` static-analysis commands in
 [`memory-map.md`](memory-map.md) assume the Debian cross-binutils package;
 on macOS, Ghidra covers the same disassembly needs.
@@ -47,7 +52,15 @@ The cross-GCC packages are not required. In particular,
 Debian/Ubuntu repositories; `binutils-mips-linux-gnu` supplies the `readelf`,
 `nm`, and `objdump` tools used for static analysis.
 
-Follow [`rom-layout.md`](rom-layout.md) to download and verify the ROM and SDK.
+Mirror every research input (ROMs, packages, Windows reference tools, CPU
+manual) with one checksum-verified command; add `all` to include the 176 MiB
+SDK bundle, and see [`rom-layout.md`](rom-layout.md) for what each file is:
+
+```sh
+cd "$HOME/fun/magic-cap-emulator"
+tools/fetch_assets.sh all
+```
+
 The resulting MAME ROM must be:
 
 ```text
