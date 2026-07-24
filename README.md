@@ -173,6 +173,17 @@ Repo, README, survey of existing parts (this document).
   writable 2 MiB flash lanes; the separately archived Japan image is an
   audited clone set. See [`docs/rom-layout.md`](docs/rom-layout.md).
 
+### Open questions
+- **Mirror the hobbyist-hosted assets.** The 3.1.2j USA/Japan ROM images and
+  the [TX39 Core Architecture manual](https://archive.org/details/manualzilla-id-7260633)
+  live on personal/community hosts that could disappear; keep local copies in
+  `~/fun/magic-cap-assets/` so bring-up never depends on a live download.
+- **Diff the 4/7/98 development ROM against the 3.1.2j release.** The Mac
+  Rosemary SDK ships a dated development ROM image; it may carry extra debugger
+  hooks or assertions the release image lacks. Comparing memory map, debug
+  strings, and entry points could give the emulator a friendlier bring-up
+  target than the shipping ROM.
+
 ## Verification (no real hardware)
 
 We don't own a DataRover 840, so correctness is judged by external signals only:
