@@ -591,7 +591,7 @@ def lua_warm_provider_navigation(
     owner_first_name: str | None = None,
     owner_last_name: str | None = None,
 ) -> str:
-    """Navigate a provider-configured warm image from In box to PCLink."""
+    """Generate provider-seeded navigation and post-install acceptance."""
     settle_offset = (
         PACKAGE_SETTLE_FRAMES
         if package_ready_path is not None
@@ -917,8 +917,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--nvram-source",
         type=Path,
         help=(
-            "copy a provider-configured NVRAM directory into the run and "
-            "use warm-boot navigation"
+            "copy an external NVRAM directory into the isolated run and "
+            "use provider navigation"
         ),
     )
     parser.add_argument(
@@ -933,11 +933,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--owner-first-name",
-        help="first name for completing the provider's first-run owner card",
+        help="letters-only first name for provider first-run setup",
     )
     parser.add_argument(
         "--owner-last-name",
-        help="last name for completing the provider's first-run owner card",
+        help="letters-only last name for provider first-run setup",
     )
     parser.add_argument(
         "--connect-only",

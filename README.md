@@ -2,7 +2,7 @@
 
 The first emulator for the [General Magic DataRover 840](https://pdamuseum.eu/pda/datarover840/) — the last and best Magic Cap communicator (1998), running Magic Cap 3.1 on a MIPS CPU. It is built as a MAME driver (fork: [ddanila/mame](https://github.com/ddanila/mame), `custom` branch); this repository holds the reverse-engineering notes, analysis tooling, and regression harnesses.
 
-**Current state:** the emulated machine boots ROM build 3.1.2j to the interactive Magic Cap workbench — touchscreen, persistent storage, sound, both PC Card slots, package installation over serial PCLink, and a PC Card modem completing live PPP all work. See [Status](#status).
+**Current state:** the emulated machine boots ROM build 3.1.2j to the interactive Magic Cap workbench — touchscreen, persistent storage, sound, both PC Card slots, package installation over serial PCLink, and Web Browser 4.0 fetching a local HTTP page over live PC Card PPP all work. See [Status](#status).
 
 Before this project (survey, July 2026) no emulator for any Magic Cap device existed — nothing in MAME, on GitHub, or in QEMU. The only way people ran Magic Cap was the Mac-hosted *Magic Cap Simulator*, a native recompile of the OS rather than a hardware emulator ([details below](#the-magic-cap-simulators)).
 
@@ -83,7 +83,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling | [`mame-bringup.md`](docs/mame-bringup.md) |
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap | [`pclink.md`](docs/pclink.md) |
-| Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 installs | [`modem.md`](docs/modem.md) |
+| Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 fetches and renders deterministic local HTTP | [`modem.md`](docs/modem.md) |
 | Variants | `datarover840` / `840f` (writable flash) / `840j` / `840d` (1998-04-07 development ROM) all build and verify; `840d` also boots to the workbench | [`rom-layout.md`](docs/rom-layout.md), [`dev-rom.md`](docs/dev-rom.md) |
 | OS self-tests | Three of the development ROM's own unit-test suites (date/time, cache, font) run against the emulated hardware and report no complaint, judged by the oracle the ROM names itself | [`dev-rom.md`](docs/dev-rom.md) |
 
@@ -91,8 +91,6 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
 
 ### Remaining work
 
-- **Final combined acceptance**: load a plain-HTTP page in the archived Web
-  Browser 4.0 over the live PPP link — *Magic Cap on the internet*.
 - **Buffered SIB sound DMA** (the startup tone uses the unbuffered path).
 - **Complete wake-path interaction.** In-session suspend/wake works, but a
   warm boot of a heap that was saved *while suspended* re-enters suspend at

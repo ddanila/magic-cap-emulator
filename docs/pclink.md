@@ -11,6 +11,17 @@ persistent `~/fun/magic-cap-assets/` tree.
 
 ## Download the test package and reference host
 
+The repository mirror helper downloads and checksum-verifies every archived
+package used below:
+
+```sh
+cd "$HOME/fun/magic-cap-emulator"
+tools/fetch_assets.sh packages
+```
+
+The equivalent individual commands are kept here so the inputs and their
+original locations remain recoverable even without the helper.
+
 The small Dvorak keyboard package is the default regression input:
 
 ```sh
@@ -113,29 +124,31 @@ continues through PPP and local HTTP without restarting MAME:
 ```sh
 python3 tools/pclink_regression.py \
   --package "$HOME/fun/magic-cap-assets/packages/WebBrowser40.mc2" \
-  --state-source \
-    "$HOME/fun/magic-cap-assets/runtime/state-card-load/pc-card-only.sta" \
-  --internet-center-source \
+  --nvram-source \
+    "$HOME/fun/magic-cap-assets/runtime/state-card-load/nvram" \
+  --owner-first-name Ada \
+  --owner-last-name Lovelace \
   --combined-browser-acceptance \
   --workdir \
     "$HOME/fun/magic-cap-assets/runtime/combined-browser/live-http"
 ```
 
-`--state-source` loads the provider-configured checkpoint without modifying
-it. The newly launched MAME process writes its own NVRAM into the timestamped
-run.
-`--internet-center-source` selects the navigation path used by the exported
-provider checkpoint. Starting from the state, rather than only its exported
-NVRAM, retains the live PC Card actor binding needed when the browser later
-dials. `--combined-browser-acceptance` keeps both the PCLink
-serial endpoint and modem PTY open, services Hayes commands during the long
-transfer, waits 1,800 emulated frames after the final `Pong` for the package
-actor to settle, and only then sends `GBye`. In that same live process it
-opens the received package, follows **go to**, enters
-`10.0.2.2:8080/`, presses **go**, and services Slirp plus the built-in
-HTTP/1.0 endpoint. Avoiding a save-state handoff matters: build 3.1.2j can
-restore the running heap into its cleanup/suspend path with touch input
-unavailable.
+The source is the pre-owner-setup NVRAM saved while configuring the two
+provider connections described in [`modem.md`](modem.md). The harness copies
+it into the timestamped run and never modifies the source. It then completes
+the owner card, creates the `home` dialing location (USA, area code 650), and
+explicitly assigns `PPP PC Card` to that location. Substitute any non-empty
+first and last names made only from letters `a` through `z`; capitalization is
+accepted.
+
+`--combined-browser-acceptance` keeps both the PCLink serial endpoint and
+modem PTY open, services Hayes commands during the long transfer, waits 1,800
+emulated frames after the final `Pong` for the package actor to settle, and
+only then sends `GBye`. In that same live process it opens the received
+package, follows **go to**, enters `http://10.0.2.2:8080/`, presses **go**,
+and services Slirp plus the built-in HTTP/1.0 endpoint. Avoiding any
+state/NVRAM relaunch matters: build 3.1.2j can render the restored heap after
+its cleanup path while rejecting the scripted touch input.
 
 The run's `nvram/`, screenshots, PCLink and modem wire captures, Hayes
 transcript, Slirp PPP debug log, and recorded HTTP requests are persistent

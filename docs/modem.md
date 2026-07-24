@@ -88,10 +88,22 @@ cd "$HOME/fun/mame"
 The resulting `datarover840/ram` and `datarover840/rtc` files contain the
 same PPP PC Card provider as the source checkpoint. They are the
 `--nvram-source` used by package-only probes. They remain outside Git, and
-every PCLink run copies them before making changes. The final browser
-acceptance instead loads `pc-card-only.sta`: the raw NVRAM preserves the
-provider fields but not the already-bound live PC Card actor required for
-the later dial.
+every PCLink run copies them before making changes.
+
+For the combined browser acceptance, preserve a copy of the configured heap
+*before* completing the first-run owner-card dialog:
+
+```text
+~/fun/magic-cap-assets/runtime/state-card-load/nvram/
+  datarover840/ram
+  datarover840/rtc
+```
+
+That seed must show the provider's `PPP PC Card` and `PPP dialup` rows when
+booted. The combined harness completes the owner dialog, creates a `home`
+dialing location, and binds that location to `PPP PC Card` in the same
+process. It copies the seed into each run, so the preserved source remains
+unchanged.
 
 ## Verify the guest modem boundary
 
@@ -156,9 +168,10 @@ one uninterrupted MAME process:
 cd "$HOME/fun/magic-cap-emulator"
 python3 tools/pclink_regression.py \
   --package "$HOME/fun/magic-cap-assets/packages/WebBrowser40.mc2" \
-  --state-source \
-    "$HOME/fun/magic-cap-assets/runtime/state-card-load/pc-card-only.sta" \
-  --internet-center-source \
+  --nvram-source \
+    "$HOME/fun/magic-cap-assets/runtime/state-card-load/nvram" \
+  --owner-first-name Ada \
+  --owner-last-name Lovelace \
   --combined-browser-acceptance \
   --workdir \
     "$HOME/fun/magic-cap-assets/runtime/combined-browser/live-http"
@@ -166,16 +179,20 @@ python3 tools/pclink_regression.py \
 
 The harness starts its fixed HTTP/1.0 endpoint on port 8080, owns both host
 PTYs from boot, and answers the modem's Hayes initialization even while
-PCLink transfers the package. After the final `Pong`, it gives the guest
-package actor 1,800 emulated frames to finish, takes the installed-package
-snapshot, and sends `GBye`. It then opens Web Browser 4.0, enters
-`10.0.2.2:8080/`, presses **go**, and hands the modem line to Slirp after
-`CONNECT 14400`.
+PCLink transfers the package. Its first-run automation completes the owner
+card, creates the `home` dialing location with the seed's USA/650 defaults,
+and explicitly changes that location's connection from the default `PPP
+dialup` to `PPP PC Card`. After the final `Pong`, it gives the guest package
+actor 1,800 emulated frames to finish, takes the installed-package snapshot,
+and sends `GBye`. It then opens Web Browser 4.0, enters
+`http://10.0.2.2:8080/`, presses **go**, and hands the modem line to Slirp
+after `CONNECT 14400`.
 
-This deliberately avoids relaunching a MAME save state between installation
-and dialing. The 3.1.2j running heap can restore into a cleanup/suspend path
-whose touch input never becomes available, whereas keeping the original
-process alive preserves the verified interactive browser session.
+This deliberately avoids relaunching a MAME save state or copied NVRAM
+between installation and dialing. The 3.1.2j running heap can return through
+a cleanup/suspend path that renders the saved screen but does not accept the
+scripted touches, whereas keeping the original process alive preserves the
+interactive browser session.
 
 A pass requires all of the following from one run: the ROM's Hayes dial
 sequence, Slirp LCP/IPCP with the guest at `10.0.2.15`, an exact `GET /` at
@@ -184,6 +201,23 @@ directory also retains `http-requests.txt`, Slirp's PPP debug log, modem
 transcript, both protocols' raw wire captures, isolated NVRAM, and
 intermediate browser screenshots. No package, state, or generated binary is
 placed in this Git checkout.
+
+The first complete combined pass on 2026-07-25 recorded:
+
+```text
+HAYES ATE0V1&d2W2
+HAYES atl0
+HAYES at&n0&u0
+HAYES ATDT555-1212
+remote IP address 10.0.2.15
+slirppp: PPP is up now
+GET /
+```
+
+The final LCD capture renders the deterministic page heading **Magic Cap is
+online** and its text identifying Web Browser 4.0 and Slirp PPP. The harness
+printed `PASS: installed Web Browser through PCLink and fetched the local
+HTTP page over PPP`.
 
 The browser predates modern TLS, so plain HTTP is intentional. Slirp's
 `10.0.2.2` host alias avoids an external site and proves PPP, TCP, HTTP, and
