@@ -103,6 +103,11 @@ result is the Magic Cap 3.1.2j workbench. A main-battery warning can appear
 over the desk while the battery model is still being refined.
 
 `-lightgun_device mouse` maps the host pointer to the resistive pen axes.
+Add `-nokeepaspect` for interactive use: SDL normalizes the pointer over the
+whole window while `-keepaspect` letterboxes the 3:2 screen, so with
+letterboxing the crosshair and the host cursor only agree at the window
+center. With `-nokeepaspect` the screen fills the window and the pen mapping
+is exact at any window size (keep the window near 3:2 to avoid distortion).
 Press **End** for the DataRover power button; a normal press enters
 suspend-to-RAM rather than destroying the battery-backed heap, and another
 press wakes the CPU.
