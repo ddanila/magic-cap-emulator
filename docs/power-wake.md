@@ -225,3 +225,8 @@ For MAME debugger sessions on a wake failure:
 `shutdownReason` at `0x0000e880` and `wakeInterrupt1mirror`…`5mirror` at
 `0x0000e8b0`…`0x0000e8c0` are the two RAM locations worth dumping first: they
 decide the branch before any hardware is consulted.
+
+Those global addresses are specific to the release build. The 1998-04-07
+development ROM shifts its RAM globals up by `0x40` — `shutdownReason` sits at
+`0x0000e8c0` there — so re-resolve them against the matching ELF if you
+investigate on that image; see [`dev-rom.md`](dev-rom.md).

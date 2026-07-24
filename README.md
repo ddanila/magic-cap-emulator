@@ -108,11 +108,16 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
 
 ### Open questions
 
-- **Diff the 4/7/98 development ROM against the 3.1.2j release.** The Mac
-  Rosemary SDK ships a dated development ROM image; it may carry extra debugger
-  hooks or assertions the release image lacks. Comparing memory map, debug
-  strings, and entry points could give the emulator a friendlier bring-up
-  target than the shipping ROM.
+- **Boot the 1998-04-07 development ROM.** The diff against the 3.1.2j release
+  is done ([`dev-rom.md`](docs/dev-rom.md)): the Mac Rosemary SDK ships four
+  dated development images, and the USA Apollo build adds 719 functions the
+  release lacks — 28 `*TestSuite_RunTest` entry points, 11 unit-test functions,
+  a live heap inspector, heap-stress tools, and input journaling. It is
+  drop-in compatible with the current memory map (same base, same `BootCap`
+  entry, 4.9 MB inside the 8 MiB region), so exposing it should need only a new
+  ROM set. Doing that turns 28 suites of ROM-provided self-tests into
+  acceptance material, which is the strongest verification signal available
+  without hardware.
 
 ## Resources
 
@@ -150,8 +155,8 @@ We don't own a DataRover 840, so correctness is judged by external signals only:
 ## Repo layout
 
 ```
-docs/       RE notes: memory map, Betty registers, ROM layout, bring-up, PCLink, modem, TX39 CPU, power/wake
-tools/      headless regression harnesses and analysis scripts (ROM info, serial, desk, sound, TX39, PC Card, PCLink, modem), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play
+docs/       RE notes: memory map, Betty registers, ROM layout, bring-up, PCLink, modem, TX39 CPU, power/wake, development ROMs
+tools/      headless regression harnesses and analysis scripts (ROM info, ROM diff, serial, desk, sound, TX39, PC Card, PCLink, modem), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play
 tests/      unit tests for the tools, with captured serial fixtures
 roms/       optional git-ignored compatibility path; persistent assets live outside the repo in ~/fun/magic-cap-assets/
 ```

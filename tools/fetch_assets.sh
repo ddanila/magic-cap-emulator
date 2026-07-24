@@ -16,7 +16,7 @@
 #   tools/fetch_assets.sh rom japan       # only the named groups
 #   tools/fetch_assets.sh --verify        # check the existing mirror, download nothing
 #
-# Groups: rom japan packages wintools manual sdk
+# Groups: rom japan packages wintools manual sdk macsdk
 #
 # Environment overrides:
 #   ASSETS      persistent asset tree (default: ~/fun/magic-cap-assets)
@@ -36,8 +36,8 @@ groups=()
 for arg in "$@"; do
   case "$arg" in
     --verify|--verify-only) verify_only=1 ;;
-    all)                    groups+=(rom japan packages wintools manual sdk) ;;
-    rom|japan|packages|wintools|manual|sdk) groups+=("$arg") ;;
+    all)                    groups+=(rom japan packages wintools manual sdk macsdk) ;;
+    rom|japan|packages|wintools|manual|sdk|macsdk) groups+=("$arg") ;;
     -h|--help)              sed -n '3,28p' "$0"; exit 0 ;;
     *) printf 'error: unknown argument %s (see --help)\n' "$arg" >&2; exit 2 ;;
   esac
@@ -248,6 +248,39 @@ if want sdk; then
   # The SDK's own ROM image is byte-identical to the separately published one.
   assert "$apollo/MagicCAP-USA.image" \
     94785cb334f14eac00ed200af014c35972b4f25694103bc6a49b3afa280a6f1b
+fi
+
+# --- Mac Rosemary SDK: the 1998-04-07 development ROMs ---------------------
+if want macsdk; then
+  echo 'Mac Rosemary SDK (development ROMs, debugger databases)'
+  sit="$ASSETS/sdk-mac/magicdeveloper.sit"
+  sit_sha=1ea81ba35c2ade992bac2b0348cbc4f7443f3f006a1480d66c04848c8de89e76
+  # Macintosh Garden publishes MD5 0e3385d40ba3c9c069b1af99a430fe7a for this
+  # file; the SHA-256 above is of that same 74,208,013-byte download.
+  fetch https://old.mac.gdn/apps/magicdeveloper.sit "$sit" "$sit_sha"
+  assert "$sit" "$sit_sha"
+
+  dbg="$ASSETS/sdk-mac/extracted/MagicDeveloper/MagicDeveloper/Debugger"
+  dev_usa_sha=fee43c259942baa0fe893be583e41800935a2e06a5dbdeb7ab83739a88aa00f8
+  if ! matches "$dbg/Apollo/MagicCap-USA.image" "$dev_usa_sha" \
+     && (( ! verify_only )); then
+    if ! command -v unar >/dev/null 2>&1; then
+      printf 'error: unar not found (brew install unar / apt install unar)\n' >&2
+      exit 1
+    fi
+    # StuffIt 5; unar is the only reliable extractor. ~200 MiB unpacked.
+    unar -quiet -force-overwrite -output-directory "$ASSETS/sdk-mac/extracted" \
+      "$sit" >/dev/null
+  fi
+  assert "$dbg/Apollo/MagicCap-USA.image" "$dev_usa_sha"
+  assert "$dbg/Apollo/MagicCap-Japan.image" \
+    ed5e5f0307d44f3023328f7e9b83b44682643b8ef5768d78c4e7627ed625d8bc
+  assert "$dbg/Sputnik/MagicCap-USA.image" \
+    1a7f5eb74e6a83e4721e797fc21f200567ebffe6576930e10894d8debb2eaa37
+  assert "$dbg/Sputnik/MagicCap-Japan.image" \
+    e940fcae73b657ac6437a6c8cdaf2f5d6e89e95d408e751260c0a801f8bc1ae1
+  assert "$dbg/Apollo/MagicCap-USA" \
+    c3b3fe4a38c1a3a7c666f579639398601e48e62bc26437b27e3fc1b020e3b034
 fi
 
 echo

@@ -32,6 +32,13 @@ all persistent binary inputs outside the Git repositories under
 `~/fun/magic-cap-assets/`. This avoids committing copyrighted binaries without
 making research inputs ephemeral.
 
+The separate **Mac** Rosemary SDK adds four development ROM images dated
+1998-04-07 (USA and Japan, for the Apollo and Sputnik platforms), each with its
+own unstripped ELF and `.dx` debugger database. The USA Apollo development
+build carries an on-device test framework the release ROM does not — see
+[`dev-rom.md`](dev-rom.md) for the comparison and
+`tools/fetch_assets.sh macsdk` for acquisition.
+
 ### Mirror everything at once
 
 These inputs live on personal and community hosts that could disappear, so the
