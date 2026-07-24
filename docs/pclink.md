@@ -113,18 +113,21 @@ continues through PPP and local HTTP without restarting MAME:
 ```sh
 python3 tools/pclink_regression.py \
   --package "$HOME/fun/magic-cap-assets/packages/WebBrowser40.mc2" \
-  --nvram-source \
-    "$HOME/fun/magic-cap-assets/runtime/provider-from-state/nvram" \
+  --state-source \
+    "$HOME/fun/magic-cap-assets/runtime/state-card-load/pc-card-only.sta" \
   --internet-center-source \
   --combined-browser-acceptance \
   --workdir \
     "$HOME/fun/magic-cap-assets/runtime/combined-browser/live-http"
 ```
 
-`--nvram-source` copies the provider-configured NVRAM into the timestamped
-run before starting MAME; it never modifies the source.
+`--state-source` loads the provider-configured checkpoint without modifying
+it. The newly launched MAME process writes its own NVRAM into the timestamped
+run.
 `--internet-center-source` selects the navigation path used by the exported
-provider checkpoint. `--combined-browser-acceptance` keeps both the PCLink
+provider checkpoint. Starting from the state, rather than only its exported
+NVRAM, retains the live PC Card actor binding needed when the browser later
+dials. `--combined-browser-acceptance` keeps both the PCLink
 serial endpoint and modem PTY open, services Hayes commands during the long
 transfer, waits 1,800 emulated frames after the final `Pong` for the package
 actor to settle, and only then sends `GBye`. In that same live process it

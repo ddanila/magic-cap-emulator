@@ -67,7 +67,7 @@ bridge's default automation taps the configured row. For a state saved
 elsewhere, start with `--no-autodial` and initiate the connection in the
 visible Magic Cap UI yourself.
 
-The combined browser regression starts from persistent NVRAM rather than
+PCLink-only package probes can start from persistent NVRAM rather than
 modifying that checkpoint. Export the known configured checkpoint into an
 isolated NVRAM directory with:
 
@@ -87,8 +87,11 @@ cd "$HOME/fun/mame"
 
 The resulting `datarover840/ram` and `datarover840/rtc` files contain the
 same PPP PC Card provider as the source checkpoint. They are the
-`--nvram-source` used below. They remain outside Git, and every PCLink run
-copies them before making changes.
+`--nvram-source` used by package-only probes. They remain outside Git, and
+every PCLink run copies them before making changes. The final browser
+acceptance instead loads `pc-card-only.sta`: the raw NVRAM preserves the
+provider fields but not the already-bound live PC Card actor required for
+the later dial.
 
 ## Verify the guest modem boundary
 
@@ -153,8 +156,8 @@ one uninterrupted MAME process:
 cd "$HOME/fun/magic-cap-emulator"
 python3 tools/pclink_regression.py \
   --package "$HOME/fun/magic-cap-assets/packages/WebBrowser40.mc2" \
-  --nvram-source \
-    "$HOME/fun/magic-cap-assets/runtime/provider-from-state/nvram" \
+  --state-source \
+    "$HOME/fun/magic-cap-assets/runtime/state-card-load/pc-card-only.sta" \
   --internet-center-source \
   --combined-browser-acceptance \
   --workdir \

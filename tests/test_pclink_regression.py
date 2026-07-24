@@ -204,6 +204,15 @@ class PCLinkProtocolTests(unittest.TestCase):
         self.assertIn("browser-result.png", script)
         self.assertNotIn("machine:save", script)
 
+    def test_state_source_is_available_for_live_provider_session(
+        self,
+    ) -> None:
+        args = pclink_regression.parse_args(
+            ["--state-source", "/tmp/provider.sta"]
+        )
+
+        self.assertEqual(args.state_source, Path("/tmp/provider.sta"))
+
 
 if __name__ == "__main__":
     unittest.main()

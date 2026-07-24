@@ -709,6 +709,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--state-source",
+        type=Path,
+        help=(
+            "load a provider-configured MAME state while keeping all "
+            "subsequent acceptance steps in the same process"
+        ),
+    )
+    parser.add_argument(
         "--probe-package",
         action="store_true",
         help="open the received package and capture its Package scene",
@@ -766,6 +774,12 @@ def run_regression(args: argparse.Namespace) -> int:
         if args.nvram_source
         else None
     )
+    state_source = (
+        args.state_source.expanduser().resolve()
+        if args.state_source
+        else None
+    )
+    provider_source = nvram_source is not None or state_source is not None
     combined_browser = args.combined_browser_acceptance
     probe_package = args.probe_package or combined_browser
 
@@ -777,20 +791,28 @@ def run_regression(args: argparse.Namespace) -> int:
         inputs.append(("package", package, "file"))
     if nvram_source is not None:
         inputs.append(("NVRAM source", nvram_source, "directory"))
+    if state_source is not None:
+        inputs.append(("state source", state_source, "file"))
     for label, path, kind in inputs:
         valid = path.is_file() if kind == "file" else path.is_dir()
         if not valid:
             print(f"error: {label} not found: {path}", file=sys.stderr)
             return 2
-    if probe_package and nvram_source is None:
+    if nvram_source is not None and state_source is not None:
         print(
-            "error: package probing requires --nvram-source",
+            "error: --nvram-source and --state-source are mutually exclusive",
             file=sys.stderr,
         )
         return 2
-    if args.internet_center_source and nvram_source is None:
+    if probe_package and not provider_source:
         print(
-            "error: --internet-center-source requires --nvram-source",
+            "error: package probing requires a provider source",
+            file=sys.stderr,
+        )
+        return 2
+    if args.internet_center_source and not provider_source:
+        print(
+            "error: --internet-center-source requires a provider source",
             file=sys.stderr,
         )
         return 2
@@ -840,7 +862,7 @@ def run_regression(args: argparse.Namespace) -> int:
     navigation_frame = (
         5100
         if args.internet_center_source
-        else 3500 if nvram_source is not None else 2750
+        else 3500 if provider_source else 2750
     )
     snapshot_frame = navigation_frame + ceil(wire_seconds * 60) + 120
     post_frames = (
@@ -851,7 +873,7 @@ def run_regression(args: argparse.Namespace) -> int:
     exit_frame = (
         snapshot_frame
         + post_frames
-        + (PACKAGE_SETTLE_FRAMES if nvram_source is not None else 0)
+        + (PACKAGE_SETTLE_FRAMES if provider_source else 0)
     )
     lua_path = workdir / "pclink.lua"
     post_install_state = workdir / "post-install.sta"
@@ -873,7 +895,7 @@ def run_regression(args: argparse.Namespace) -> int:
                 combined_browser,
                 args.http_port,
             )
-            if nvram_source is not None
+            if provider_source
             else lua_navigation(snapshot_frame, exit_frame)
         ),
         encoding="utf-8",
@@ -912,6 +934,8 @@ def run_regression(args: argparse.Namespace) -> int:
     ]
     if combined_browser:
         command.extend(["-pccard1", "modem"])
+    if state_source is not None:
+        command.extend(["-state", str(state_source)])
     if probe_package:
         command.extend(["-debug", "-debugger", "none"])
     try:
@@ -1038,7 +1062,7 @@ def run_regression(args: argparse.Namespace) -> int:
                 and not disconnect_completed
                 and pong_seen
                 and (
-                    nvram_source is None
+                    not provider_source
                     or package_snapshotted_path.is_file()
                 )
             ):
@@ -1060,7 +1084,7 @@ def run_regression(args: argparse.Namespace) -> int:
                 trailing = bytes(device_wire[connect_wire_length:])
                 if pong_wire in trailing:
                     pong_seen = True
-                    if nvram_source is not None:
+                    if provider_source:
                         package_ready_path.write_text(
                             "package-ready\n",
                             encoding="ascii",
