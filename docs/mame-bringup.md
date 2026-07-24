@@ -187,6 +187,7 @@ python3 tools/pccard_regression.py
 python3 tools/pclink_regression.py
 python3 tools/modem_bridge.py --probe
 python3 tools/modem_bridge.py --acceptance
+python3 tools/devrom_tests.py
 ```
 
 The serial harness writes generated configuration and logs under
@@ -251,6 +252,13 @@ done
 
 The serial and desk harnesses accept `--system`, so both checkpoints can be
 run against any of these sets; `datarover840d` passes both.
+
+`tools/devrom_tests.py` goes further with that set: it forces calls to the
+development ROM's own OS unit tests and judges them with the oracle the ROM
+names itself (`AnnounceNonDebugFailure`). Three suites — date/time, cache, and
+font — return with no complaint. `--self-check` validates the detector, and
+[`dev-rom.md`](dev-rom.md) covers the two-phase design and the suites that
+need more context than a forced call provides.
 
 The 840F uses four persistent 2 MiB flash devices rather than the mask-ROM
 map. Japan/840F acquisition and layout details are in

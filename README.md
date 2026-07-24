@@ -85,6 +85,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap | [`pclink.md`](docs/pclink.md) |
 | Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 installs | [`modem.md`](docs/modem.md) |
 | Variants | `datarover840` / `840f` (writable flash) / `840j` / `840d` (1998-04-07 development ROM) all build and verify; `840d` also boots to the workbench | [`rom-layout.md`](docs/rom-layout.md), [`dev-rom.md`](docs/dev-rom.md) |
+| OS self-tests | Three of the development ROM's own unit-test suites (date/time, cache, font) run against the emulated hardware and report no complaint, judged by the oracle the ROM names itself | [`dev-rom.md`](docs/dev-rom.md) |
 
 Each subsystem has a headless regression under [`tools/`](tools/); the full list and expected checkpoints are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
 
@@ -108,16 +109,12 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
 
 ### Open questions
 
-- **Drive the development ROM's own test suites.** The 1998-04-07 image now
-  runs as the `datarover840d` set: it needed no hardware change, reaches the
-  same IDT monitor banner, and boots to the workbench with the same signature
-  as the release ([`dev-rom.md`](docs/dev-rom.md)). It carries 719 functions
-  the release lacks — 28 `*TestSuite_RunTest` entry points, 11 unit-test
-  functions, a heap inspector, heap-stress tools, input journaling — plus a
-  `TestSite` scene, and the ROM names its own failure oracle
-  (`AnnounceNonDebugFailure`). Turning one suite into a checkpoint the way
-  `BettyTest` is one is the open work: the UI route to `TestSite` is not
-  mapped yet, and a forced call needs a `jalr` stub.
+- **Reach the development ROM's remaining test suites.** Three of its
+  OS-level unit tests already run as acceptance checks (see below); the other
+  no-argument suites do not return from a forced call, and the 28
+  `*TestSuite_RunTest` entry points take arguments. Both probably need the
+  build's `TestSite` scene, whose UI route is not mapped yet
+  ([`dev-rom.md`](docs/dev-rom.md)).
 
 ## Resources
 
@@ -150,13 +147,14 @@ We don't own a DataRover 840, so correctness is judged by external signals only:
 - **Screen appearance** vs. photos/screenshots of Magic Cap 3.x in the wild ([PDA Museum](https://pdamuseum.eu/pda/datarover840/), [Old VCR](http://oldvcr.blogspot.com/2022/12/magic-cap-from-magic-link-to-datarover.html), [Pen Computing review](http://www.pencomputing.com/magic_cap/data_rover_840.html)) and the Rosemary Simulator's UI as a behavioral reference.
 - **The ROM's own voice**: the IDT boot monitor and Magic Cap debug builds talk over the serial port — an emulated UART console is our primary instrument for everything that happens before (and behind) the screen.
 - **Internal consistency**: the ROM's own diagnostics (Betty register readback tests, memory sizing) passing is itself evidence the hardware model is right.
+- **The OS's own unit tests**: the 1998-04-07 development ROM retains General Magic's test framework, and three of its suites (date/time, cache, font) now run inside the emulator and report no complaint, using the failure oracle the ROM documents for itself. These are the strongest signals available without hardware — tests written by the OS authors, judging the emulated machine. See [`dev-rom.md`](docs/dev-rom.md).
 - **Simulator cross-checks**: the Rosemary simulator's object dumps describe the same structures our ROM stores, and its self-tests (if retained in the device ROM) are more ROM-provided diagnostics to drive — see [The Magic Cap Simulators](#the-magic-cap-simulators).
 
 ## Repo layout
 
 ```
 docs/       RE notes: memory map, Betty registers, ROM layout, bring-up, PCLink, modem, TX39 CPU, power/wake, development ROMs
-tools/      headless regression harnesses and analysis scripts (ROM info, ROM diff, serial, desk, sound, TX39, PC Card, PCLink, modem), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play
+tools/      headless regression harnesses and analysis scripts (ROM info, ROM diff, serial, desk, sound, TX39, PC Card, PCLink, modem, development-ROM OS self-tests), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play
 tests/      unit tests for the tools, with captured serial fixtures
 roms/       optional git-ignored compatibility path; persistent assets live outside the repo in ~/fun/magic-cap-assets/
 ```

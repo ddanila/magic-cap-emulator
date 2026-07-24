@@ -183,14 +183,64 @@ existing `BettyTest` checkpoint. Candidate no-argument entry points:
 | `0x13e9d5b8` | `AnnouncementUnitTests__Fv` |
 | `0x13e9dbfc` | `DateTimeUnitTests__Fv` |
 
-Driving one of these to a pass/fail verdict is the next step and is not done
-yet. Two routes are open: navigate to the `TestSite` scene in the UI (taps on
-the Downtown directory sign and street arrow did not respond in a first probe,
-so the route there is still unknown), or force a call the way
-`tools/tx39_regression.py` injects code, using a `jalr` stub since a `jal`
-cannot reach `0x13e9xxxx` from low RAM. Note that the test suites are compiled
-into the ROM — the Mac SDK ships no test packages — so no extra input is
-needed.
+## Driving the suites: `tools/devrom_tests.py`
+
+`tools/devrom_tests.py` runs these entry points and applies the ROM's own
+verdict. It works in two phases, which matters:
+
+1. **Calibrate.** Boot a fresh machine, tap the welcome scene and the three
+   calibration targets, exit. This leaves a calibrated NVRAM directory.
+2. **Call.** For each suite, boot warm from a *copy* of that NVRAM, set a
+   counting breakpoint on `AnnounceNonDebugFailure`, write a small stub into
+   scratch DRAM, and point the PC at it. The stub calls the suite through
+   `jalr` (a `jal` cannot reach `0x13e9xxxx` from low DRAM), then writes a
+   completion marker and parks in a spin loop.
+
+A suite passes when the marker appears — the function returned — and the
+complaint counter is still zero.
+
+```sh
+cd "$HOME/fun/magic-cap-emulator"
+python3 tools/devrom_tests.py                       # the suites that return
+python3 tools/devrom_tests.py --suite font          # one suite
+python3 tools/devrom_tests.py --self-check          # validate the oracle
+```
+
+Forcing the call during a *first* boot does not work: the tests never return
+while first-run initialization is still settling, which is why the calibration
+phase exists. `--nvram-source` reuses an existing calibrated directory instead.
+
+### Trusting a pass
+
+A zero complaint count only means something if the counter can fire at all, so
+`--self-check` points it at the suite function itself, which the stub calls
+exactly once, and requires a count of exactly one. That control passes, so a
+zero count in a normal run is a real negative rather than a detector that
+silently did nothing.
+
+### Results
+
+| Suite | Symbol | Result |
+|---|---|---|
+| `datetime` | `DateTimeUnitTests__Fv` | **passes** — returns, no complaint |
+| `cache` | `CacheUnitTests__Fv` | **passes** |
+| `font` | `FontUnitTests__Fv` | **passes** |
+| `announcement` | `AnnouncementUnitTests__Fv` | does not return from a freshly calibrated machine; does return from a longer-lived session's NVRAM |
+| `contact` | `ContactUnitTests__Fv` | does not return (checked to 9,000 frames) |
+| `datebook` | `DatebookTaskUnitTests__Fv` | does not return |
+
+The three that pass are three OS-level self-tests, written by the people who
+wrote this OS, executing against the emulated hardware and finding nothing to
+complain about. That is a much stronger signal than a framebuffer checksum.
+
+For the ones that do not return, the PC keeps moving through OS code rather
+than sitting in a tight loop, so they are waiting on something — task or scene
+context — rather than crashing. `announcement`'s dependence on session state
+points the same way. Reaching those probably needs the real `TestSite` scene
+rather than a forced call: the UI route there is still unmapped, since taps on
+the Downtown directory sign and street arrow did not respond in a first probe.
+The suites themselves are compiled into the ROM — the Mac SDK ships no test
+packages — so no extra input is needed, only the right context.
 
 ## Reproducing the comparison
 
