@@ -140,7 +140,7 @@ We don't own a DataRover 840, so correctness is judged by external signals only:
 
 ```
 docs/       RE notes: memory map, Betty registers, ROM layout, bring-up, PCLink, modem, TX39 CPU
-tools/      headless regression harnesses and analysis scripts (ROM info, serial, desk, sound, TX39, PC Card, PCLink, modem)
+tools/      headless regression harnesses and analysis scripts (ROM info, serial, desk, sound, TX39, PC Card, PCLink, modem), plus start_manual.sh for interactive play
 tests/      unit tests for the tools, with captured serial fixtures
 roms/       optional git-ignored compatibility path; persistent assets live outside the repo in ~/fun/magic-cap-assets/
 ```

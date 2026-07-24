@@ -84,6 +84,10 @@ edit-build-run loop; a full MAME build is unnecessary.
 
 ## Run Magic Cap
 
+For interactive play, `tools/start_manual.sh` wraps everything below (views,
+persistent state in the assets tree, pointer alignment) — see its header for
+modes. The rest of this section documents the underlying invocation.
+
 The default power-on mode is Magic Cap and the default view is the handheld
 LCD:
 
