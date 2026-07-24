@@ -58,11 +58,11 @@ def canonicalize_terminal(data: bytes) -> str:
     return "\n".join(lines) + ("\n" if lines else "")
 
 
-def monitor_config() -> str:
+def monitor_config(system: str = "datarover840") -> str:
     """Return a monitor-mode MAME configuration with its keyboard enabled."""
-    return """<?xml version="1.0"?>
+    return f"""<?xml version="1.0"?>
 <mameconfig version="10">
-    <system name="datarover840">
+    <system name="{system}">
         <input>
             <keyboard tag=":terminal:keyboard" enabled="1" />
             <port tag=":BOOT_MODE" type="CONFIG"
@@ -104,6 +104,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default="monitor",
         help="serial checkpoint to verify (default: monitor)",
     )
+    parser.add_argument(
+        "--system",
+        default="datarover840",
+        help=(
+            "MAME system to boot, for example datarover840d for the "
+            "development ROM (default: datarover840)"
+        ),
+    )
     args = parser.parse_args(argv)
     if args.seconds is not None and args.seconds <= 0:
         parser.error("--seconds must be positive")
@@ -128,13 +136,13 @@ def run_regression(args: argparse.Namespace) -> int:
     nvram_dir = workdir / "nvram" / args.checkpoint
     config_dir.mkdir(parents=True, exist_ok=True)
     nvram_dir.mkdir(parents=True, exist_ok=True)
-    (config_dir / "datarover840.cfg").write_text(
-        monitor_config(), encoding="utf-8"
+    (config_dir / f"{args.system}.cfg").write_text(
+        monitor_config(args.system), encoding="utf-8"
     )
 
     command = [
         str(mame),
-        "datarover840",
+        args.system,
         "-rompath",
         str(rompath),
         "-cfg_directory",

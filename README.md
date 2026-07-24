@@ -84,7 +84,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | PC Cards | Both linear slots with CIS and insertion signaling | [`mame-bringup.md`](docs/mame-bringup.md) |
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap | [`pclink.md`](docs/pclink.md) |
 | Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 installs | [`modem.md`](docs/modem.md) |
-| Variants | `datarover840` / `840f` (writable flash) / `840j` all build and verify | [`rom-layout.md`](docs/rom-layout.md) |
+| Variants | `datarover840` / `840f` (writable flash) / `840j` / `840d` (1998-04-07 development ROM) all build and verify; `840d` also boots to the workbench | [`rom-layout.md`](docs/rom-layout.md), [`dev-rom.md`](docs/dev-rom.md) |
 
 Each subsystem has a headless regression under [`tools/`](tools/); the full list and expected checkpoints are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
 
@@ -108,16 +108,16 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
 
 ### Open questions
 
-- **Boot the 1998-04-07 development ROM.** The diff against the 3.1.2j release
-  is done ([`dev-rom.md`](docs/dev-rom.md)): the Mac Rosemary SDK ships four
-  dated development images, and the USA Apollo build adds 719 functions the
-  release lacks — 28 `*TestSuite_RunTest` entry points, 11 unit-test functions,
-  a live heap inspector, heap-stress tools, and input journaling. It is
-  drop-in compatible with the current memory map (same base, same `BootCap`
-  entry, 4.9 MB inside the 8 MiB region), so exposing it should need only a new
-  ROM set. Doing that turns 28 suites of ROM-provided self-tests into
-  acceptance material, which is the strongest verification signal available
-  without hardware.
+- **Drive the development ROM's own test suites.** The 1998-04-07 image now
+  runs as the `datarover840d` set: it needed no hardware change, reaches the
+  same IDT monitor banner, and boots to the workbench with the same signature
+  as the release ([`dev-rom.md`](docs/dev-rom.md)). It carries 719 functions
+  the release lacks — 28 `*TestSuite_RunTest` entry points, 11 unit-test
+  functions, a heap inspector, heap-stress tools, input journaling — plus a
+  `TestSite` scene, and the ROM names its own failure oracle
+  (`AnnounceNonDebugFailure`). Turning one suite into a checkpoint the way
+  `BettyTest` is one is the open work: the UI route to `TestSite` is not
+  mapped yet, and a forced call needs a `jalr` stub.
 
 ## Resources
 

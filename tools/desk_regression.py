@@ -133,6 +133,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         type=Path,
         help="optional 8 MiB linear card image to mount in slot 1",
     )
+    parser.add_argument(
+        "--system",
+        default="datarover840",
+        help=(
+            "MAME system to boot, for example datarover840d for the "
+            "development ROM (default: datarover840)"
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -168,7 +176,7 @@ def run_regression(args: argparse.Namespace) -> int:
 
     command = [
         str(mame),
-        "datarover840",
+        args.system,
         "-rompath",
         str(rompath),
         "-nvram_directory",

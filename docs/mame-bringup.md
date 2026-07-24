@@ -238,15 +238,19 @@ LCP frame. The live Slirp handoff, guest network settings, Web Browser 4.0
 download/install command, and automated plain-HTTP browser acceptance are in
 [`modem.md`](modem.md).
 
-The build also contains `datarover840f` and `datarover840j`. Verify all three
-external ROM sets with:
+The build also contains `datarover840f`, `datarover840j`, and `datarover840d`
+(the 1998-04-07 development ROM — see [`dev-rom.md`](dev-rom.md)). Verify all
+four external ROM sets with:
 
 ```sh
 cd "$HOME/fun/mame"
-./datarover -rompath "$HOME/fun/magic-cap-assets/roms" -verifyroms datarover840
-./datarover -rompath "$HOME/fun/magic-cap-assets/roms" -verifyroms datarover840f
-./datarover -rompath "$HOME/fun/magic-cap-assets/roms" -verifyroms datarover840j
+for set in datarover840 datarover840d datarover840f datarover840j; do
+  ./datarover -rompath "$HOME/fun/magic-cap-assets/roms" -verifyroms "$set"
+done
 ```
+
+The serial and desk harnesses accept `--system`, so both checkpoints can be
+run against any of these sets; `datarover840d` passes both.
 
 The 840F uses four persistent 2 MiB flash devices rather than the mask-ROM
 map. Japan/840F acquisition and layout details are in

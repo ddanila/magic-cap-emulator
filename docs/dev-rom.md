@@ -120,10 +120,77 @@ approach substantially:
 - Journal record/replay, which is the natural fit for deterministic
   touch-input regressions.
 
-The image is drop-in compatible with the current memory map — same base, same
-entry point, 4.9 MB inside the 8 MiB ROM region — so exposing it should need
-only a new ROM set in the driver, not a hardware change. That driver work, and
-verifying the machine boots this image, is not done yet.
+## Running it: the `datarover840d` set
+
+The driver exposes the Apollo development image as `datarover840d`, a clone of
+`datarover840` using the same machine configuration — the image needed no
+hardware change, as its layout predicted:
+
+```sh
+cd "$HOME/fun/magic-cap-emulator"
+tools/fetch_assets.sh macsdk        # also places the image in the rompath
+
+cd "$HOME/fun/mame"
+./datarover -rompath "$HOME/fun/magic-cap-assets/roms" -verifyroms datarover840d
+./datarover datarover840d -rompath "$HOME/fun/magic-cap-assets/roms" \
+  -window -skip_gameinfo -view LCD -lightgun -mouse -lightgun_device lightgun
+```
+
+Both headless harnesses take `--system`, so the existing checkpoints run
+against it unchanged:
+
+```sh
+python3 tools/serial_regression.py --system datarover840d \
+  --workdir "$HOME/fun/magic-cap-assets/runtime/serial-regression-dev"
+python3 tools/desk_regression.py --system datarover840d \
+  --workdir "$HOME/fun/magic-cap-assets/runtime/desk-regression-dev"
+```
+
+Verified results on this image:
+
+| Checkpoint | Result |
+|---|---|
+| IDT monitor banner | Byte-identical to the release capture — the monitor portion is the same build |
+| Boot to workbench | Reaches the calibrated desk; the stable lower-workbench signature is the same `0x9dab458b` as the release |
+
+The development build also opens a version card on boot that the release does
+not: it reads `Rosemary (release), 04/…`, which is a convenient on-screen
+build identifier when checking which image a session is running.
+
+The scene inventory differs too. The dev-only strings include
+`$Reset Hallway, TestSite And Downtown` and *"To pan the Hallway, TestSite and
+Downtown to the left"*, so **`TestSite` is a scene in this build**, alongside
+the Hallway and Downtown that the release ships. `About TestSite`,
+`No Test Suites`, and `No Tests` are also present, so the scene has an empty
+state.
+
+The ROM states its own failure oracle, which is the natural acceptance hook:
+
+> *"A TestSite assertion or complaint was triggered in this non-debug build. To
+> track this down, put a breakpoint on `AnnounceNonDebugFailure` and re-run the
+> test."*
+
+`AnnounceNonDebugFailure__Fv` is at `0x13e97834` in this build. Driving a suite
+and asserting that this address is never reached is the same shape as the
+existing `BettyTest` checkpoint. Candidate no-argument entry points:
+
+| Address | Symbol |
+|---|---|
+| `0x13e9c1ec` | `DatebookTaskUnitTests__Fv` |
+| `0x13e9c824` | `CacheUnitTests__Fv` |
+| `0x13e9cca0` | `ContactUnitTests__Fv` |
+| `0x13e9d488` | `FontUnitTests__Fv` |
+| `0x13e9d5b8` | `AnnouncementUnitTests__Fv` |
+| `0x13e9dbfc` | `DateTimeUnitTests__Fv` |
+
+Driving one of these to a pass/fail verdict is the next step and is not done
+yet. Two routes are open: navigate to the `TestSite` scene in the UI (taps on
+the Downtown directory sign and street arrow did not respond in a first probe,
+so the route there is still unknown), or force a call the way
+`tools/tx39_regression.py` injects code, using a `jalr` stub since a `jal`
+cannot reach `0x13e9xxxx` from low RAM. Note that the test suites are compiled
+into the ROM — the Mac SDK ships no test packages — so no extra input is
+needed.
 
 ## Reproducing the comparison
 

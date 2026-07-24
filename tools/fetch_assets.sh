@@ -281,6 +281,15 @@ if want macsdk; then
     e940fcae73b657ac6437a6c8cdaf2f5d6e89e95d408e751260c0a801f8bc1ae1
   assert "$dbg/Apollo/MagicCap-USA" \
     c3b3fe4a38c1a3a7c666f579639398601e48e62bc26437b27e3fc1b020e3b034
+
+  # Arrange the Apollo development image under the MAME set name so
+  # `datarover840d` verifies and boots from the normal rompath.
+  devrom="$ASSETS/roms/datarover840d/magiccap-usa-dev.image"
+  if ! matches "$devrom" "$dev_usa_sha" && (( ! verify_only )); then
+    mkdir -p "$ASSETS/roms/datarover840d"
+    cp -f "$dbg/Apollo/MagicCap-USA.image" "$devrom"
+  fi
+  assert "$devrom" "$dev_usa_sha"
 fi
 
 echo
