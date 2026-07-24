@@ -153,7 +153,9 @@ class PCLinkProtocolTests(unittest.TestCase):
         self.assertIn("press(170, 132)", script)
         self.assertIn("press(48, 155)", script)
 
-    def test_probe_can_suppress_unrelated_magicbus_warning(self) -> None:
+    def test_package_probe_dismisses_both_magicbus_alert_variants(
+        self,
+    ) -> None:
         script = pclink_regression.lua_warm_provider_navigation(
             5200,
             7200,
@@ -162,9 +164,10 @@ class PCLinkProtocolTests(unittest.TestCase):
             suppress_magicbus_warning=True,
         )
 
+        self.assertIn("press(413, 46)", script)
+        self.assertIn("press(413, 61)", script)
         self.assertIn("0x13c29434", script)
-        self.assertIn("do v0=0; do pc=ra; g", script)
-        self.assertNotIn("press(413, 46)", script)
+        self.assertIn("do R2=0; do PC=R31; g", script)
 
 if __name__ == "__main__":
     unittest.main()

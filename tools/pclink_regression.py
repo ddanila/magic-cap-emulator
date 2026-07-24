@@ -257,9 +257,7 @@ def lua_warm_provider_navigation(
     end
 """
     alert_dismissal = (
-        ""
-        if suppress_magicbus_warning
-        else f"""    elseif frames == {snapshot_frame + 1450} then press(413, 46)
+        f"""    elseif frames == {snapshot_frame + 1450} then press(413, 46)
     elseif frames == {snapshot_frame + 1470} then touch_button:set_value(0)
     elseif frames == {snapshot_frame + 1500} then press(413, 61)
     elseif frames == {snapshot_frame + 1520} then touch_button:set_value(0)
@@ -297,11 +295,12 @@ def lua_warm_provider_navigation(
 """
     )
     debugger_clause = (
-        """local cpu = machine.devices[":maincpu"]
+        """-- MAME exposes the raw MIPS names R2/R31, not v0/ra aliases.
+local cpu = machine.devices[":maincpu"]
 cpu.debug:bpset(
     0x13c29434,
     "1",
-    "do v0=0; do pc=ra; g")
+    "do R2=0; do PC=R31; g")
 cpu.debug:go()
 """
         if suppress_magicbus_warning
@@ -805,6 +804,21 @@ def run_regression(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    if args.probe_package:
+        opened_screenshot = workdir / "snapshots" / "package-opened.png"
+        if not opened_screenshot.is_file():
+            print(
+                f"error: package-opened screenshot not produced: "
+                f"{opened_screenshot}",
+                file=sys.stderr,
+            )
+            return 1
+        if opened_screenshot.read_bytes() == disconnect_screenshot.read_bytes():
+            print(
+                "error: received package did not open after disconnect",
+                file=sys.stderr,
+            )
+            return 1
 
     if args.connect_only:
         print("PASS: completed a PCLink connect/disconnect cycle")
