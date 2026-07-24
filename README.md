@@ -95,13 +95,16 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
 - **Buffered SIB sound DMA** (the startup tone uses the unbuffered path).
 - **Complete wake-path interaction.** In-session suspend/wake works, but a
   warm boot of a heap that was saved *while suspended* re-enters suspend at
-  the end of boot, and a subsequent power-button wake is rejected: traced on
-  build 3.1.2j, the OS wakes, services and acknowledges Betty edges, then
-  masks Dino interrupt-enable bank 1 to zero and stops the CPU again. The
-  wake-reason handshake the OS checks is not modeled yet; understanding it
-  needs the SDK ELF's power/wake code. Until then, restoring a session that
-  auto-slept boots to an unresponsive (sleeping) desk. The machine stays
-  `MACHINE_NOT_WORKING` until this closes.
+  the end of boot, and a subsequent power-button wake is rejected. The SDK
+  ELF's power/wake code has now been read, and it reframes the bug: the
+  bank-1 masking is a deliberate software branch in
+  `EnableInterruptsForShutdown` taken when the `shutdownReason` global reads
+  `EMER`, which leaves the on-button bits out of the wake sources on purpose.
+  The handshake boot actually checks is `interrupt5` bits 23/22 (latched
+  on-button edges) then `powerControl` bit 31 (button held). Registers, bits,
+  RAM globals, driver requirements, and debugger breakpoints are in
+  [`power-wake.md`](docs/power-wake.md); the driver change and its
+  verification are still open, so the machine stays `MACHINE_NOT_WORKING`.
 
 ### Open questions
 
@@ -147,7 +150,7 @@ We don't own a DataRover 840, so correctness is judged by external signals only:
 ## Repo layout
 
 ```
-docs/       RE notes: memory map, Betty registers, ROM layout, bring-up, PCLink, modem, TX39 CPU
+docs/       RE notes: memory map, Betty registers, ROM layout, bring-up, PCLink, modem, TX39 CPU, power/wake
 tools/      headless regression harnesses and analysis scripts (ROM info, serial, desk, sound, TX39, PC Card, PCLink, modem), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play
 tests/      unit tests for the tools, with captured serial fixtures
 roms/       optional git-ignored compatibility path; persistent assets live outside the repo in ~/fun/magic-cap-assets/
