@@ -88,8 +88,15 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
 - **Final combined acceptance**: load a plain-HTTP page in the archived Web
   Browser 4.0 over the live PPP link — *Magic Cap on the internet*.
 - **Buffered SIB sound DMA** (the startup tone uses the unbuffered path).
-- **Complete wake-path interaction** (suspend/wake works for the power
-  button; the machine stays marked `MACHINE_NOT_WORKING` until these close).
+- **Complete wake-path interaction.** In-session suspend/wake works, but a
+  warm boot of a heap that was saved *while suspended* re-enters suspend at
+  the end of boot, and a subsequent power-button wake is rejected: traced on
+  build 3.1.2j, the OS wakes, services and acknowledges Betty edges, then
+  masks Dino interrupt-enable bank 1 to zero and stops the CPU again. The
+  wake-reason handshake the OS checks is not modeled yet; understanding it
+  needs the SDK ELF's power/wake code. Until then, restoring a session that
+  auto-slept boots to an unresponsive (sleeping) desk. The machine stays
+  `MACHINE_NOT_WORKING` until this closes.
 
 ### Open questions
 

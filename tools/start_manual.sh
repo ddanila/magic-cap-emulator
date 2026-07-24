@@ -73,6 +73,11 @@ fi
 state="$ASSETS/runtime/manual"
 mkdir -p "$state/cfg" "$state/nvram"
 
+# SDL_VIDEO_HIGHDPI_DISABLED: on Retina Macs, SDL otherwise reports mouse
+#   motion and window size in mismatched units (pixels vs points), which
+#   doubles the pen-axis gain and desyncs the crosshair from the cursor.
+export SDL_VIDEO_HIGHDPI_DISABLED=1
+
 # -ui_active: keep Tab and the other UI keys live despite the emulated
 #   terminal keyboard.
 # -nokeepaspect: SDL maps the pointer over the whole window, so the pen
