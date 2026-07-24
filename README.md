@@ -67,43 +67,19 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 
 ### What works
 
-- **Boot & serial** — reset at `0xBFC0_0000` jumps to the normal ROM alias
-  `0xB3C0_001C`; the IDT monitor reaches an interactive `<IDT>` prompt on the
-  emulated UART, and both Dino UARTs are wired to MAME RS-232 ports. A
-  headless harness diffs exact serial output against known-good logs
-  (`tools/serial_regression.py`).
-- **Betty** — a 16-register Betty shadow behind Dino's SIB (completion flags,
-  RTC, power-good, stop-timer, absent-card GPIO) carries boot into `BootCap`,
-  and the ROM's own `BettyTest` passes: every failed register readback
-  branches to `StayHere`, so returning to the `<IDT>` prompt is the acceptance
-  (`tools/serial_regression.py --checkpoint betty`).
-- **Display** — the 480×320, 2bpp, 120-byte-stride framebuffer (top 38,400
-  bytes of RAM) renders from the top-hat splash through the welcome scene to
-  the workbench.
-- **Touch** — MAME pointer input drives Betty's six-sample touch macro,
-  including the ROM's three-point calibration flow; the desk is navigable with
-  the mouse.
-- **Persistence & power** — main DRAM and Dino's 32,768 Hz RTC are
-  battery-backed NVRAM; the power button enters suspend-to-RAM and a second
-  press wakes the CPU.
-- **Sound** — the ROM's 750 Hz startup tone is rendered as signed 16-bit mono
-  at the 11.025 kHz rate programmed by Dino.
-- **TX39 CPU extensions** — the modem DSP contains 792 TX39 `MADD`
-  instructions; the R3900 device implements `MADD`/`MADDU` with an isolated
-  arithmetic regression. See [`docs/tx39-cpu.md`](docs/tx39-cpu.md).
-- **PC Cards** — both 8 MiB linear slots expose common/attribute memory, CIS,
-  and insertion signals; the archived 840F flasher card is the ready-made test
-  image.
-- **PCLink** — the automated host reproduces WinPCLink framing over UART A and
-  installs archived packages (e.g. `DvorakKeyboard.pkg`) through the Storeroom
-  computer into built-in storage. See [`docs/pclink.md`](docs/pclink.md).
-- **Modem → PPP** — the emulated PC Card modem is detected by Magic Cap,
-  accepts the ROM's Hayes sequence, completes live Slirp LCP/IPCP, receives
-  `10.0.2.15`, and sends IPv4 packets; Web Browser 4.0 installs through
-  PCLink. See [`docs/modem.md`](docs/modem.md).
-- **Variants** — `datarover840` (mask ROM), `datarover840f` (four persistent
-  writable 2 MiB flash lanes), and `datarover840j` (audited Japan clone set)
-  all build and verify. See [`docs/rom-layout.md`](docs/rom-layout.md).
+| Subsystem | Verified behavior | Details |
+|---|---|---|
+| Boot & serial | IDT monitor reaches an interactive `<IDT>` prompt; both Dino UARTs on MAME RS-232 | [`memory-map.md`](docs/memory-map.md) |
+| Betty (SIB ASIC) | Boot reaches `BootCap`; the ROM's own `BettyTest` diagnostic passes | [`betty-registers.md`](docs/betty-registers.md) |
+| Display | 480×320 2bpp framebuffer renders splash → welcome → workbench | [`memory-map.md`](docs/memory-map.md) |
+| Touch | Pointer input drives the touch macro incl. three-point calibration; desk is mouse-navigable | [`betty-registers.md`](docs/betty-registers.md) |
+| Persistence & power | Battery-backed DRAM + RTC as NVRAM; power-button suspend/wake | [`memory-map.md`](docs/memory-map.md) |
+| Sound | ROM's startup tone rendered at the programmed rate (unbuffered path) | [`betty-registers.md`](docs/betty-registers.md) |
+| TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
+| PC Cards | Both linear slots with CIS and insertion signaling | [`mame-bringup.md`](docs/mame-bringup.md) |
+| PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap | [`pclink.md`](docs/pclink.md) |
+| Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 installs | [`modem.md`](docs/modem.md) |
+| Variants | `datarover840` / `840f` (writable flash) / `840j` all build and verify | [`rom-layout.md`](docs/rom-layout.md) |
 
 Each subsystem has a headless regression under [`tools/`](tools/); the full list and expected checkpoints are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
 
