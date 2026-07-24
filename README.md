@@ -137,9 +137,22 @@ Repo, README, survey of existing parts (this document).
   actually uses them.~~ ✅ The modem DSP contains 792 TX39 `MADD`
   instructions. The R3900 device now implements `MADD`/`MADDU`, with an
   isolated arithmetic regression; see [`docs/tx39-cpu.md`](docs/tx39-cpu.md).
-- PC Card slots (linear flash card images — the flasher-card image from the archive is a ready-made test), package installation (`.pkg` files from the archive).
-- Serial/modem → PPP bridge for the true endgame: **Magic Cap on the internet**, running the archived Web Browser 4.0.
-- 840F flash variant, Japan ROM.
+- ~~PC Card slots (linear flash card images — the flasher-card image from the
+  archive is a ready-made test), package installation (`.pkg` files from the
+  archive).~~ ✅ Both 8 MiB linear slots expose common/attribute memory and
+  insertion signals. PCLink installs an archived package into live Magic Cap;
+  see [`docs/pclink.md`](docs/pclink.md).
+- ~~External serial cable and PCLink host.~~ ✅ Both Dino UARTs are wired to
+  MAME RS-232 ports. The automated host reproduces WinPCLink framing and
+  verifies an OS-visible package install.
+- Modem → PPP bridge for the true endgame: **Magic Cap on the internet**,
+  running the archived Web Browser 4.0. ✅ The emulated PC Card modem is
+  detected by Magic Cap, accepts the ROM's Hayes sequence, and reaches a
+  verified PPP LCP frame. The final live Slirp/browser acceptance remains;
+  see [`docs/modem.md`](docs/modem.md).
+- ~~840F flash variant and Japan ROM.~~ ✅ The 840F has four persistent
+  writable 2 MiB flash lanes; the separately archived Japan image is an
+  audited clone set. See [`docs/rom-layout.md`](docs/rom-layout.md).
 
 ## Verification (no real hardware)
 

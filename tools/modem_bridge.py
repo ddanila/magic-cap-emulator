@@ -1,0 +1,482 @@
+#!/usr/bin/env python3
+"""Launch Magic Cap with a Hayes modem front end and a Slirp PPP backend."""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import os
+import re
+import select
+import shutil
+import subprocess
+import sys
+import termios
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_MAME = REPO_ROOT.parent / "mame" / "datarover"
+DEFAULT_ROMPATH = Path.home() / "fun" / "magic-cap-assets" / "roms"
+DEFAULT_STATE = (
+    Path.home()
+    / "fun"
+    / "magic-cap-assets"
+    / "runtime"
+    / "state-card-load"
+    / "pc-card-only.sta"
+)
+DEFAULT_WORKDIR = (
+    Path.home()
+    / "fun"
+    / "magic-cap-assets"
+    / "runtime"
+    / "modem-bridge"
+)
+PTY_PATTERN = re.compile(rb"PTY: (/[^\r\n]+)")
+PPP_FLAG = 0x7E
+PPP_ESCAPE = 0x7D
+PPP_ESCAPE_XOR = 0x20
+PPP_LCP = 0xC021
+
+
+@dataclass(frozen=True)
+class HayesEvent:
+    """A complete command received from the emulated modem UART."""
+
+    command: str
+    response: bytes
+    dial: bool
+
+
+class HayesNegotiator:
+    """Small command-mode modem sufficient to reach Magic Cap's PPP stack."""
+
+    def __init__(self) -> None:
+        self._buffer = bytearray()
+        self.echo = True
+
+    def feed(self, data: bytes) -> list[HayesEvent]:
+        """Consume serial bytes and return events for complete CR commands."""
+        self._buffer.extend(data)
+        events: list[HayesEvent] = []
+        while b"\r" in self._buffer:
+            raw, _, remainder = self._buffer.partition(b"\r")
+            self._buffer[:] = remainder
+            command = raw.strip(b"\n").decode("ascii", "replace")
+            if not command:
+                continue
+
+            upper = command.upper()
+            dial = upper.startswith("ATD")
+            response = b""
+            if self.echo:
+                response += command.encode("ascii", "replace") + b"\r"
+            if not dial:
+                response += b"\r\nOK\r\n"
+
+            # ATE0 is part of Magic Cap's first compound initialization
+            # command.  Echo that command, then disable echo for later ones.
+            if upper.startswith("AT") and "E0" in upper:
+                self.echo = False
+            elif upper.startswith("AT") and "E1" in upper:
+                self.echo = True
+            events.append(HayesEvent(command, response, dial))
+        return events
+
+
+def ppp_frames(data: bytes) -> list[bytes]:
+    """Extract and unescape complete async-HDLC PPP frames."""
+    frames: list[bytes] = []
+    frame = bytearray()
+    escaped = False
+    inside = False
+    for value in data:
+        if value == PPP_FLAG:
+            if inside and frame:
+                frames.append(bytes(frame))
+            frame.clear()
+            escaped = False
+            inside = True
+        elif not inside:
+            continue
+        elif escaped:
+            frame.append(value ^ PPP_ESCAPE_XOR)
+            escaped = False
+        elif value == PPP_ESCAPE:
+            escaped = True
+        else:
+            frame.append(value)
+    return frames
+
+
+def ppp_protocol(frame: bytes) -> int | None:
+    """Return a PPP protocol from an unescaped frame, ignoring its FCS."""
+    if frame.startswith(b"\xff\x03") and len(frame) >= 4:
+        return int.from_bytes(frame[2:4], "big")
+    if frame and (frame[0] & 1):
+        return frame[0]
+    if len(frame) >= 2:
+        return int.from_bytes(frame[:2], "big")
+    return None
+
+
+def configure_raw_pty(fd: int) -> None:
+    """Put a PTY slave into unprocessed eight-bit mode."""
+    attrs = termios.tcgetattr(fd)
+    attrs[0] = 0
+    attrs[1] = 0
+    attrs[2] = termios.CS8 | termios.CREAD | termios.CLOCAL
+    attrs[3] = 0
+    attrs[6][termios.VMIN] = 0
+    attrs[6][termios.VTIME] = 0
+    termios.tcsetattr(fd, termios.TCSANOW, attrs)
+
+
+def set_nonblocking(fd: int) -> None:
+    flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+    fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
+
+def autodial_script(exit_frame: int | None) -> str:
+    """Click Mail in the saved Phone-line panel and optionally stop MAME."""
+    exit_clause = ""
+    if exit_frame is not None:
+        exit_clause = (
+            f'    elseif frames == {exit_frame} then machine:exit()\n'
+        )
+    return f"""local machine = manager.machine
+local ports = machine.ioport.ports
+local touch_x = ports[":TOUCH_X"]:field(0xffff)
+local touch_y = ports[":TOUCH_Y"]:field(0xffff)
+local touch_button = ports[":TOUCH_BUTTON"]:field(0x01)
+local frames = 0
+
+local function press(x, y)
+    touch_x:set_value(math.floor((x * 0xffff) / 479))
+    touch_y:set_value(math.floor((y * 0xffff) / 319))
+    touch_button:set_value(1)
+end
+
+emu.register_frame_done(function()
+    frames = frames + 1
+    if frames == 500 then press(320, 164)
+    elseif frames == 520 then touch_button:set_value(0)
+{exit_clause}    end
+end)
+"""
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--mame",
+        type=Path,
+        default=DEFAULT_MAME,
+        help=f"DataRover MAME executable (default: {DEFAULT_MAME})",
+    )
+    parser.add_argument(
+        "--rompath",
+        type=Path,
+        default=DEFAULT_ROMPATH,
+        help=f"MAME ROM search path (default: {DEFAULT_ROMPATH})",
+    )
+    parser.add_argument(
+        "--state",
+        type=Path,
+        default=DEFAULT_STATE,
+        help=f"external configured guest state (default: {DEFAULT_STATE})",
+    )
+    parser.add_argument(
+        "--workdir",
+        type=Path,
+        default=DEFAULT_WORKDIR,
+        help=f"persistent artifact root (default: {DEFAULT_WORKDIR})",
+    )
+    parser.add_argument(
+        "--slirp",
+        default="slirp",
+        help="classic Slirp executable (default: slirp)",
+    )
+    parser.add_argument(
+        "--baudrate",
+        type=int,
+        default=57_600,
+        help="Slirp link pacing rate (default: 57600)",
+    )
+    parser.add_argument(
+        "--probe",
+        action="store_true",
+        help="capture the guest's first PPP LCP frame without starting Slirp",
+    )
+    parser.add_argument(
+        "--no-autodial",
+        action="store_true",
+        help="do not click Mail automatically after loading the saved state",
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="disable video and sound (implied by --probe)",
+    )
+    return parser.parse_args(argv)
+
+
+def _validate(args: argparse.Namespace) -> tuple[Path, Path, Path, Path] | None:
+    mame = args.mame.expanduser().resolve()
+    rompath = args.rompath.expanduser().resolve()
+    state = args.state.expanduser().resolve()
+    artifact_root = args.workdir.expanduser().resolve()
+    for label, path, kind in (
+        ("MAME executable", mame, "file"),
+        ("ROM path", rompath, "directory"),
+        ("guest state", state, "file"),
+    ):
+        valid = path.is_file() if kind == "file" else path.is_dir()
+        if not valid:
+            print(f"error: {label} not found: {path}", file=sys.stderr)
+            return None
+    if not args.probe and shutil.which(args.slirp) is None:
+        print(
+            "error: classic Slirp is required; install it with "
+            "`sudo apt install slirp`",
+            file=sys.stderr,
+        )
+        return None
+    if args.baudrate <= 0:
+        print("error: --baudrate must be positive", file=sys.stderr)
+        return None
+    return mame, rompath, state, artifact_root
+
+
+def _drain_stream(stream, sink) -> bytes:
+    try:
+        data = os.read(stream.fileno(), 65_536)
+    except BlockingIOError:
+        return b""
+    if data:
+        sink.write(data)
+        sink.flush()
+    return data
+
+
+def run_bridge(args: argparse.Namespace) -> int:
+    paths = _validate(args)
+    if paths is None:
+        return 2
+    mame, rompath, state, artifact_root = paths
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+    run_dir = artifact_root / f"{stamp}-{os.getpid()}"
+    (run_dir / "cfg").mkdir(parents=True)
+    (run_dir / "snapshots").mkdir()
+    lua_path: Path | None = None
+    if not args.no_autodial:
+        lua_path = run_dir / "autodial.lua"
+        lua_path.write_text(
+            autodial_script(3600 if args.probe else None), encoding="utf-8"
+        )
+
+    command = [
+        str(mame),
+        "datarover840",
+        "-rompath",
+        str(rompath),
+        "-state",
+        str(state),
+        "-pccard1",
+        "modem",
+        "-cfg_directory",
+        str(run_dir / "cfg"),
+        "-snapshot_directory",
+        str(run_dir / "snapshots"),
+        "-snapview",
+        "native",
+        "-skip_gameinfo",
+        "-oslog",
+    ]
+    if lua_path is not None:
+        command.extend(
+            ["-autoboot_delay", "0", "-autoboot_script", str(lua_path)]
+        )
+    if args.probe or args.headless:
+        command.extend(["-video", "none", "-sound", "none", "-nothrottle"])
+
+    mame_log_path = run_dir / "mame-output.txt"
+    modem_log_path = run_dir / "modem-transcript.txt"
+    slirp_log_path = run_dir / "slirp-output.txt"
+    guest_wire_path = run_dir / "guest-wire.bin"
+    host_wire_path = run_dir / "host-wire.bin"
+    guest_wire = bytearray()
+    host_wire = bytearray()
+    slirp_process: subprocess.Popen[bytes] | None = None
+    pty_fd: int | None = None
+    error: str | None = None
+    lcp_seen = False
+
+    try:
+        process = subprocess.Popen(
+            command,
+            cwd=mame.parent,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+    except OSError as caught:
+        print(f"error: unable to run MAME: {caught}", file=sys.stderr)
+        return 2
+
+    try:
+        assert process.stdout is not None
+        set_nonblocking(process.stdout.fileno())
+        with (
+            mame_log_path.open("wb") as mame_log,
+            modem_log_path.open("w", encoding="utf-8") as modem_log,
+            slirp_log_path.open("wb") as slirp_log,
+        ):
+            output = bytearray()
+            deadline = time.monotonic() + 30
+            pty_path: str | None = None
+            while time.monotonic() < deadline and process.poll() is None:
+                if select.select([process.stdout], [], [], 0.1)[0]:
+                    chunk = _drain_stream(process.stdout, mame_log)
+                    output.extend(chunk)
+                    match = PTY_PATTERN.search(output)
+                    if match:
+                        pty_path = match.group(1).decode()
+                        break
+            if pty_path is None:
+                raise RuntimeError("MAME did not announce its modem PTY")
+
+            pty_fd = os.open(
+                pty_path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK
+            )
+            configure_raw_pty(pty_fd)
+            negotiator = HayesNegotiator()
+            dialed = False
+            deadline = (
+                time.monotonic() + 120 if args.probe else float("inf")
+            )
+
+            while time.monotonic() < deadline and process.poll() is None:
+                readable = [process.stdout]
+                if pty_fd is not None:
+                    readable.append(pty_fd)
+                ready, _, _ = select.select(readable, [], [], 0.05)
+                if process.stdout in ready:
+                    _drain_stream(process.stdout, mame_log)
+                if pty_fd is None or pty_fd not in ready:
+                    if slirp_process is not None and slirp_process.poll() is not None:
+                        raise RuntimeError(
+                            f"Slirp exited with status {slirp_process.returncode}"
+                        )
+                    continue
+
+                chunk = os.read(pty_fd, 65_536)
+                if not chunk:
+                    continue
+                guest_wire.extend(chunk)
+                if dialed:
+                    frames = ppp_frames(bytes(guest_wire))
+                    if any(ppp_protocol(frame) == PPP_LCP for frame in frames):
+                        lcp_seen = True
+                        if args.probe:
+                            break
+                    continue
+
+                for event in negotiator.feed(chunk):
+                    modem_log.write(f"HAYES {event.command}\n")
+                    modem_log.flush()
+                    if event.dial:
+                        dialed = True
+                        if args.probe:
+                            time.sleep(0.25)
+                            response = b"\r\nCONNECT\r\n"
+                            os.write(pty_fd, response)
+                            host_wire.extend(response)
+                        else:
+                            env = os.environ.copy()
+                            env["SLIRP_TTY"] = pty_path
+                            slirp_process = subprocess.Popen(
+                                [
+                                    args.slirp,
+                                    "-P",
+                                    "-b",
+                                    str(args.baudrate),
+                                    "nozeros",
+                                ],
+                                cwd=run_dir,
+                                env=env,
+                                stdin=subprocess.DEVNULL,
+                                stdout=slirp_log,
+                                stderr=subprocess.STDOUT,
+                            )
+                            # Slirp opens the same slave.  Keep this descriptor
+                            # long enough to send CONNECT, then leave all guest
+                            # reads to Slirp so no PPP bytes are stolen.
+                            time.sleep(0.25)
+                            response = b"\r\nCONNECT 14400\r\n"
+                            os.write(pty_fd, response)
+                            host_wire.extend(response)
+                            os.close(pty_fd)
+                            pty_fd = None
+                        break
+
+                    if event.response:
+                        time.sleep(0.10)
+                        os.write(pty_fd, event.response)
+                        host_wire.extend(event.response)
+
+            if args.probe and not lcp_seen:
+                raise RuntimeError("Magic Cap did not emit a PPP LCP frame")
+            if not args.probe and process.poll() is None:
+                # Interactive mode normally reaches here only after the user
+                # closes MAME.  The deadline prevents an unattended stale run.
+                raise RuntimeError("bridge timed out after ten minutes")
+    except (OSError, RuntimeError) as caught:
+        error = str(caught)
+    except KeyboardInterrupt:
+        if args.probe:
+            error = "probe interrupted before a PPP LCP frame was verified"
+    finally:
+        if pty_fd is not None:
+            try:
+                os.close(pty_fd)
+            except OSError:
+                pass
+        if slirp_process is not None and slirp_process.poll() is None:
+            slirp_process.terminate()
+            try:
+                slirp_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                slirp_process.kill()
+                slirp_process.wait()
+        if process.poll() is None:
+            process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+
+    guest_wire_path.write_bytes(guest_wire)
+    host_wire_path.write_bytes(host_wire)
+    if error:
+        print(f"error: {error}; see {run_dir}", file=sys.stderr)
+        return 1
+    if args.probe:
+        print("PASS: Magic Cap completed Hayes dialing and emitted PPP LCP")
+    else:
+        print("Modem bridge stopped")
+    print(f"Persistent artifacts: {run_dir}")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    return run_bridge(parse_args(sys.argv[1:] if argv is None else argv))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

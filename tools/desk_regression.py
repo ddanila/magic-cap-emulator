@@ -23,11 +23,12 @@ DEFAULT_WORKDIR = (
     / "desk-regression"
 )
 EXPECTED_BASE = 0x003F6A00
-EXPECTED_CHECKSUM = 0x62D64BA4
-EXPECTED_NONZERO = 157
+EXPECTED_WORKBENCH = 0x9DAB458B
+EXPECTED_MIN_NONZERO = 6_000
 CHECKPOINT_PATTERN = re.compile(
     rb"DESK_CHECKPOINT BASE=([0-9A-F]{8}) "
-    rb"CHECKSUM=([0-9A-F]{8}) NONZERO=(\d+)"
+    rb"CHECKSUM=([0-9A-F]{8}) "
+    rb"WORKBENCH=([0-9A-F]{8}) NONZERO=(\d+)"
 )
 
 
@@ -46,51 +47,55 @@ local function press(x, y)
     touch_button:set_value(1)
 end
 
-press(240, 160)
-
 emu.register_frame_done(function()
     frames = frames + 1
 
-    if frames == 20 then
-        touch_button:set_value(0)
-    elseif frames == 180 then
-        press(23, 23)
-    elseif frames == 200 then
-        touch_button:set_value(0)
-    elseif frames == 360 then
-        press(456, 296)
-    elseif frames == 380 then
-        touch_button:set_value(0)
-    elseif frames == 540 then
+    if frames == 1220 then
         press(240, 160)
-    elseif frames == 560 then
+    elseif frames == 1240 then
         touch_button:set_value(0)
-    elseif frames == 720 then
+    elseif frames == 1420 then
+        press(23, 23)
+    elseif frames == 1440 then
+        touch_button:set_value(0)
+    elseif frames == 1620 then
+        press(456, 296)
+    elseif frames == 1640 then
+        touch_button:set_value(0)
+    elseif frames == 1820 then
+        press(240, 160)
+    elseif frames == 1840 then
+        touch_button:set_value(0)
+    elseif frames == 2200 then
         local program = machine.devices[":maincpu"].spaces["program"]
         local framebuffer = program:read_u32(0x10c00030) & 0xfffffff0
         local checksum = 0
+        local workbench = 0
         local nonzero = 0
 
         for offset = 0, 38396, 4 do
             local word = program:read_u32(framebuffer + offset)
             checksum = (checksum + word) & 0xffffffff
+            if offset >= 27600 then
+                workbench = (workbench + word) & 0xffffffff
+            end
             if word ~= 0 then
                 nonzero = nonzero + 1
             end
         end
 
         print(string.format(
-            "DESK_CHECKPOINT BASE=%08X CHECKSUM=%08X NONZERO=%d",
-            framebuffer, checksum, nonzero))
+            "DESK_CHECKPOINT BASE=%08X CHECKSUM=%08X WORKBENCH=%08X NONZERO=%d",
+            framebuffer, checksum, workbench, nonzero))
         machine.screens[":screen"]:snapshot("magic-cap-desk.png")
-    elseif frames == 740 then
+    elseif frames == 2220 then
         machine:exit()
     end
 end)
 """
 
 
-def parse_checkpoint(output: bytes) -> tuple[int, int, int] | None:
+def parse_checkpoint(output: bytes) -> tuple[int, int, int, int] | None:
     """Extract the framebuffer checkpoint from combined MAME output."""
     match = CHECKPOINT_PATTERN.search(output)
     if not match:
@@ -98,7 +103,8 @@ def parse_checkpoint(output: bytes) -> tuple[int, int, int] | None:
     return (
         int(match.group(1), 16),
         int(match.group(2), 16),
-        int(match.group(3)),
+        int(match.group(3), 16),
+        int(match.group(4)),
     )
 
 
@@ -122,6 +128,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=DEFAULT_WORKDIR,
         help=f"persistent artifact directory (default: {DEFAULT_WORKDIR})",
     )
+    parser.add_argument(
+        "--card",
+        type=Path,
+        help="optional 8 MiB linear card image to mount in slot 1",
+    )
     return parser.parse_args(argv)
 
 
@@ -129,12 +140,21 @@ def run_regression(args: argparse.Namespace) -> int:
     mame = args.mame.expanduser().resolve()
     rompath = args.rompath.expanduser().resolve()
     workdir = args.workdir.expanduser().resolve()
+    card = args.card.expanduser().resolve() if args.card else None
 
     if not mame.is_file():
         print(f"error: MAME executable not found: {mame}", file=sys.stderr)
         return 2
     if not rompath.is_dir():
         print(f"error: ROM path not found: {rompath}", file=sys.stderr)
+        return 2
+    if card is not None and (
+        not card.is_file() or card.stat().st_size != 8 * 1024 * 1024
+    ):
+        print(
+            f"error: card must be an existing 8 MiB image: {card}",
+            file=sys.stderr,
+        )
         return 2
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
@@ -155,6 +175,8 @@ def run_regression(args: argparse.Namespace) -> int:
         str(nvram_dir),
         "-snapshot_directory",
         str(snapshot_dir),
+        "-snapview",
+        "native",
         "-autoboot_delay",
         "0",
         "-autoboot_script",
@@ -166,6 +188,8 @@ def run_regression(args: argparse.Namespace) -> int:
         "-nothrottle",
         "-skip_gameinfo",
     ]
+    if card is not None:
+        command.extend(["-pccard1", "linear", "-card", str(card)])
     try:
         completed = subprocess.run(
             command,
@@ -193,10 +217,17 @@ def run_regression(args: argparse.Namespace) -> int:
         return 2
 
     actual = parse_checkpoint(completed.stdout)
-    expected = (EXPECTED_BASE, EXPECTED_CHECKSUM, EXPECTED_NONZERO)
-    if actual != expected:
+    if (
+        actual is None
+        or actual[0] != EXPECTED_BASE
+        or actual[2] != EXPECTED_WORKBENCH
+        or actual[3] < EXPECTED_MIN_NONZERO
+    ):
         print(
-            f"FAIL: desk checkpoint {actual!r}, expected {expected!r}; "
+            f"FAIL: desk checkpoint {actual!r}, expected base "
+            f"{EXPECTED_BASE:#010x}, workbench signature "
+            f"{EXPECTED_WORKBENCH:#010x}, and at least "
+            f"{EXPECTED_MIN_NONZERO} nonzero words; "
             f"see {log_path}",
             file=sys.stderr,
         )
@@ -209,7 +240,7 @@ def run_regression(args: argparse.Namespace) -> int:
 
     print(
         "PASS: calibrated Magic Cap desk framebuffer "
-        f"matches {EXPECTED_CHECKSUM:#010x}"
+        f"matches workbench signature {EXPECTED_WORKBENCH:#010x}"
     )
     print(f"Snapshot: {snapshot_path}")
     print(f"Artifacts: {run_dir}")

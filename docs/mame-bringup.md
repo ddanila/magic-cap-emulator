@@ -18,7 +18,7 @@ sudo apt-get install \
   libsdl2-dev libsdl2-ttf-dev libfontconfig-dev libpulse-dev \
   qt6-base-dev qt6-base-dev-tools qtchooser \
   ccache binutils-mips-linux-gnu gdb-multiarch unshield \
-  curl unzip gzip
+  curl unzip gzip slirp
 ```
 
 The cross-GCC packages are not required. In particular,
@@ -50,6 +50,7 @@ cd "$HOME/fun/mame"
 PATH="/usr/lib/ccache:$PATH" \
   make SUBTARGET=datarover \
   SOURCES=src/mame/skeleton/datarover.cpp \
+  REGENIE=1 \
   NO_USE_PORTAUDIO=1 \
   -j"$(nproc)"
 ```
@@ -136,6 +137,9 @@ python3 tools/serial_regression.py --checkpoint betty
 python3 tools/desk_regression.py
 python3 tools/sound_regression.py
 python3 tools/tx39_regression.py
+python3 tools/pccard_regression.py
+python3 tools/pclink_regression.py
+python3 tools/modem_bridge.py --probe
 ```
 
 The serial harness writes generated configuration and logs under
@@ -147,7 +151,9 @@ returning to the `<IDT>` prompt is therefore the acceptance condition.
 
 The desk harness starts with a fresh isolated NVRAM directory, taps the
 welcome scene and all three calibration targets, and verifies the native
-framebuffer checkpoint (`0x003f6a00`, checksum `0x62d64ba4`). It also writes a
+framebuffer at `0x003f6a00`. Its exact `0x9dab458b` signature covers the
+stable lower workbench area; the full-screen checksum is reported but not
+used as an assertion because the clock is time-dependent. It also writes a
 native LCD PNG. Every run keeps its Lua script, MAME output, NVRAM, and
 snapshot under a timestamped directory in
 `~/fun/magic-cap-assets/runtime/desk-regression/`; no binary artifact is
@@ -164,6 +170,39 @@ uncached RAM and verifies `rd`, `HI`, and `LO`. Its generated inputs and log
 remain under `~/fun/magic-cap-assets/runtime/tx39-regression/`; the CPU audit
 and reference-manual download command are in
 [`tx39-cpu.md`](tx39-cpu.md).
+
+The PC Card harness copies the verified 840F flasher into its persistent run
+directory, inserts that disposable copy after the workbench appears, and
+checks common memory, CIS bytes, write/readback, Glacier card-detect signals,
+and Magic Cap's live slot state. The source image and exact acquisition
+instructions are in [`rom-layout.md`](rom-layout.md).
+
+The PCLink harness uses the real UART-A PTY and recovered WinPCLink framing to
+install an archived package through the Storeroom computer. It fails on a
+Dino receive overrun or Magic Cap's `GBye` response and verifies that the
+installed object appears in a post-transfer native LCD capture. Package and
+reference-tool download commands, checksums, protocol notes, and alternate
+inputs are in [`pclink.md`](pclink.md).
+
+The modem probe inserts the I/O card, accepts the ROM's Hayes initialization
+and dial string, sends `CONNECT`, and requires Magic Cap to emit a valid PPP
+LCP frame. The live Slirp handoff, guest network settings, Web Browser 4.0
+download/install command, and plain-HTTP test page are in
+[`modem.md`](modem.md).
+
+The build also contains `datarover840f` and `datarover840j`. Verify all three
+external ROM sets with:
+
+```sh
+cd "$HOME/fun/mame"
+./datarover -rompath "$HOME/fun/magic-cap-assets/roms" -verifyroms datarover840
+./datarover -rompath "$HOME/fun/magic-cap-assets/roms" -verifyroms datarover840f
+./datarover -rompath "$HOME/fun/magic-cap-assets/roms" -verifyroms datarover840j
+```
+
+The 840F uses four persistent 2 MiB flash devices rather than the mask-ROM
+map. Japan/840F acquisition and layout details are in
+[`rom-layout.md`](rom-layout.md).
 
 ## Native LCD snapshot
 
@@ -199,7 +238,11 @@ the separate serial-terminal view.
 | Workbench | Live Dino buffer `0x003f6a00` reaches deterministic checksum `0x62d64ba4` |
 | Persistence | 4 MiB DRAM and Dino RTC use external NVRAM files; power-button sleep stops and wakes the CPU |
 | Sound | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
+| PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback, insertion, and live-OS checks |
+| PCLink | The Storeroom computer accepts the handshake and installs archived `DvorakKeyboard.pkg` into built-in storage |
+| PC Card modem | Magic Cap detects the card, completes its Hayes sequence, and emits an async-HDLC PPP LCP frame |
+| Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
 
 The machine remains marked `MACHINE_NOT_WORKING`: buffered sound DMA,
-PC Cards, modem/networking, and complete wake-path interaction are later plan
-items.
+full PPP/browser interoperability and complete wake-path interaction are
+later plan items.

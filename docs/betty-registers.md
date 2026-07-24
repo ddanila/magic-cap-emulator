@@ -52,7 +52,7 @@ registers, which makes these number/name pairs high confidence:
 | 1 | `IODir` | 16-bit GPIO direction |
 | 2 | `PosIntEn` | positive/rising-edge interrupt enable |
 | 3 | `NegIntEn` | negative/falling-edge interrupt enable |
-| 4 | unknown interrupt-related register | retain a 16-bit shadow initially |
+| 4 | latched GPIO edge status | set on enabled GPIO edges; write-one-to-clear |
 | 5 | `TelecomCfgA` | telecom configuration A |
 | 6 | `TelecomCfgB` | telecom configuration B |
 | 7 | `SoundCfgA` | sound configuration A |
@@ -65,11 +65,13 @@ registers, which makes these number/name pairs high confidence:
 | 14 | unknown | retain a 16-bit shadow initially |
 | 15 | unknown | retain a 16-bit shadow initially |
 
-Register 4 is repeatedly exercised during `touch_init`, but its final role is
-not yet proven. Register 5 must retain ordinary writes: the ROM diagnostic
-writes `0x0028` and requires the same value on readback. Pen edges are
-therefore not modeled as register-4/5 status; they update `IOData` and the
-documented Dino SIB interrupt/pending state.
+The production `SibExtInterruptHandler` proves register 4's role. It reads
+the register after a Betty IRQ, writes the returned set bits back to
+acknowledge them, and dispatches callbacks by comparing that saved mask with
+`PosIntEn`, `NegIntEn`, and `IOData`. Modeling this write-one-to-clear latch
+is what lets a pen-down interrupt deassert and the welcome scene accept a
+tap. Register 5 must retain ordinary writes: the ROM diagnostic writes
+`0x0028` and requires the same value on readback.
 
 The SDK debug records also expose a 16-entry `bettyShadowRegs` array in the
 production SIB globals, confirming the register-file size independently of
@@ -86,7 +88,9 @@ The current driver implements the observable contract used by the boot path:
    `sibSf0Status` at `+0x088`.
 4. Betty writes update writable shadows; register 12 remains a plausible,
    stable ID.
-5. Betty ID register 12 reads as revision `0x1002`, one of the two revisions
+5. GPIO edges latch in register 4, assert Dino's SIB IRQ input, and deassert
+   when the ROM writes the latched bits back.
+6. Betty ID register 12 reads as revision `0x1002`, one of the two revisions
    accepted by `touch_init`.
 
 The production path now also implements the six ADC samples used by the touch

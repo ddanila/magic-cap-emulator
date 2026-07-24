@@ -72,6 +72,54 @@ python3 tools/rom_info.py \
   --flasher "$magic_cap_assets/roms/DataRover840FRomFlasher"
 ```
 
+### Download the Japan ROM
+
+The archived Japan image is a separate 6,091,544-byte build. Keep its
+original ZIP and arrange the extracted file under the MAME set name:
+
+```sh
+magic_cap_assets="$HOME/fun/magic-cap-assets"
+mkdir -p "$magic_cap_assets/roms/datarover840j"
+curl --fail --location \
+  --output "$magic_cap_assets/roms/MagicCap-Japan.zip" \
+  https://joshcarter.com/magic_cap/packages/MagicCap-Japan.zip
+echo 'd103d18f2f2b016a015745119df5007b87b931fcde48ff2cd11dca5a2bd7e617  MagicCap-Japan.zip' \
+  | (cd "$magic_cap_assets/roms" && sha256sum --check)
+unzip -j -o "$magic_cap_assets/roms/MagicCap-Japan.zip" \
+  MagicCap-Japan.image \
+  -d "$magic_cap_assets/roms/datarover840j"
+mv "$magic_cap_assets/roms/datarover840j/MagicCap-Japan.image" \
+  "$magic_cap_assets/roms/datarover840j/magiccap-japan.image"
+echo '897d7320703c6ca432fb0982a7570d8c7c3ce60695b8103a947b37ec8f30e0e4  magiccap-japan.image' \
+  | (cd "$magic_cap_assets/roms/datarover840j" && sha256sum --check)
+```
+
+MAME exposes this as `datarover840j`. It uses the same hardware model as the
+USA mask-ROM machine but has its own audited ROM definition.
+
+### 840F system flash
+
+`DataRover840FRomFlasher` is an 8 MiB **PC Card image**, not a direct dump of
+the soldered system flash. Its payload is byte-identical to the USA
+`magiccap-usa.image`, so `datarover840f` seeds its system flash from the
+verified USA image rather than treating the card header as executable ROM.
+
+The ROM's resident flash programmer supports Fujitsu and Intel command sets.
+The current 840F model uses four byte-wide Fujitsu MBM29F016A devices on the
+32-bit ROM bus, matching the firmware's four-byte-lane command sequences and
+8 MiB capacity. Each 2 MiB lane is independently writable and persistent:
+
+```text
+~/fun/magic-cap-assets/runtime/.../datarover840f/flash0
+~/fun/magic-cap-assets/runtime/.../datarover840f/flash1
+~/fun/magic-cap-assets/runtime/.../datarover840f/flash2
+~/fun/magic-cap-assets/runtime/.../datarover840f/flash3
+```
+
+The exact production flash part marking has not surfaced in a board photo,
+so the compatible Fujitsu part choice is documented rather than presented as
+a confirmed physical chip identification.
+
 `WinDownload.exe` is not needed by the emulator, but the archived tool can be
 obtained separately when its serial protocol needs investigation:
 

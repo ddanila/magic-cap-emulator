@@ -16,12 +16,12 @@ class DeskRegressionTests(unittest.TestCase):
     def test_parses_framebuffer_checkpoint(self) -> None:
         output = (
             b"noise\nDESK_CHECKPOINT BASE=003F6A00 "
-            b"CHECKSUM=62D64BA4 NONZERO=157\n"
+            b"CHECKSUM=310CE6B5 WORKBENCH=9DAB458B NONZERO=7077\n"
         )
 
         self.assertEqual(
             desk_regression.parse_checkpoint(output),
-            (0x003F6A00, 0x62D64BA4, 157),
+            (0x003F6A00, 0x310CE6B5, 0x9DAB458B, 7077),
         )
 
     def test_rejects_missing_checkpoint(self) -> None:
