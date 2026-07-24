@@ -8,7 +8,28 @@ binary is committed to either repository.
 
 ## Host prerequisites
 
-On Debian or Ubuntu, install MAME's documented build dependencies plus the
+The build and every regression except the live Slirp PPP bridge run on both
+Linux and macOS. The bridge's dependencies (classic `slirp` and `bubblewrap`,
+see [`modem.md`](modem.md)) are Linux-only; `tools/modem_bridge.py --probe`
+still works everywhere.
+
+### macOS
+
+Install the Xcode Command Line Tools, then:
+
+```sh
+brew install sdl2 sdl2_ttf coreutils
+```
+
+`coreutils` supplies the `sha256sum` and `nproc` used by these docs
+(equivalently, use `shasum -a 256` and `sysctl -n hw.ncpu`). The
+`mips-linux-gnu-*` static-analysis commands in
+[`memory-map.md`](memory-map.md) assume the Debian cross-binutils package;
+on macOS, Ghidra covers the same disassembly needs.
+
+### Debian / Ubuntu
+
+Install MAME's documented build dependencies plus the
 analysis and test utilities used here:
 
 ```sh
@@ -54,6 +75,9 @@ PATH="/usr/lib/ccache:$PATH" \
   NO_USE_PORTAUDIO=1 \
   -j"$(nproc)"
 ```
+
+(On macOS without coreutils, replace `$(nproc)` with
+`$(sysctl -n hw.ncpu)`.)
 
 This produces `~/fun/mame/datarover`. The scoped build is the normal
 edit-build-run loop; a full MAME build is unnecessary.

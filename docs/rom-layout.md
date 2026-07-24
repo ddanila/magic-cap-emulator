@@ -15,9 +15,8 @@ The [Rosemary Software Archive][packages] publishes:
 
 The [Archive.org DataRover840 item][archive] contains `Datarover840.zip`
 (SHA-256 `4455c41a681006b6cac791c639014b87739c2513212078708cd9efaaf554d839`).
-Contrary to the previous assumption that an SDK still needed to be found, its
-`Developer/IcrasSoftwareDevelopmentKit3.2` directory is the complete Windows
-SDK installer.
+Its `Developer/IcrasSoftwareDevelopmentKit3.2` directory is the complete
+Windows SDK installer.
 
 Its InstallShield cabinets contain these particularly useful Apollo artifacts:
 

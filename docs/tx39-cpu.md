@@ -21,6 +21,10 @@ printf '%s  %s\n' \
   "$assets/docs/TMPR39xx-um_199507.pdf" | sha256sum --check
 ```
 
+The same 246-page document is also scanned on archive.org as
+[manualzilla-id-7260633](https://archive.org/details/manualzilla-id-7260633),
+a fallback if the Bitsavers copy moves.
+
 The July 1995 manual defines `MADD` and `MADDU` under primary opcode `0x1c`,
 function values 0 and 1. Both add a signed or unsigned 32×32 product to the
 existing `HI:LO` accumulator, write the 64-bit result back to `HI:LO`, and
