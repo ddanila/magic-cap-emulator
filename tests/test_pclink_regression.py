@@ -21,6 +21,10 @@ class PCLinkProtocolTests(unittest.TestCase):
         self.assertIsNotNone(match)
         assert match is not None
         self.assertEqual(match.group(1), b"/dev/pts/8")
+        modem_match = pclink_regression.MODEM_PTY_PATTERN.search(output)
+        self.assertIsNotNone(modem_match)
+        assert modem_match is not None
+        self.assertEqual(modem_match.group(1), b"/dev/pts/6")
 
     def test_escape_round_trip(self) -> None:
         original = bytes(range(32))
@@ -137,6 +141,12 @@ class PCLinkProtocolTests(unittest.TestCase):
         )
 
         self.assertIn('io.open("/tmp/package-ready", "r")', script)
+        self.assertIn("local package_ready_frame = nil", script)
+        self.assertIn(
+            f"package_ready_frame + "
+            f"{pclink_regression.PACKAGE_SETTLE_FRAMES}",
+            script,
+        )
         self.assertIn('snapshot("package-installed.png")', script)
         self.assertIn('io.open("/tmp/package-snapshotted", "w")', script)
 
@@ -168,6 +178,32 @@ class PCLinkProtocolTests(unittest.TestCase):
         self.assertIn("press(413, 61)", script)
         self.assertIn("0x13c29434", script)
         self.assertIn("do R2=0; do PC=R31; g", script)
+
+    def test_combined_acceptance_stays_live_through_browser_http(
+        self,
+    ) -> None:
+        script = pclink_regression.lua_warm_provider_navigation(
+            5200,
+            18120,
+            probe_package=True,
+            package_ready_path=Path("/tmp/package-ready"),
+            package_snapshotted_path=Path("/tmp/package-snapshotted"),
+            suppress_magicbus_warning=True,
+            browser_acceptance=True,
+            http_port=8080,
+        )
+
+        self.assertIn("package-opened.png", script)
+        self.assertIn("press(451, 148)", script)
+        self.assertIn("browser-scene-opened.png", script)
+        self.assertIn("press(391, 270)", script)
+        self.assertIn("press(262, 270)", script)
+        self.assertIn("press(434, 270)", script)
+        self.assertIn("browser-url-entered.png", script)
+        self.assertIn("press(419, 143)", script)
+        self.assertIn("browser-result.png", script)
+        self.assertNotIn("machine:save", script)
+
 
 if __name__ == "__main__":
     unittest.main()

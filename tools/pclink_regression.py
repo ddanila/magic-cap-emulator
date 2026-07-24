@@ -17,6 +17,12 @@ import zlib
 from math import ceil
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
+
+try:
+    from tools import modem_bridge as modem_support
+except ModuleNotFoundError:
+    import modem_bridge as modem_support
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -37,6 +43,7 @@ DEFAULT_WORKDIR = (
     / "pclink-regression"
 )
 PTY_PATTERN = re.compile(rb":rs2321:pty PTY: (/[^\r\n]+)")
+MODEM_PTY_PATTERN = re.compile(rb":pccard1:modem PTY: (/[^\r\n]+)")
 ESCAPE_BYTES = frozenset((0x0E, 0x0F, 0x10))
 PC_LINK_MAGIC = b"ChMa"
 CONNECT_TAG = b"Cnct"
@@ -45,6 +52,159 @@ SEND_PACKAGE_TAG = b"SPkg"
 GOODBYE_TAG = b"GBye"
 PING_TAG = b"Ping"
 PONG_TAG = b"Pong"
+PACKAGE_SETTLE_FRAMES = 1800
+
+
+class CombinedModemSession:
+    """Own the live modem PTY, Slirp peer, and deterministic HTTP server."""
+
+    def __init__(
+        self,
+        fd: int,
+        pty_path: str,
+        run_dir: Path,
+        slirp: str,
+        bubblewrap: str,
+        baudrate: int,
+        http_port: int,
+    ) -> None:
+        self.fd: int | None = fd
+        self.pty_path = pty_path
+        self.run_dir = run_dir
+        self.slirp = slirp
+        self.bubblewrap = bubblewrap
+        self.baudrate = baudrate
+        self.negotiator = modem_support.HayesNegotiator()
+        self.dialed = False
+        self.guest_wire = bytearray()
+        self.host_wire = bytearray()
+        self.transcript: list[str] = []
+        self.slirp_process: subprocess.Popen[bytes] | None = None
+        self.closed = False
+        (run_dir / "slirp.rc").write_text(
+            "debugppp ppp-debug.txt\n",
+            encoding="utf-8",
+        )
+        self.http_server, self.http_thread, self.http_requests = (
+            modem_support.start_acceptance_http_server(http_port)
+        )
+        try:
+            self.slirp_log = (run_dir / "slirp-output.txt").open("wb")
+        except OSError:
+            self.http_server.shutdown()
+            self.http_server.server_close()
+            self.http_thread.join(timeout=5)
+            raise
+
+    def service(self) -> None:
+        """Answer pending Hayes traffic and hand the line to Slirp on dial."""
+        if self.fd is None or not select.select([self.fd], [], [], 0)[0]:
+            return
+        chunk = read_available(self.fd)
+        self.guest_wire.extend(chunk)
+        for event in self.negotiator.feed(chunk):
+            self.transcript.append(f"HAYES {event.command}\n")
+            if event.dial:
+                self.dialed = True
+                env = os.environ.copy()
+                env["SLIRP_TTY"] = modem_support.classic_slirp_tty(
+                    self.pty_path
+                )
+                self.slirp_process = subprocess.Popen(
+                    [
+                        self.bubblewrap,
+                        "--ro-bind",
+                        "/",
+                        "/",
+                        "--dev-bind",
+                        "/dev",
+                        "/dev",
+                        "--bind",
+                        str(self.run_dir),
+                        str(self.run_dir),
+                        "--unshare-uts",
+                        "--hostname",
+                        "10.0.2.2",
+                        "--die-with-parent",
+                        self.slirp,
+                        "-P",
+                        "-f",
+                        str(self.run_dir / "slirp.rc"),
+                        "-b",
+                        str(self.baudrate),
+                        "nozeros",
+                    ],
+                    cwd=self.run_dir,
+                    env=env,
+                    stdin=subprocess.DEVNULL,
+                    stdout=self.slirp_log,
+                    stderr=subprocess.STDOUT,
+                )
+                time.sleep(0.25)
+                response = b"\r\nCONNECT 14400\r\n"
+                os.write(self.fd, response)
+                self.host_wire.extend(response)
+                os.close(self.fd)
+                self.fd = None
+                break
+            if event.response:
+                time.sleep(0.10)
+                os.write(self.fd, event.response)
+                self.host_wire.extend(event.response)
+
+    def close(self) -> None:
+        """Stop owned processes and persist all bridge evidence."""
+        if self.closed:
+            return
+        self.closed = True
+        if self.fd is not None:
+            try:
+                self.service()
+                os.close(self.fd)
+            except OSError:
+                pass
+            self.fd = None
+        if self.slirp_process is not None and self.slirp_process.poll() is None:
+            self.slirp_process.terminate()
+            try:
+                self.slirp_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.slirp_process.kill()
+                self.slirp_process.wait()
+        self.http_server.shutdown()
+        self.http_server.server_close()
+        self.http_thread.join(timeout=5)
+        self.slirp_log.close()
+        (self.run_dir / "modem-transcript.txt").write_text(
+            "".join(self.transcript),
+            encoding="utf-8",
+        )
+        (self.run_dir / "modem-guest-wire.bin").write_bytes(self.guest_wire)
+        (self.run_dir / "modem-host-wire.bin").write_bytes(self.host_wire)
+        (self.run_dir / "http-requests.txt").write_text(
+            "".join(f"{path}\n" for path in self.http_requests),
+            encoding="utf-8",
+        )
+
+    def validation_error(self) -> str | None:
+        """Return why the combined HTTP acceptance failed, if it did."""
+        slirp_output = (self.run_dir / "slirp-output.txt").read_text(
+            encoding="utf-8", errors="replace"
+        )
+        ppp_debug = self.run_dir / "slirp_pppdebug"
+        if not self.dialed:
+            return "Web Browser did not dial the emulated modem"
+        if "SLiRP Ready" not in slirp_output:
+            return "Slirp did not become ready"
+        if (
+            not ppp_debug.is_file()
+            or "slirppp: PPP is up now"
+            not in ppp_debug.read_text(encoding="utf-8", errors="replace")
+        ):
+            return "Slirp did not complete IPCP"
+        if "/" not in self.http_requests:
+            return "Web Browser did not request the local root page"
+        return None
 
 
 class ProtocolError(ValueError):
@@ -221,15 +381,24 @@ def lua_warm_provider_navigation(
     package_snapshotted_path: Path | None = None,
     internet_center_start: bool = False,
     suppress_magicbus_warning: bool = False,
+    browser_acceptance: bool = False,
+    http_port: int = 8080,
 ) -> str:
     """Navigate a provider-configured warm image from In box to PCLink."""
+    settle_offset = (
+        PACKAGE_SETTLE_FRAMES
+        if package_ready_path is not None
+        and package_snapshotted_path is not None
+        else 0
+    )
+    post_base = snapshot_frame + settle_offset
     save_clause = ""
     if save_path is not None:
         quoted_path = (
             str(save_path).replace("\\", "\\\\").replace('"', '\\"')
         )
         save_clause = (
-            f'    elseif frames == {snapshot_frame + 3050} then\n'
+            f'    elseif frames == {post_base + 3050} then\n'
             f'        machine:save("{quoted_path}")\n'
         )
     signal_clause = ""
@@ -246,6 +415,12 @@ def lua_warm_provider_navigation(
         local ready = io.open("{quoted_ready}", "r")
         if ready then
             ready:close()
+            if not package_ready_frame then
+                package_ready_frame = frames
+            end
+        end
+        if package_ready_frame
+                and frames >= package_ready_frame + {PACKAGE_SETTLE_FRAMES} then
             machine.screens[":screen"]:snapshot("package-installed.png")
             local acknowledged = io.open("{quoted_snapshotted}", "w")
             if acknowledged then
@@ -257,43 +432,94 @@ def lua_warm_provider_navigation(
     end
 """
     alert_dismissal = (
-        f"""    elseif frames == {snapshot_frame + 1450} then press(413, 46)
-    elseif frames == {snapshot_frame + 1470} then touch_button:set_value(0)
-    elseif frames == {snapshot_frame + 1500} then press(413, 61)
-    elseif frames == {snapshot_frame + 1520} then touch_button:set_value(0)
+        f"""    elseif frames == {post_base + 1450} then press(413, 46)
+    elseif frames == {post_base + 1470} then touch_button:set_value(0)
+    elseif frames == {post_base + 1500} then press(413, 61)
+    elseif frames == {post_base + 1520} then touch_button:set_value(0)
 """
     )
-    post_install = (
-        f"""    elseif frames == {snapshot_frame + 1400} then
+    if browser_acceptance:
+        key_positions = {
+            **{
+                digit: (26 + (index * 43), 198)
+                for index, digit in enumerate("1234567890")
+            },
+            ".": (391, 270),
+            ":": (262, 270),
+            "/": (434, 270),
+        }
+        address = f"10.0.2.2:{http_port}/"
+        key_steps = "".join(
+            f"    elseif frames == "
+            f"{post_base + 3600 + (index * 60)} then "
+            f"press({key_positions[character][0]}, "
+            f"{key_positions[character][1]})\n"
+            f"    elseif frames == "
+            f"{post_base + 3620 + (index * 60)} then "
+            f"touch_button:set_value(0)\n"
+            for index, character in enumerate(address)
+        ).rstrip()
+        post_install = f"""    elseif frames == {post_base + 1400} then
         machine.screens[":screen"]:snapshot("pclink-disconnected.png")
 {alert_dismissal.rstrip()}
-    elseif frames == {snapshot_frame + 1650} then press(270, 220)
-    elseif frames == {snapshot_frame + 1670} then touch_button:set_value(0)
-    elseif frames == {snapshot_frame + 1850} then
+    elseif frames == {post_base + 1650} then press(270, 220)
+    elseif frames == {post_base + 1670} then touch_button:set_value(0)
+    elseif frames == {post_base + 1850} then
         machine.screens[":screen"]:snapshot("package-opened.png")
-    elseif frames == {snapshot_frame + 1900} then press(440, 10)
-    elseif frames == {snapshot_frame + 1920} then touch_button:set_value(0)
-    elseif frames == {snapshot_frame + 2100} then
+    elseif frames == {post_base + 1950} then press(451, 148)
+    elseif frames == {post_base + 1970} then touch_button:set_value(0)
+    elseif frames == {post_base + 2200} then
+        machine.screens[":screen"]:snapshot("browser-scene-opened.png")
+    elseif frames == {post_base + 2300} then press(126, 80)
+    elseif frames == {post_base + 2320} then touch_button:set_value(0)
+    elseif frames == {post_base + 2700} then press(450, 45)
+    elseif frames == {post_base + 2720} then touch_button:set_value(0)
+    elseif frames == {post_base + 3000} then press(120, 302)
+    elseif frames == {post_base + 3020} then touch_button:set_value(0)
+    elseif frames == {post_base + 3300} then press(118, 237)
+    elseif frames == {post_base + 3320} then touch_button:set_value(0)
+{key_steps}
+    elseif frames == {post_base + 4700} then
+        machine.screens[":screen"]:snapshot("browser-url-entered.png")
+    elseif frames == {post_base + 4800} then press(419, 143)
+    elseif frames == {post_base + 4820} then touch_button:set_value(0)
+    elseif frames == {post_base + 5100} then
+        machine.screens[":screen"]:snapshot("browser-go-pressed.png")
+    elseif frames == {post_base + 7000} then
+        machine.screens[":screen"]:snapshot("browser-loading.png")
+    elseif frames == {exit_frame - 120} then
+        machine.screens[":screen"]:snapshot("browser-result.png")
+"""
+    elif probe_package:
+        post_install = f"""    elseif frames == {post_base + 1400} then
+        machine.screens[":screen"]:snapshot("pclink-disconnected.png")
+{alert_dismissal.rstrip()}
+    elseif frames == {post_base + 1650} then press(270, 220)
+    elseif frames == {post_base + 1670} then touch_button:set_value(0)
+    elseif frames == {post_base + 1850} then
+        machine.screens[":screen"]:snapshot("package-opened.png")
+    elseif frames == {post_base + 1900} then press(440, 10)
+    elseif frames == {post_base + 1920} then touch_button:set_value(0)
+    elseif frames == {post_base + 2100} then
         machine.screens[":screen"]:snapshot("post-package-storeroom.png")
-    elseif frames == {snapshot_frame + 2200} then press(440, 10)
-    elseif frames == {snapshot_frame + 2220} then touch_button:set_value(0)
-    elseif frames == {snapshot_frame + 2400} then
+    elseif frames == {post_base + 2200} then press(440, 10)
+    elseif frames == {post_base + 2220} then touch_button:set_value(0)
+    elseif frames == {post_base + 2400} then
         machine.screens[":screen"]:snapshot("post-package-hallway.png")
-    elseif frames == {snapshot_frame + 2500} then press(440, 10)
-    elseif frames == {snapshot_frame + 2520} then touch_button:set_value(0)
-    elseif frames == {snapshot_frame + 2700} then
+    elseif frames == {post_base + 2500} then press(440, 10)
+    elseif frames == {post_base + 2520} then touch_button:set_value(0)
+    elseif frames == {post_base + 2700} then
         machine.screens[":screen"]:snapshot("post-package-downtown.png")
-    elseif frames == {snapshot_frame + 2800} then press(260, 200)
-    elseif frames == {snapshot_frame + 2820} then touch_button:set_value(0)
-    elseif frames == {snapshot_frame + 3000} then
+    elseif frames == {post_base + 2800} then press(260, 200)
+    elseif frames == {post_base + 2820} then touch_button:set_value(0)
+    elseif frames == {post_base + 3000} then
         machine.screens[":screen"]:snapshot("downtown-directory.png")
 {save_clause.rstrip()}
 """
-        if probe_package
-        else f"""    elseif frames == {snapshot_frame + 1400} then
+    else:
+        post_install = f"""    elseif frames == {post_base + 1400} then
         machine.screens[":screen"]:snapshot("pclink-disconnected.png")
 """
-    )
     debugger_clause = (
         """-- MAME exposes the raw MIPS names R2/R31, not v0/ra aliases.
 local cpu = machine.devices[":maincpu"]
@@ -372,6 +598,7 @@ local touch_y = ports[":TOUCH_Y"]:field(0xffff)
 local touch_button = ports[":TOUCH_BUTTON"]:field(0x01)
 local frames = 0
 local package_snapshotted = false
+local package_ready_frame = nil
 {debugger_clause.rstrip()}
 
 local function press(x, y)
@@ -420,11 +647,15 @@ def write_all(
     data: bytes,
     process: subprocess.Popen[bytes],
     output: bytearray,
+    service: Callable[[], None] | None = None,
 ) -> None:
     view = memoryview(data)
     while view:
         drain_process_output(process, output)
-        select.select([], [fd], [], 1)
+        if service is not None:
+            service()
+        if not select.select([], [fd], [], 0.05)[1]:
+            continue
         try:
             count = os.write(fd, view)
         except BlockingIOError:
@@ -492,6 +723,36 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="diagnose a PCLink connect/disconnect without sending a package",
     )
+    parser.add_argument(
+        "--combined-browser-acceptance",
+        action="store_true",
+        help=(
+            "continue in the same MAME process through Web Browser, PPP, "
+            "and deterministic local HTTP"
+        ),
+    )
+    parser.add_argument(
+        "--http-port",
+        type=int,
+        default=8080,
+        help="local combined-acceptance HTTP port (default: 8080)",
+    )
+    parser.add_argument(
+        "--slirp",
+        default="slirp",
+        help="classic Slirp executable (default: slirp)",
+    )
+    parser.add_argument(
+        "--bubblewrap",
+        default="bwrap",
+        help="Bubblewrap executable used to isolate Slirp's hostname",
+    )
+    parser.add_argument(
+        "--baudrate",
+        type=int,
+        default=57_600,
+        help="Slirp link pacing rate (default: 57600)",
+    )
     return parser.parse_args(argv)
 
 
@@ -505,6 +766,8 @@ def run_regression(args: argparse.Namespace) -> int:
         if args.nvram_source
         else None
     )
+    combined_browser = args.combined_browser_acceptance
+    probe_package = args.probe_package or combined_browser
 
     inputs = [
         ("MAME executable", mame, "file"),
@@ -519,9 +782,9 @@ def run_regression(args: argparse.Namespace) -> int:
         if not valid:
             print(f"error: {label} not found: {path}", file=sys.stderr)
             return 2
-    if args.probe_package and nvram_source is None:
+    if probe_package and nvram_source is None:
         print(
-            "error: --probe-package requires --nvram-source",
+            "error: package probing requires --nvram-source",
             file=sys.stderr,
         )
         return 2
@@ -531,12 +794,28 @@ def run_regression(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    if args.probe_package and args.connect_only:
+    if probe_package and args.connect_only:
         print(
-            "error: --probe-package cannot be combined with --connect-only",
+            "error: package probing cannot be combined with --connect-only",
             file=sys.stderr,
         )
         return 2
+    if combined_browser:
+        if shutil.which(args.slirp) is None:
+            print("error: classic Slirp is required", file=sys.stderr)
+            return 2
+        if shutil.which(args.bubblewrap) is None:
+            print("error: Bubblewrap is required", file=sys.stderr)
+            return 2
+        if not 1 <= args.http_port <= 65_535:
+            print(
+                "error: --http-port must be between 1 and 65535",
+                file=sys.stderr,
+            )
+            return 2
+        if args.baudrate <= 0:
+            print("error: --baudrate must be positive", file=sys.stderr)
+            return 2
     stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
     workdir = artifact_root / stamp
     workdir.mkdir(parents=True)
@@ -564,8 +843,15 @@ def run_regression(args: argparse.Namespace) -> int:
         else 3500 if nvram_source is not None else 2750
     )
     snapshot_frame = navigation_frame + ceil(wire_seconds * 60) + 120
-    exit_frame = snapshot_frame + (
-        3100 if args.probe_package else 1600
+    post_frames = (
+        11_120
+        if combined_browser
+        else 3100 if probe_package else 1600
+    )
+    exit_frame = (
+        snapshot_frame
+        + post_frames
+        + (PACKAGE_SETTLE_FRAMES if nvram_source is not None else 0)
     )
     lua_path = workdir / "pclink.lua"
     post_install_state = workdir / "post-install.sta"
@@ -576,12 +862,16 @@ def run_regression(args: argparse.Namespace) -> int:
             lua_warm_provider_navigation(
                 snapshot_frame,
                 exit_frame,
-                args.probe_package,
-                post_install_state if args.probe_package else None,
+                probe_package,
+                post_install_state
+                if probe_package and not combined_browser
+                else None,
                 package_ready_path,
                 package_snapshotted_path,
                 args.internet_center_source,
-                args.probe_package,
+                probe_package,
+                combined_browser,
+                args.http_port,
             )
             if nvram_source is not None
             else lua_navigation(snapshot_frame, exit_frame)
@@ -620,7 +910,9 @@ def run_regression(args: argparse.Namespace) -> int:
         "-skip_gameinfo",
         "-oslog",
     ]
-    if args.probe_package:
+    if combined_browser:
+        command.extend(["-pccard1", "modem"])
+    if probe_package:
         command.extend(["-debug", "-debugger", "none"])
     try:
         process = subprocess.Popen(
@@ -640,11 +932,14 @@ def run_regression(args: argparse.Namespace) -> int:
     disconnect_completed = False
     pong_seen = False
     fd: int | None = None
+    modem_fd: int | None = None
+    modem_session: CombinedModemSession | None = None
     error: str | None = None
     try:
         assert process.stdout is not None
         deadline = time.monotonic() + 30
         pty_path = None
+        modem_pty_path = None
         while time.monotonic() < deadline:
             if select.select([process.stdout], [], [], 0.25)[0]:
                 chunk = os.read(process.stdout.fileno(), 65536)
@@ -654,17 +949,43 @@ def run_regression(args: argparse.Namespace) -> int:
                 match = PTY_PATTERN.search(output)
                 if match:
                     pty_path = match.group(1).decode()
+                modem_match = MODEM_PTY_PATTERN.search(output)
+                if modem_match:
+                    modem_pty_path = modem_match.group(1).decode()
+                if pty_path is not None and (
+                    not combined_browser or modem_pty_path is not None
+                ):
                     break
         if pty_path is None:
             raise RuntimeError("MAME did not announce its PCLink PTY")
+        if combined_browser and modem_pty_path is None:
+            raise RuntimeError("MAME did not announce its modem PTY")
 
         fd = os.open(pty_path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
         configure_raw_pty(fd)
+        if modem_pty_path is not None:
+            modem_fd = os.open(
+                modem_pty_path,
+                os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK,
+            )
+            configure_raw_pty(modem_fd)
+            modem_session = CombinedModemSession(
+                modem_fd,
+                modem_pty_path,
+                workdir,
+                args.slirp,
+                args.bubblewrap,
+                args.baudrate,
+                args.http_port,
+            )
+            modem_fd = None
 
         connect_stream = None
         deadline = time.monotonic() + 180
         while time.monotonic() < deadline:
             drain_process_output(process, output)
+            if modem_session is not None:
+                modem_session.service()
             if select.select([fd], [], [], 0.05)[0]:
                 device_wire.extend(read_available(fd))
             if device_wire.startswith(PC_LINK_MAGIC):
@@ -687,22 +1008,31 @@ def run_regression(args: argparse.Namespace) -> int:
         connected = encode_packet(CONNECTED_TAG)
         host_wire.extend(connected)
         host_wire.extend(connected)
-        write_all(fd, bytes(host_wire), process, output)
+        modem_service = (
+            modem_session.service if modem_session is not None else None
+        )
+        write_all(fd, bytes(host_wire), process, output, modem_service)
 
-        time.sleep(0.5)
+        pause_deadline = time.monotonic() + 0.5
+        while time.monotonic() < pause_deadline:
+            if modem_service is not None:
+                modem_service()
+            time.sleep(0.05)
         if not args.connect_only:
             host_wire.extend(metadata_wire)
             host_wire.extend(package_wire)
-            write_all(fd, metadata_wire, process, output)
-            write_all(fd, package_wire, process, output)
+            write_all(fd, metadata_wire, process, output, modem_service)
+            write_all(fd, package_wire, process, output, modem_service)
         ping_wire = encode_packet(PING_TAG)
         pong_wire = encode_packet(PONG_TAG)
         goodbye_wire = encode_packet(GOODBYE_TAG)
         host_wire.extend(ping_wire)
-        write_all(fd, ping_wire, process, output)
+        write_all(fd, ping_wire, process, output, modem_service)
         deadline = time.monotonic() + max(60, exit_frame // 30)
         while process.poll() is None and time.monotonic() < deadline:
             drain_process_output(process, output)
+            if modem_service is not None:
+                modem_service()
             if (
                 fd is not None
                 and not disconnect_completed
@@ -717,7 +1047,13 @@ def run_regression(args: argparse.Namespace) -> int:
                 # the serial endpoint open long enough for Magic Cap to
                 # consume it; the surrounding MAME run owns the PTY lifetime.
                 host_wire.extend(goodbye_wire)
-                write_all(fd, goodbye_wire, process, output)
+                write_all(
+                    fd,
+                    goodbye_wire,
+                    process,
+                    output,
+                    modem_service,
+                )
                 disconnect_completed = True
             if fd is not None and select.select([fd], [], [], 0.05)[0]:
                 device_wire.extend(read_available(fd))
@@ -744,6 +1080,11 @@ def run_regression(args: argparse.Namespace) -> int:
                 os.close(fd)
             except OSError:
                 pass
+        if modem_fd is not None:
+            try:
+                os.close(modem_fd)
+            except OSError:
+                pass
         if process.poll() is None:
             process.terminate()
         try:
@@ -752,6 +1093,12 @@ def run_regression(args: argparse.Namespace) -> int:
             process.kill()
             tail = process.communicate()[0]
         output.extend(tail)
+        if modem_session is not None:
+            try:
+                modem_session.close()
+            except OSError as caught:
+                if error is None:
+                    error = f"unable to finalize modem evidence: {caught}"
 
     (workdir / "device-wire.bin").write_bytes(device_wire)
     (workdir / "host-wire.bin").write_bytes(host_wire)
@@ -798,13 +1145,17 @@ def run_regression(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
-    if args.probe_package and not post_install_state.is_file():
+    if (
+        probe_package
+        and not combined_browser
+        and not post_install_state.is_file()
+    ):
         print(
             f"error: post-install state not produced: {post_install_state}",
             file=sys.stderr,
         )
         return 1
-    if args.probe_package:
+    if probe_package:
         opened_screenshot = workdir / "snapshots" / "package-opened.png"
         if not opened_screenshot.is_file():
             print(
@@ -819,9 +1170,29 @@ def run_regression(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 1
+    if combined_browser:
+        browser_screenshot = workdir / "snapshots" / "browser-result.png"
+        if not browser_screenshot.is_file():
+            print(
+                f"error: browser result screenshot not produced: "
+                f"{browser_screenshot}",
+                file=sys.stderr,
+            )
+            return 1
+        assert modem_session is not None
+        modem_error = modem_session.validation_error()
+        if modem_error is not None:
+            print(f"error: {modem_error}; see {workdir}", file=sys.stderr)
+            return 1
 
     if args.connect_only:
         print("PASS: completed a PCLink connect/disconnect cycle")
+    elif combined_browser:
+        print(
+            "PASS: installed Web Browser through PCLink and fetched "
+            "the local HTTP page over PPP"
+        )
+        print(f"Browser screenshot: {browser_screenshot}")
     else:
         print(f"PASS: installed {package.name} through PCLink")
     print(f"Install screenshot: {screenshot}")

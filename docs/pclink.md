@@ -107,7 +107,8 @@ python3 tools/pclink_regression.py \
   --package "$HOME/fun/magic-cap-assets/packages/Betteris.pkg"
 ```
 
-Web Browser 4.0 uses the same path:
+The full Web Browser 4.0 acceptance uses the same transfer path and then
+continues through PPP and local HTTP without restarting MAME:
 
 ```sh
 python3 tools/pclink_regression.py \
@@ -115,25 +116,29 @@ python3 tools/pclink_regression.py \
   --nvram-source \
     "$HOME/fun/magic-cap-assets/runtime/provider-from-state/nvram" \
   --internet-center-source \
-  --probe-package \
+  --combined-browser-acceptance \
   --workdir \
-    "$HOME/fun/magic-cap-assets/runtime/combined-browser/browser-live-state"
+    "$HOME/fun/magic-cap-assets/runtime/combined-browser/live-http"
 ```
 
 `--nvram-source` copies the provider-configured NVRAM into the timestamped
 run before starting MAME; it never modifies the source.
 `--internet-center-source` selects the navigation path used by the exported
-provider checkpoint. `--probe-package` opens the received object, follows its
-**go to** action, and writes `post-install.sta` after returning to Downtown.
-That state includes the installed browser and PCLink RS-232 topology needed
-by the combined browser test in [`modem.md`](modem.md). The modem card is
-intentionally absent during the long serial transfer; the browser test
-inserts it only while its host bridge owns and answers the modem PTY.
+provider checkpoint. `--combined-browser-acceptance` keeps both the PCLink
+serial endpoint and modem PTY open, services Hayes commands during the long
+transfer, waits 1,800 emulated frames after the final `Pong` for the package
+actor to settle, and only then sends `GBye`. In that same live process it
+opens the received package, follows **go to**, enters
+`10.0.2.2:8080/`, presses **go**, and services Slirp plus the built-in
+HTTP/1.0 endpoint. Avoiding a save-state handoff matters: build 3.1.2j can
+restore the running heap into its cleanup/suspend path with touch input
+unavailable.
 
-The run's `nvram/`, state, screenshots, and wire captures are persistent and
-isolated under `~/fun/magic-cap-assets/`, so the large install is neither
-discarded with `/tmp` nor copied into Git. The archived 500K Web Browser 4.0
-package has been verified through this exact path.
+The run's `nvram/`, screenshots, PCLink and modem wire captures, Hayes
+transcript, Slirp PPP debug log, and recorded HTTP requests are persistent
+and isolated under `~/fun/magic-cap-assets/`, so the large install is neither
+discarded with `/tmp` nor copied into Git. See [`modem.md`](modem.md) for the
+combined pass criteria.
 
 ## Recovered wire format
 

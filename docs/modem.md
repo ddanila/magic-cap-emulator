@@ -145,8 +145,9 @@ passes IPv4 packets from the guest.
 ## Install and test Web Browser 4.0
 
 Download and checksum commands for `WebBrowser40.mc2` are in
-[`pclink.md`](pclink.md). Install it into a copy of the
-provider-configured NVRAM, open it once, and save the combined checkpoint:
+[`pclink.md`](pclink.md). The deterministic combined acceptance installs it
+into a copy of the provider-configured NVRAM and reaches the HTTP result in
+one uninterrupted MAME process:
 
 ```sh
 cd "$HOME/fun/magic-cap-emulator"
@@ -155,41 +156,31 @@ python3 tools/pclink_regression.py \
   --nvram-source \
     "$HOME/fun/magic-cap-assets/runtime/provider-from-state/nvram" \
   --internet-center-source \
-  --probe-package \
+  --combined-browser-acceptance \
   --workdir \
-    "$HOME/fun/magic-cap-assets/runtime/combined-browser/browser-live-state"
+    "$HOME/fun/magic-cap-assets/runtime/combined-browser/live-http"
 ```
 
-The printed run directory contains isolated NVRAM, install screenshots, wire
-logs, and `post-install.sta`. No binary is placed in this Git checkout.
+The harness starts its fixed HTTP/1.0 endpoint on port 8080, owns both host
+PTYs from boot, and answers the modem's Hayes initialization even while
+PCLink transfers the package. After the final `Pong`, it gives the guest
+package actor 1,800 emulated frames to finish, takes the installed-package
+snapshot, and sends `GBye`. It then opens Web Browser 4.0, enters
+`10.0.2.2:8080/`, presses **go**, and hands the modem line to Slirp after
+`CONNECT 14400`.
 
-Run the deterministic combined acceptance against that state:
-
-```sh
-browser_root="$HOME/fun/magic-cap-assets/runtime/combined-browser"
-browser_run="$browser_root/browser-live-state/RUN_TIMESTAMP"
-python3 tools/modem_bridge.py --browser-acceptance \
-  --state "$browser_run/post-install.sta" \
-  --workdir \
-    "$HOME/fun/magic-cap-assets/runtime/combined-browser/http-acceptance"
-```
-
-Replace `RUN_TIMESTAMP` with the directory printed by the PCLink run. The
-bridge starts its own fixed HTTP/1.0 endpoint on port 8080 and automates Web
-Browser 4.0 to open `http://10.0.2.2:8080/`. It first enters the full URL,
-writes `browser-ready.sta`, and relaunches that state before pressing
-**go**. The relaunch ends the completed PCLink process cleanly while retaining
-the installed browser, provider settings, and entered URL. The lengthy PCLink
-transfer leaves the PC Card modem absent. URL preparation and live acceptance
-both insert it, and the bridge opens the new PTY immediately and answers the
-ROM's Hayes initialization. This prevents the saved modem actor from retaining
-a stale pre-save host session.
+This deliberately avoids relaunching a MAME save state between installation
+and dialing. The 3.1.2j running heap can restore into a cleanup/suspend path
+whose touch input never becomes available, whereas keeping the original
+process alive preserves the verified interactive browser session.
 
 A pass requires all of the following from one run: the ROM's Hayes dial
 sequence, Slirp LCP/IPCP with the guest at `10.0.2.15`, an exact `GET /` at
 the built-in server, and `snapshots/browser-result.png`. The timestamped
 directory also retains `http-requests.txt`, Slirp's PPP debug log, modem
-transcript, raw wire captures, and intermediate browser screenshots.
+transcript, both protocols' raw wire captures, isolated NVRAM, and
+intermediate browser screenshots. No package, state, or generated binary is
+placed in this Git checkout.
 
 The browser predates modern TLS, so plain HTTP is intentional. Slirp's
 `10.0.2.2` host alias avoids an external site and proves PPP, TCP, HTTP, and
