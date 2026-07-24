@@ -147,9 +147,11 @@ Repo, README, survey of existing parts (this document).
   verifies an OS-visible package install.
 - Modem → PPP bridge for the true endgame: **Magic Cap on the internet**,
   running the archived Web Browser 4.0. ✅ The emulated PC Card modem is
-  detected by Magic Cap, accepts the ROM's Hayes sequence, and reaches a
-  verified PPP LCP frame. The final live Slirp/browser acceptance remains;
-  see [`docs/modem.md`](docs/modem.md).
+  detected by Magic Cap, accepts the ROM's Hayes sequence, completes live
+  Slirp LCP/IPCP, receives `10.0.2.15`, and sends IPv4 packets. Web Browser
+  4.0 also installs through PCLink. Loading local HTTP in that browser on the
+  same configured guest remains the final combined acceptance; see
+  [`docs/modem.md`](docs/modem.md).
 - ~~840F flash variant and Japan ROM.~~ ✅ The 840F has four persistent
   writable 2 MiB flash lanes; the separately archived Japan image is an
   audited clone set. See [`docs/rom-layout.md`](docs/rom-layout.md).

@@ -141,11 +141,23 @@ def set_nonblocking(fd: int) -> None:
     fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
 
+def classic_slirp_tty(pty_path: str) -> str:
+    """Format SLIRP_TTY for Debian's classic Slirp 1.0.17.
+
+    That release unconditionally removes the last byte as though the value
+    came from a newline-terminated input line.  Supplying the terminator keeps
+    it from truncating the final digit of /dev/pts/N.
+    """
+    return pty_path + "\n"
+
+
 def autodial_script(exit_frame: int | None) -> str:
     """Click Mail in the saved Phone-line panel and optionally stop MAME."""
     exit_clause = ""
     if exit_frame is not None:
         exit_clause = (
+            f'    elseif frames == {exit_frame - 120} then\n'
+            '        machine.screens[":screen"]:snapshot("ppp-connected.png")\n'
             f'    elseif frames == {exit_frame} then machine:exit()\n'
         )
     return f"""local machine = manager.machine
@@ -202,6 +214,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="classic Slirp executable (default: slirp)",
     )
     parser.add_argument(
+        "--bubblewrap",
+        default="bwrap",
+        help="Bubblewrap executable used to isolate Slirp's hostname",
+    )
+    parser.add_argument(
         "--baudrate",
         type=int,
         default=57_600,
@@ -211,6 +228,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--probe",
         action="store_true",
         help="capture the guest's first PPP LCP frame without starting Slirp",
+    )
+    parser.add_argument(
+        "--acceptance",
+        action="store_true",
+        help="run a finite headless live-Slirp check and capture the guest UI",
     )
     parser.add_argument(
         "--no-autodial",
@@ -246,8 +268,27 @@ def _validate(args: argparse.Namespace) -> tuple[Path, Path, Path, Path] | None:
             file=sys.stderr,
         )
         return None
+    if not args.probe and shutil.which(args.bubblewrap) is None:
+        print(
+            "error: Bubblewrap is required; install it with "
+            "`sudo apt install bubblewrap`",
+            file=sys.stderr,
+        )
+        return None
     if args.baudrate <= 0:
         print("error: --baudrate must be positive", file=sys.stderr)
+        return None
+    if args.probe and args.acceptance:
+        print(
+            "error: --probe and --acceptance are mutually exclusive",
+            file=sys.stderr,
+        )
+        return None
+    if args.acceptance and args.no_autodial:
+        print(
+            "error: --acceptance requires automatic dialing",
+            file=sys.stderr,
+        )
         return None
     return mame, rompath, state, artifact_root
 
@@ -276,8 +317,18 @@ def run_bridge(args: argparse.Namespace) -> int:
     lua_path: Path | None = None
     if not args.no_autodial:
         lua_path = run_dir / "autodial.lua"
+        exit_frame = 3600 if args.probe else 6000 if args.acceptance else None
         lua_path.write_text(
-            autodial_script(3600 if args.probe else None), encoding="utf-8"
+            autodial_script(exit_frame), encoding="utf-8"
+        )
+    slirp_config_path = run_dir / "slirp.rc"
+    # Despite `help debugppp` claiming that it accepts a filename, classic
+    # Slirp 1.0.17 always writes this fixed basename in its working directory.
+    ppp_debug_path = run_dir / "slirp_pppdebug"
+    if not args.probe:
+        slirp_config_path.write_text(
+            "debugppp ppp-debug.txt\n",
+            encoding="utf-8",
         )
 
     command = [
@@ -302,7 +353,7 @@ def run_bridge(args: argparse.Namespace) -> int:
         command.extend(
             ["-autoboot_delay", "0", "-autoboot_script", str(lua_path)]
         )
-    if args.probe or args.headless:
+    if args.probe or args.acceptance or args.headless:
         command.extend(["-video", "none", "-sound", "none", "-nothrottle"])
 
     mame_log_path = run_dir / "mame-output.txt"
@@ -357,7 +408,9 @@ def run_bridge(args: argparse.Namespace) -> int:
             negotiator = HayesNegotiator()
             dialed = False
             deadline = (
-                time.monotonic() + 120 if args.probe else float("inf")
+                time.monotonic() + 180
+                if args.probe or args.acceptance
+                else float("inf")
             )
 
             while time.monotonic() < deadline and process.poll() is None:
@@ -369,6 +422,14 @@ def run_bridge(args: argparse.Namespace) -> int:
                     _drain_stream(process.stdout, mame_log)
                 if pty_fd is None or pty_fd not in ready:
                     if slirp_process is not None and slirp_process.poll() is not None:
+                        # At the scripted acceptance exit, MAME closes the PTY
+                        # and Slirp can finish just before MAME's process status
+                        # becomes visible here.
+                        snapshot = (
+                            run_dir / "snapshots" / "ppp-connected.png"
+                        )
+                        if args.acceptance and snapshot.is_file():
+                            continue
                         raise RuntimeError(
                             f"Slirp exited with status {slirp_process.returncode}"
                         )
@@ -398,11 +459,27 @@ def run_bridge(args: argparse.Namespace) -> int:
                             host_wire.extend(response)
                         else:
                             env = os.environ.copy()
-                            env["SLIRP_TTY"] = pty_path
+                            env["SLIRP_TTY"] = classic_slirp_tty(pty_path)
                             slirp_process = subprocess.Popen(
                                 [
+                                    args.bubblewrap,
+                                    "--ro-bind",
+                                    "/",
+                                    "/",
+                                    "--dev-bind",
+                                    "/dev",
+                                    "/dev",
+                                    "--bind",
+                                    str(run_dir),
+                                    str(run_dir),
+                                    "--unshare-uts",
+                                    "--hostname",
+                                    "10.0.2.2",
+                                    "--die-with-parent",
                                     args.slirp,
                                     "-P",
+                                    "-f",
+                                    str(slirp_config_path),
                                     "-b",
                                     str(args.baudrate),
                                     "nozeros",
@@ -431,10 +508,8 @@ def run_bridge(args: argparse.Namespace) -> int:
 
             if args.probe and not lcp_seen:
                 raise RuntimeError("Magic Cap did not emit a PPP LCP frame")
-            if not args.probe and process.poll() is None:
-                # Interactive mode normally reaches here only after the user
-                # closes MAME.  The deadline prevents an unattended stale run.
-                raise RuntimeError("bridge timed out after ten minutes")
+            if args.acceptance and process.poll() is None:
+                raise RuntimeError("live PPP acceptance timed out")
     except (OSError, RuntimeError) as caught:
         error = str(caught)
     except KeyboardInterrupt:
@@ -468,6 +543,37 @@ def run_bridge(args: argparse.Namespace) -> int:
         return 1
     if args.probe:
         print("PASS: Magic Cap completed Hayes dialing and emitted PPP LCP")
+    elif args.acceptance:
+        slirp_output = slirp_log_path.read_text(
+            encoding="utf-8", errors="replace"
+        )
+        snapshot_path = run_dir / "snapshots" / "ppp-connected.png"
+        if "SLiRP Ready" not in slirp_output:
+            print(
+                f"error: Slirp did not become ready; see {run_dir}",
+                file=sys.stderr,
+            )
+            return 1
+        if (
+            not ppp_debug_path.is_file()
+            or "slirppp: PPP is up now"
+            not in ppp_debug_path.read_text(
+                encoding="utf-8", errors="replace"
+            )
+        ):
+            print(
+                f"error: Slirp did not complete IPCP; see {run_dir}",
+                file=sys.stderr,
+            )
+            return 1
+        if not snapshot_path.is_file():
+            print(
+                f"error: guest acceptance snapshot missing; see {run_dir}",
+                file=sys.stderr,
+            )
+            return 1
+        print("PASS: Magic Cap completed a live PPP negotiation with Slirp")
+        print(f"Snapshot: {snapshot_path}")
     else:
         print("Modem bridge stopped")
     print(f"Persistent artifacts: {run_dir}")

@@ -182,6 +182,8 @@ emu.register_frame_done(function()
     elseif frames == 1640 then touch_button:set_value(0)
     elseif frames == 1820 then press(240, 160)
     elseif frames == 1840 then touch_button:set_value(0)
+    elseif frames == 2180 then
+        machine.screens[":screen"]:snapshot("navigation-workbench.png")
     elseif frames == 2200 then press(420, 70)
     elseif frames == 2220 then touch_button:set_value(0)
     elseif frames == 2260 then press(396, 24)
@@ -192,6 +194,8 @@ emu.register_frame_done(function()
     elseif frames == 2420 then touch_button:set_value(0)
     elseif frames == 2500 then press(60, 130)
     elseif frames == 2520 then touch_button:set_value(0)
+    elseif frames == 2580 then
+        machine.screens[":screen"]:snapshot("navigation-storeroom.png")
     elseif frames == 2630 then press(48, 155)
     elseif frames == 2650 then touch_button:set_value(0)
     elseif frames == {snapshot_frame} then
@@ -302,6 +306,7 @@ def run_regression(args: argparse.Namespace) -> int:
     stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
     workdir = artifact_root / stamp
     workdir.mkdir(parents=True)
+    (workdir / "cfg").mkdir()
 
     # Allow the known 48 KiB test package and some installation time after a
     # 19,200-baud transfer. Larger packages extend the scripted run.
@@ -320,6 +325,8 @@ def run_regression(args: argparse.Namespace) -> int:
         str(rompath),
         "-nvram_directory",
         str(workdir / "nvram"),
+        "-cfg_directory",
+        str(workdir / "cfg"),
         "-snapshot_directory",
         str(workdir / "snapshots"),
         "-snapview",
@@ -374,7 +381,7 @@ def run_regression(args: argparse.Namespace) -> int:
         configure_raw_pty(fd)
 
         connect_stream = None
-        deadline = time.monotonic() + 100
+        deadline = time.monotonic() + 180
         while time.monotonic() < deadline:
             drain_process_output(process, output)
             if select.select([fd], [], [], 0.05)[0]:

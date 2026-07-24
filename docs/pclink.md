@@ -101,7 +101,9 @@ python3 tools/pclink_regression.py \
 ```
 
 The run's `nvram/` directory is persistent and isolated, so a successful
-large-package install is not discarded with a temporary directory. See
+large-package install is not discarded with a temporary directory. The
+archived 500K Web Browser 4.0 package has been verified through this exact
+path. See
 [`modem.md`](modem.md) for the PPP bridge and browser test URL.
 
 ## Recovered wire format

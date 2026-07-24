@@ -70,6 +70,13 @@ class PCLinkProtocolTests(unittest.TestCase):
             "DvorakKeyboard.pkg".encode("utf-16-be"),
         )
 
+    def test_navigation_leaves_failure_checkpoints(self) -> None:
+        script = pclink_regression.lua_navigation(4700, 4900)
+
+        self.assertIn("navigation-workbench.png", script)
+        self.assertIn("navigation-storeroom.png", script)
+        self.assertIn("frames == 4700", script)
+        self.assertIn("frames == 4900", script)
 
 if __name__ == "__main__":
     unittest.main()

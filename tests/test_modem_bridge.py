@@ -64,6 +64,12 @@ class PPPFrameTests(unittest.TestCase):
 
 
 class AutomationTests(unittest.TestCase):
+    def test_classic_slirp_tty_preserves_final_path_byte(self) -> None:
+        self.assertEqual(
+            modem_bridge.classic_slirp_tty("/dev/pts/8"),
+            "/dev/pts/8\n",
+        )
+
     def test_autodial_click_and_optional_exit(self) -> None:
         interactive = modem_bridge.autodial_script(None)
         probe = modem_bridge.autodial_script(3600)
@@ -71,6 +77,8 @@ class AutomationTests(unittest.TestCase):
         self.assertIn("frames == 500", interactive)
         self.assertIn("press(320, 164)", interactive)
         self.assertNotIn("machine:exit()", interactive)
+        self.assertIn('snapshot("ppp-connected.png")', probe)
+        self.assertIn("frames == 3480", probe)
         self.assertIn("frames == 3600", probe)
         self.assertIn("machine:exit()", probe)
 
