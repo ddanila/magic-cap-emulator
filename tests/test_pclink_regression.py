@@ -163,6 +163,54 @@ class PCLinkProtocolTests(unittest.TestCase):
         self.assertIn("press(170, 132)", script)
         self.assertIn("press(48, 155)", script)
 
+    def test_provider_first_run_completes_owner_card_then_reaches_pclink(
+        self,
+    ) -> None:
+        pclink_frame = pclink_regression.provider_first_run_pclink_frame(
+            "Ada",
+            "Lovelace",
+        )
+        script = pclink_regression.lua_warm_provider_navigation(
+            pclink_frame + 120,
+            pclink_frame + 2000,
+            suppress_magicbus_warning=True,
+            owner_first_name="Ada",
+            owner_last_name="Lovelace",
+        )
+
+        self.assertIn("press(120, 40)", script)
+        self.assertIn("provider-name-card-step-6.png", script)
+        self.assertIn("provider-name-card-complete.png", script)
+        self.assertIn("press(293, 258)", script)
+        self.assertIn("provider-locations-tab.png", script)
+        self.assertIn("press(450, 58)", script)
+        self.assertIn("press(145, 103)", script)
+        self.assertIn("provider-phone-locations.png", script)
+        self.assertIn("press(102, 300)", script)
+        self.assertIn("press(50, 104)", script)
+        self.assertIn("provider-home-location-created.png", script)
+        self.assertIn("provider-home-location-returned.png", script)
+        self.assertIn("provider-choose-connection.png", script)
+        self.assertIn("press(250, 77)", script)
+        self.assertIn("provider-pccard-selected.png", script)
+        self.assertIn("press(425, 202)", script)
+        self.assertIn("provider-pccard-assigned.png", script)
+        self.assertIn("press(440, 10)", script)
+        self.assertIn("navigation-internet-center.png", script)
+        self.assertIn("navigation-downtown.png", script)
+        self.assertIn("navigation-storeroom.png", script)
+        self.assertIn("press(48, 155)", script)
+        self.assertIn(f"frames == {pclink_frame}", script)
+        self.assertIn("0x13c29434", script)
+
+    def test_name_card_automation_rejects_non_keyboard_characters(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(ValueError, "letters a-z only"):
+            pclink_regression.name_card_key_steps("Ada-1", 100)
+        with self.assertRaisesRegex(ValueError, "non-empty name"):
+            pclink_regression.name_card_key_steps("", 100)
+
     def test_package_probe_dismisses_both_magicbus_alert_variants(
         self,
     ) -> None:
@@ -203,16 +251,6 @@ class PCLinkProtocolTests(unittest.TestCase):
         self.assertIn("press(419, 143)", script)
         self.assertIn("browser-result.png", script)
         self.assertNotIn("machine:save", script)
-
-    def test_state_source_is_available_for_live_provider_session(
-        self,
-    ) -> None:
-        args = pclink_regression.parse_args(
-            ["--state-source", "/tmp/provider.sta"]
-        )
-
-        self.assertEqual(args.state_source, Path("/tmp/provider.sta"))
-
 
 if __name__ == "__main__":
     unittest.main()

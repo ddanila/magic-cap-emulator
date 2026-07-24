@@ -53,6 +53,8 @@ GOODBYE_TAG = b"GBye"
 PING_TAG = b"Ping"
 PONG_TAG = b"Pong"
 PACKAGE_SETTLE_FRAMES = 1800
+NAME_KEY_INTERVAL = 100
+PROVIDER_POST_OWNER_TO_PCLINK_FRAMES = 9700
 
 
 class CombinedModemSession:
@@ -321,6 +323,72 @@ def package_metadata(path: Path) -> bytes:
     return bytes(metadata)
 
 
+def name_card_key_steps(
+    text: str,
+    start_frame: int,
+    interval: int = NAME_KEY_INTERVAL,
+) -> str:
+    """Generate paced taps for the first-run name-card keyboard."""
+    if not text:
+        raise ValueError("name-card automation requires a non-empty name")
+    positions = {
+        "q": (26, 198),
+        "w": (70, 198),
+        "e": (112, 198),
+        "r": (156, 198),
+        "t": (199, 198),
+        "y": (242, 198),
+        "u": (285, 198),
+        "i": (328, 198),
+        "o": (370, 198),
+        "p": (414, 198),
+        "a": (33, 234),
+        "s": (76, 234),
+        "d": (119, 234),
+        "f": (162, 234),
+        "g": (205, 234),
+        "h": (248, 234),
+        "j": (291, 234),
+        "k": (334, 234),
+        "l": (377, 234),
+        "z": (48, 269),
+        "x": (89, 269),
+        "c": (132, 269),
+        "v": (176, 269),
+        "b": (219, 269),
+        "n": (262, 269),
+        "m": (305, 269),
+    }
+    unsupported = sorted(set(text.lower()) - positions.keys())
+    if unsupported:
+        raise ValueError(
+            "name-card automation supports letters a-z only; unsupported: "
+            + ", ".join(repr(character) for character in unsupported)
+        )
+    return "".join(
+        f"    elseif frames == {start_frame + (index * interval)} then "
+        f"press({positions[character.lower()][0]}, "
+        f"{positions[character.lower()][1]})\n"
+        f"    elseif frames == "
+        f"{start_frame + 20 + (index * interval)} then "
+        "touch_button:set_value(0)\n"
+        for index, character in enumerate(text)
+    ).rstrip()
+
+
+def provider_first_run_pclink_frame(
+    owner_first_name: str,
+    owner_last_name: str,
+) -> int:
+    """Return the frame at which first-run automation opens PCLink."""
+    owner_done_frame = (
+        3700
+        + (len(owner_first_name) + len(owner_last_name))
+        * NAME_KEY_INTERVAL
+    )
+    return owner_done_frame + PROVIDER_POST_OWNER_TO_PCLINK_FRAMES
+
+
 def lua_navigation(snapshot_frame: int, exit_frame: int) -> str:
     """Return deterministic first-boot calibration and PCLink navigation."""
     return f"""local machine = manager.machine
@@ -372,6 +440,143 @@ end)
 """
 
 
+def lua_provider_first_run_navigation(
+    snapshot_frame: int,
+    owner_first_name: str,
+    owner_last_name: str,
+) -> str:
+    """Complete owner/location setup, then navigate to PCLink."""
+    first_steps = name_card_key_steps(
+        owner_first_name,
+        3500,
+    )
+    last_start = 3600 + (len(owner_first_name) * NAME_KEY_INTERVAL)
+    last_steps = name_card_key_steps(
+        owner_last_name,
+        last_start,
+    )
+    done_frame = (
+        last_start
+        + (len(owner_last_name) * NAME_KEY_INTERVAL)
+        + NAME_KEY_INTERVAL
+    )
+    location_start = done_frame + 1200
+    navigation_start = location_start + 5800
+    return f"""    if frames == 1000 then press(120, 40)
+    elseif frames == 1020 then touch_button:set_value(0)
+    elseif frames == 1200 then
+        machine.screens[":screen"]:snapshot("provider-card-selected.png")
+    elseif frames == 1400 then press(320, 164)
+    elseif frames == 1420 then touch_button:set_value(0)
+    elseif frames == 1600 then
+        machine.screens[":screen"]:snapshot("provider-first-location.png")
+    elseif frames == 1800 then press(421, 70)
+    elseif frames == 1820 then touch_button:set_value(0)
+    elseif frames == 2000 then
+        machine.screens[":screen"]:snapshot("provider-battery-dismissed.png")
+    elseif frames == 2200 then press(305, 135)
+    elseif frames == 2220 then touch_button:set_value(0)
+    elseif frames == 2400 then
+        machine.screens[":screen"]:snapshot("provider-name-card.png")
+    elseif frames == 2600 then press(135, 170)
+    elseif frames == 2620 then touch_button:set_value(0)
+    elseif frames == 2800 then
+        machine.screens[":screen"]:snapshot("provider-name-card-step-2.png")
+    elseif frames == 2900 then press(371, 236)
+    elseif frames == 2920 then touch_button:set_value(0)
+    elseif frames == 3100 then
+        machine.screens[":screen"]:snapshot("provider-name-card-step-3.png")
+    elseif frames == 3200 then press(451, 52)
+    elseif frames == 3220 then touch_button:set_value(0)
+    elseif frames == 3400 then
+        machine.screens[":screen"]:snapshot("provider-name-card-step-4.png")
+{first_steps}
+    elseif frames == {last_start - 100} then press(370, 102)
+    elseif frames == {last_start - 80} then touch_button:set_value(0)
+{last_steps}
+    elseif frames == {done_frame - 100} then
+        machine.screens[":screen"]:snapshot("provider-owner-name-entered.png")
+    elseif frames == {done_frame} then press(428, 144)
+    elseif frames == {done_frame + 20} then touch_button:set_value(0)
+    elseif frames == {done_frame + 300} then
+        machine.screens[":screen"]:snapshot("provider-name-card-step-5.png")
+    elseif frames == {done_frame + 400} then press(237, 110)
+    elseif frames == {done_frame + 420} then touch_button:set_value(0)
+    elseif frames == {done_frame + 600} then
+        machine.screens[":screen"]:snapshot("provider-name-card-step-6.png")
+    elseif frames == {done_frame + 700} then press(371, 194)
+    elseif frames == {done_frame + 720} then touch_button:set_value(0)
+    elseif frames == {done_frame + 900} then
+        machine.screens[":screen"]:snapshot("provider-name-card-complete.png")
+    elseif frames == {location_start} then press(293, 258)
+    elseif frames == {location_start + 20} then touch_button:set_value(0)
+    elseif frames == {location_start + 400} then
+        machine.screens[":screen"]:snapshot("provider-locations-tab.png")
+    elseif frames == {location_start + 600} then press(450, 58)
+    elseif frames == {location_start + 620} then touch_button:set_value(0)
+    elseif frames == {location_start + 1000} then
+        machine.screens[":screen"]:snapshot("provider-add-location.png")
+    elseif frames == {location_start + 1200} then press(145, 103)
+    elseif frames == {location_start + 1220} then touch_button:set_value(0)
+    elseif frames == {location_start + 1600} then
+        machine.screens[":screen"]:snapshot("provider-phone-locations.png")
+    elseif frames == {location_start + 1800} then press(102, 300)
+    elseif frames == {location_start + 1820} then touch_button:set_value(0)
+    elseif frames == {location_start + 2200} then
+        machine.screens[":screen"]:snapshot("provider-location-stamps.png")
+    elseif frames == {location_start + 2400} then press(50, 104)
+    elseif frames == {location_start + 2420} then touch_button:set_value(0)
+    elseif frames == {location_start + 2800} then
+        machine.screens[":screen"]:snapshot("provider-home-location-setup.png")
+    elseif frames == {location_start + 3000} then press(451, 52)
+    elseif frames == {location_start + 3020} then touch_button:set_value(0)
+    elseif frames == {location_start + 3400} then
+        machine.screens[":screen"]:snapshot("provider-home-location-created.png")
+    elseif frames == {location_start + 3600} then press(440, 10)
+    elseif frames == {location_start + 3620} then touch_button:set_value(0)
+    elseif frames == {location_start + 4000} then
+        machine.screens[":screen"]:snapshot("provider-home-location-returned.png")
+    elseif frames == {location_start + 4200} then press(70, 65)
+    elseif frames == {location_start + 4220} then touch_button:set_value(0)
+    elseif frames == {location_start + 4600} then
+        machine.screens[":screen"]:snapshot("provider-choose-connection.png")
+    elseif frames == {location_start + 4800} then press(250, 77)
+    elseif frames == {location_start + 4820} then touch_button:set_value(0)
+    elseif frames == {location_start + 5000} then
+        machine.screens[":screen"]:snapshot("provider-pccard-selected.png")
+    elseif frames == {location_start + 5200} then press(425, 202)
+    elseif frames == {location_start + 5220} then touch_button:set_value(0)
+    elseif frames == {location_start + 5600} then
+        machine.screens[":screen"]:snapshot("provider-pccard-assigned.png")
+    elseif frames == {navigation_start} then press(440, 10)
+    elseif frames == {navigation_start + 20} then touch_button:set_value(0)
+    elseif frames == {navigation_start + 300} then press(440, 10)
+    elseif frames == {navigation_start + 320} then touch_button:set_value(0)
+    elseif frames == {navigation_start + 600} then press(452, 255)
+    elseif frames == {navigation_start + 620} then touch_button:set_value(0)
+    elseif frames == {navigation_start + 800} then
+        machine.screens[":screen"]:snapshot("navigation-internet-center.png")
+    elseif frames == {navigation_start + 1100} then press(430, 10)
+    elseif frames == {navigation_start + 1120} then touch_button:set_value(0)
+    elseif frames == {navigation_start + 1400} then
+        machine.screens[":screen"]:snapshot("navigation-downtown.png")
+    elseif frames == {navigation_start + 1500} then press(301, 110)
+    elseif frames == {navigation_start + 1520} then touch_button:set_value(0)
+    elseif frames == {navigation_start + 1800} then press(440, 10)
+    elseif frames == {navigation_start + 1820} then touch_button:set_value(0)
+    elseif frames == {navigation_start + 2100} then press(60, 130)
+    elseif frames == {navigation_start + 2120} then touch_button:set_value(0)
+    elseif frames == {navigation_start + 2300} then press(170, 132)
+    elseif frames == {navigation_start + 2320} then touch_button:set_value(0)
+    elseif frames == {navigation_start + 2600} then
+        machine.screens[":screen"]:snapshot("navigation-storeroom.png")
+    elseif frames == {navigation_start + 2700} then press(48, 155)
+    elseif frames == {navigation_start + 2720} then touch_button:set_value(0)
+    elseif frames == {snapshot_frame} and not package_snapshotted then
+        machine.screens[":screen"]:snapshot("package-installed.png")
+"""
+
+
 def lua_warm_provider_navigation(
     snapshot_frame: int,
     exit_frame: int,
@@ -383,6 +588,8 @@ def lua_warm_provider_navigation(
     suppress_magicbus_warning: bool = False,
     browser_acceptance: bool = False,
     http_port: int = 8080,
+    owner_first_name: str | None = None,
+    owner_last_name: str | None = None,
 ) -> str:
     """Navigate a provider-configured warm image from In box to PCLink."""
     settle_offset = (
@@ -532,8 +739,15 @@ cpu.debug:go()
         if suppress_magicbus_warning
         else ""
     )
-    navigation_steps = (
-        f"""    if frames == 1300 then press(413, 61)
+    if owner_first_name is not None:
+        assert owner_last_name is not None
+        navigation_steps = lua_provider_first_run_navigation(
+            snapshot_frame,
+            owner_first_name,
+            owner_last_name,
+        )
+    elif internet_center_start:
+        navigation_steps = f"""    if frames == 1300 then press(413, 61)
     elseif frames == 1320 then touch_button:set_value(0)
     elseif frames == 1600 then press(421, 70)
     elseif frames == 1620 then touch_button:set_value(0)
@@ -568,8 +782,8 @@ cpu.debug:go()
     elseif frames == {snapshot_frame} and not package_snapshotted then
         machine.screens[":screen"]:snapshot("package-installed.png")
 """
-        if internet_center_start
-        else f"""    if frames == 1300 then press(413, 61)
+    else:
+        navigation_steps = f"""    if frames == 1300 then press(413, 61)
     elseif frames == 1320 then touch_button:set_value(0)
     elseif frames == 1600 then press(421, 70)
     elseif frames == 1620 then touch_button:set_value(0)
@@ -590,7 +804,6 @@ cpu.debug:go()
     elseif frames == {snapshot_frame} and not package_snapshotted then
         machine.screens[":screen"]:snapshot("package-installed.png")
 """
-    )
     return f"""local machine = manager.machine
 local ports = machine.ioport.ports
 local touch_x = ports[":TOUCH_X"]:field(0xffff)
@@ -709,14 +922,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--state-source",
-        type=Path,
-        help=(
-            "load a provider-configured MAME state while keeping all "
-            "subsequent acceptance steps in the same process"
-        ),
-    )
-    parser.add_argument(
         "--probe-package",
         action="store_true",
         help="open the received package and capture its Package scene",
@@ -725,6 +930,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--internet-center-source",
         action="store_true",
         help="treat --nvram-source as starting on Internet Center's provider screen",
+    )
+    parser.add_argument(
+        "--owner-first-name",
+        help="first name for completing the provider's first-run owner card",
+    )
+    parser.add_argument(
+        "--owner-last-name",
+        help="last name for completing the provider's first-run owner card",
     )
     parser.add_argument(
         "--connect-only",
@@ -774,12 +987,7 @@ def run_regression(args: argparse.Namespace) -> int:
         if args.nvram_source
         else None
     )
-    state_source = (
-        args.state_source.expanduser().resolve()
-        if args.state_source
-        else None
-    )
-    provider_source = nvram_source is not None or state_source is not None
+    provider_source = nvram_source is not None
     combined_browser = args.combined_browser_acceptance
     probe_package = args.probe_package or combined_browser
 
@@ -791,19 +999,11 @@ def run_regression(args: argparse.Namespace) -> int:
         inputs.append(("package", package, "file"))
     if nvram_source is not None:
         inputs.append(("NVRAM source", nvram_source, "directory"))
-    if state_source is not None:
-        inputs.append(("state source", state_source, "file"))
     for label, path, kind in inputs:
         valid = path.is_file() if kind == "file" else path.is_dir()
         if not valid:
             print(f"error: {label} not found: {path}", file=sys.stderr)
             return 2
-    if nvram_source is not None and state_source is not None:
-        print(
-            "error: --nvram-source and --state-source are mutually exclusive",
-            file=sys.stderr,
-        )
-        return 2
     if probe_package and not provider_source:
         print(
             "error: package probing requires a provider source",
@@ -816,6 +1016,39 @@ def run_regression(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
+    if (args.owner_first_name is None) != (args.owner_last_name is None):
+        print(
+            "error: --owner-first-name and --owner-last-name are required "
+            "together",
+            file=sys.stderr,
+        )
+        return 2
+    if (
+        args.owner_first_name is not None
+        and not provider_source
+    ):
+        print(
+            "error: owner-name setup requires --nvram-source",
+            file=sys.stderr,
+        )
+        return 2
+    if (
+        args.owner_first_name is not None
+        and args.internet_center_source
+    ):
+        print(
+            "error: owner-name setup and --internet-center-source are "
+            "mutually exclusive",
+            file=sys.stderr,
+        )
+        return 2
+    if args.owner_first_name is not None:
+        try:
+            name_card_key_steps(args.owner_first_name, 0)
+            name_card_key_steps(args.owner_last_name or "", 0)
+        except ValueError as caught:
+            print(f"error: {caught}", file=sys.stderr)
+            return 2
     if probe_package and args.connect_only:
         print(
             "error: package probing cannot be combined with --connect-only",
@@ -860,8 +1093,12 @@ def run_regression(args: argparse.Namespace) -> int:
     )
     wire_seconds = (len(metadata_wire) + len(package_wire)) * 10 / 19_200
     navigation_frame = (
-        5100
-        if args.internet_center_source
+        provider_first_run_pclink_frame(
+            args.owner_first_name or "",
+            args.owner_last_name or "",
+        )
+        if args.owner_first_name is not None
+        else 5100 if args.internet_center_source
         else 3500 if provider_source else 2750
     )
     snapshot_frame = navigation_frame + ceil(wire_seconds * 60) + 120
@@ -891,9 +1128,11 @@ def run_regression(args: argparse.Namespace) -> int:
                 package_ready_path,
                 package_snapshotted_path,
                 args.internet_center_source,
-                probe_package,
+                probe_package or args.owner_first_name is not None,
                 combined_browser,
                 args.http_port,
+                args.owner_first_name,
+                args.owner_last_name,
             )
             if provider_source
             else lua_navigation(snapshot_frame, exit_frame)
@@ -932,11 +1171,9 @@ def run_regression(args: argparse.Namespace) -> int:
         "-skip_gameinfo",
         "-oslog",
     ]
-    if combined_browser:
+    if combined_browser or args.owner_first_name is not None:
         command.extend(["-pccard1", "modem"])
-    if state_source is not None:
-        command.extend(["-state", str(state_source)])
-    if probe_package:
+    if probe_package or args.owner_first_name is not None:
         command.extend(["-debug", "-debugger", "none"])
     try:
         process = subprocess.Popen(
@@ -1005,7 +1242,12 @@ def run_regression(args: argparse.Namespace) -> int:
             modem_fd = None
 
         connect_stream = None
-        deadline = time.monotonic() + 180
+        connect_timeout = (
+            max(180, (navigation_frame // 20) + 60)
+            if args.owner_first_name is not None
+            else 180
+        )
+        deadline = time.monotonic() + connect_timeout
         while time.monotonic() < deadline:
             drain_process_output(process, output)
             if modem_session is not None:
