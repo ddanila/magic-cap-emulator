@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 import unittest
+import urllib.request
 from pathlib import Path
 
 
@@ -64,6 +65,81 @@ class PPPFrameTests(unittest.TestCase):
 
 
 class AutomationTests(unittest.TestCase):
+    def test_modem_pty_pattern_ignores_pclink_serial_port(self) -> None:
+        output = (
+            b":pccard1:modem PTY: /dev/pts/6\n"
+            b":rs2321:pty PTY: /dev/pts/8\n"
+        )
+
+        match = modem_bridge.PTY_PATTERN.search(output)
+
+        self.assertIsNotNone(match)
+        assert match is not None
+        self.assertEqual(match.group(1), b"/dev/pts/6")
+
+    def test_browser_prepare_enters_local_url_and_saves_state(
+        self,
+    ) -> None:
+        script = modem_bridge.browser_prepare_script(
+            8080, Path("/tmp/browser-ready.sta")
+        )
+
+        self.assertNotIn("machine:hard_reset()", script)
+        self.assertIn("press(451, 148)", script)
+        self.assertIn("press(126, 80)", script)
+        self.assertIn("{391, 270}", script)
+        self.assertIn("{262, 270}", script)
+        self.assertIn("{434, 270}", script)
+        self.assertIn("browser-url-entered.png", script)
+        self.assertIn(
+            'machine:save("/tmp/browser-ready.sta")', script
+        )
+        self.assertIn("frames == 4600", script)
+
+    def test_browser_acceptance_dials_prepared_state_and_captures_result(
+        self,
+    ) -> None:
+        script = modem_bridge.browser_acceptance_script(11000)
+
+        self.assertIn("press(419, 143)", script)
+        self.assertIn("browser-ready.png", script)
+        self.assertIn("browser-go-pressed.png", script)
+        self.assertIn("browser-dialing.png", script)
+        self.assertIn("browser-result.png", script)
+        self.assertIn("frames == 11000", script)
+
+    def test_browser_url_preparation_inserts_bridged_modem(self) -> None:
+        command = modem_bridge.browser_prepare_command(
+            Path("/opt/mame/datarover"),
+            Path("/opt/roms"),
+            Path("/opt/state.sta"),
+            Path("/opt/run"),
+            Path("/opt/run/browser-prepare.lua"),
+        )
+
+        self.assertIn("-pccard1", command)
+        self.assertIn("modem", command)
+        self.assertIn("-rs2321", command)
+        self.assertIn("/opt/state.sta", command)
+
+    def test_browser_acceptance_http_server_records_root_request(self) -> None:
+        server, thread, requests = (
+            modem_bridge.start_acceptance_http_server(0)
+        )
+        try:
+            port = server.server_address[1]
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/", timeout=2
+            ) as response:
+                body = response.read()
+            self.assertEqual(response.status, 200)
+            self.assertIn(b"Magic Cap is online", body)
+            self.assertEqual(requests, ["/"])
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
     def test_classic_slirp_tty_preserves_final_path_byte(self) -> None:
         self.assertEqual(
             modem_bridge.classic_slirp_tty("/dev/pts/8"),

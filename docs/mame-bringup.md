@@ -39,7 +39,7 @@ sudo apt-get install \
   libsdl2-dev libsdl2-ttf-dev libfontconfig-dev libpulse-dev \
   qt6-base-dev qt6-base-dev-tools qtchooser \
   ccache binutils-mips-linux-gnu gdb-multiarch unshield \
-  curl unzip gzip slirp
+  curl unzip gzip slirp bubblewrap
 ```
 
 The cross-GCC packages are not required. In particular,
@@ -173,6 +173,7 @@ python3 tools/tx39_regression.py
 python3 tools/pccard_regression.py
 python3 tools/pclink_regression.py
 python3 tools/modem_bridge.py --probe
+python3 tools/modem_bridge.py --acceptance
 ```
 
 The serial harness writes generated configuration and logs under
@@ -212,15 +213,16 @@ instructions are in [`rom-layout.md`](rom-layout.md).
 
 The PCLink harness uses the real UART-A PTY and recovered WinPCLink framing to
 install an archived package through the Storeroom computer. It fails on a
-Dino receive overrun or Magic Cap's `GBye` response and verifies that the
-installed object appears in a post-transfer native LCD capture. Package and
-reference-tool download commands, checksums, protocol notes, and alternate
-inputs are in [`pclink.md`](pclink.md).
+Dino receive overrun, uses a final `Ping`/`Pong` as the completed-stream
+barrier, immediately closes the connection from the host with `GBye`, and
+verifies that the installed object appears in post-transfer native LCD
+captures. Package and reference-tool download commands, checksums, protocol
+notes, and alternate inputs are in [`pclink.md`](pclink.md).
 
 The modem probe inserts the I/O card, accepts the ROM's Hayes initialization
 and dial string, sends `CONNECT`, and requires Magic Cap to emit a valid PPP
 LCP frame. The live Slirp handoff, guest network settings, Web Browser 4.0
-download/install command, and plain-HTTP test page are in
+download/install command, and automated plain-HTTP browser acceptance are in
 [`modem.md`](modem.md).
 
 The build also contains `datarover840f` and `datarover840j`. Verify all three
@@ -276,6 +278,7 @@ the separate serial-terminal view.
 | PC Card modem | Magic Cap detects the card, completes its Hayes sequence, and emits an async-HDLC PPP LCP frame |
 | Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
 
-The machine remains marked `MACHINE_NOT_WORKING`: buffered sound DMA,
-full PPP/browser interoperability and complete wake-path interaction are
-later plan items.
+The machine remains marked `MACHINE_NOT_WORKING` while the modeled hardware
+is still incomplete. Buffered sound DMA is one known later item; incomplete
+MagicBus peripheral replies also make the ROM's background MagicBus actor
+eventually display an attached-device warning in longer sessions.

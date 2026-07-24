@@ -10,6 +10,18 @@ from tools import pclink_regression
 
 
 class PCLinkProtocolTests(unittest.TestCase):
+    def test_pclink_pty_pattern_ignores_pc_card_modem(self) -> None:
+        output = (
+            b":pccard1:modem PTY: /dev/pts/6\n"
+            b":rs2321:pty PTY: /dev/pts/8\n"
+        )
+
+        match = pclink_regression.PTY_PATTERN.search(output)
+
+        self.assertIsNotNone(match)
+        assert match is not None
+        self.assertEqual(match.group(1), b"/dev/pts/8")
+
     def test_escape_round_trip(self) -> None:
         original = bytes(range(32))
         escaped = pclink_regression.escape_payload(original)
@@ -76,7 +88,83 @@ class PCLinkProtocolTests(unittest.TestCase):
         self.assertIn("navigation-workbench.png", script)
         self.assertIn("navigation-storeroom.png", script)
         self.assertIn("frames == 4700", script)
+        self.assertIn("pclink-disconnected.png", script)
+        self.assertNotIn("power_button", script)
         self.assertIn("frames == 4900", script)
+
+    def test_warm_provider_navigation_dismisses_alerts_and_opens_pclink(
+        self,
+    ) -> None:
+        script = pclink_regression.lua_warm_provider_navigation(5200, 5400)
+
+        self.assertIn("press(413, 61)", script)
+        self.assertIn("press(421, 70)", script)
+        self.assertIn("press(343, 48)", script)
+        self.assertIn("press(440, 10)", script)
+        self.assertIn("press(452, 255)", script)
+        self.assertIn("press(48, 155)", script)
+        self.assertIn("navigation-storeroom.png", script)
+        self.assertIn("frames == 5200", script)
+        self.assertNotIn("power_button", script)
+        self.assertIn("frames == 5400", script)
+
+    def test_package_probe_recovers_alert_and_opens_received_package(
+        self,
+    ) -> None:
+        script = pclink_regression.lua_warm_provider_navigation(
+            5200,
+            7200,
+            True,
+            Path("/tmp/post-install.sta"),
+        )
+
+        self.assertIn("press(413, 46)", script)
+        self.assertIn("press(413, 61)", script)
+        self.assertIn("press(270, 220)", script)
+        self.assertIn("pclink-disconnected.png", script)
+        self.assertIn("package-opened.png", script)
+        self.assertIn("post-package-downtown.png", script)
+        self.assertIn("downtown-directory.png", script)
+        self.assertIn('machine:save("/tmp/post-install.sta")', script)
+        self.assertNotIn("power_button", script)
+
+    def test_warm_navigation_snapshots_before_host_disconnect(self) -> None:
+        script = pclink_regression.lua_warm_provider_navigation(
+            5200,
+            7200,
+            package_ready_path=Path("/tmp/package-ready"),
+            package_snapshotted_path=Path("/tmp/package-snapshotted"),
+        )
+
+        self.assertIn('io.open("/tmp/package-ready", "r")', script)
+        self.assertIn('snapshot("package-installed.png")', script)
+        self.assertIn('io.open("/tmp/package-snapshotted", "w")', script)
+
+    def test_internet_center_navigation_reaches_storeroom(self) -> None:
+        script = pclink_regression.lua_warm_provider_navigation(
+            5200,
+            7200,
+            internet_center_start=True,
+        )
+
+        self.assertIn("press(430, 10)", script)
+        self.assertIn("navigation-downtown.png", script)
+        self.assertIn("press(60, 130)", script)
+        self.assertIn("press(170, 132)", script)
+        self.assertIn("press(48, 155)", script)
+
+    def test_probe_can_suppress_unrelated_magicbus_warning(self) -> None:
+        script = pclink_regression.lua_warm_provider_navigation(
+            5200,
+            7200,
+            probe_package=True,
+            save_path=Path("/tmp/post-install.sta"),
+            suppress_magicbus_warning=True,
+        )
+
+        self.assertIn("0x13c29434", script)
+        self.assertIn("do v0=0; do pc=ra; g", script)
+        self.assertNotIn("press(413, 46)", script)
 
 if __name__ == "__main__":
     unittest.main()

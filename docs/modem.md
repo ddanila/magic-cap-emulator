@@ -67,6 +67,29 @@ bridge's default automation taps the configured row. For a state saved
 elsewhere, start with `--no-autodial` and initiate the connection in the
 visible Magic Cap UI yourself.
 
+The combined browser regression starts from persistent NVRAM rather than
+modifying that checkpoint. Export the known configured checkpoint into an
+isolated NVRAM directory with:
+
+```sh
+provider_state="$HOME/fun/magic-cap-assets/runtime/state-card-load/pc-card-only.sta"
+provider_nvram="$HOME/fun/magic-cap-assets/runtime/provider-from-state/nvram"
+mkdir -p "$provider_nvram"
+cd "$HOME/fun/mame"
+./datarover datarover840 \
+  -rompath "$HOME/fun/magic-cap-assets/roms" \
+  -state "$provider_state" \
+  -pccard1 modem \
+  -nvram_directory "$provider_nvram" \
+  -video none -sound none -nothrottle -skip_gameinfo \
+  -seconds_to_run 3
+```
+
+The resulting `datarover840/ram` and `datarover840/rtc` files contain the
+same PPP PC Card provider as the source checkpoint. They are the
+`--nvram-source` used below. They remain outside Git, and every PCLink run
+copies them before making changes.
+
 ## Verify the guest modem boundary
 
 The probe supplies `OK` and `CONNECT`, captures the first async-HDLC PPP
@@ -122,31 +145,52 @@ passes IPv4 packets from the guest.
 ## Install and test Web Browser 4.0
 
 Download and checksum commands for `WebBrowser40.mc2` are in
-[`pclink.md`](pclink.md). Install it through the same live PCLink path:
+[`pclink.md`](pclink.md). Install it into a copy of the
+provider-configured NVRAM, open it once, and save the combined checkpoint:
 
 ```sh
 cd "$HOME/fun/magic-cap-emulator"
 python3 tools/pclink_regression.py \
   --package "$HOME/fun/magic-cap-assets/packages/WebBrowser40.mc2" \
-  --workdir "$HOME/fun/magic-cap-assets/runtime/webbrowser-install"
+  --nvram-source \
+    "$HOME/fun/magic-cap-assets/runtime/provider-from-state/nvram" \
+  --internet-center-source \
+  --probe-package \
+  --workdir \
+    "$HOME/fun/magic-cap-assets/runtime/combined-browser/browser-live-state"
 ```
 
-The resulting run directory contains isolated persistent NVRAM as well as
-the install screenshot and wire logs. A verified run installs the 500K
-`Web Browser` object into a clean communicator through PCLink. The browser
-predates modern TLS, so start with plain HTTP. A deterministic host-side test
-is:
+The printed run directory contains isolated NVRAM, install screenshots, wire
+logs, and `post-install.sta`. No binary is placed in this Git checkout.
+
+Run the deterministic combined acceptance against that state:
 
 ```sh
-web_root="$HOME/fun/magic-cap-assets/runtime/web-test"
-mkdir -p "$web_root"
-printf '%s\n' '<html><body><h1>Magic Cap is online</h1></body></html>' \
-  > "$web_root/index.html"
-python3 -m http.server 8080 --directory "$web_root"
+browser_root="$HOME/fun/magic-cap-assets/runtime/combined-browser"
+browser_run="$browser_root/browser-live-state/RUN_TIMESTAMP"
+python3 tools/modem_bridge.py --browser-acceptance \
+  --state "$browser_run/post-install.sta" \
+  --workdir \
+    "$HOME/fun/magic-cap-assets/runtime/combined-browser/http-acceptance"
 ```
 
-Open `http://10.0.2.2:8080/` in Web Browser 4.0. The host alias avoids
-depending on an external site and proves PPP, TCP, HTTP, and browser
-rendering together. Installing the browser and negotiating live PPP are
-independently verified; loading this URL from the browser on the same
-configured guest remains the final combined acceptance.
+Replace `RUN_TIMESTAMP` with the directory printed by the PCLink run. The
+bridge starts its own fixed HTTP/1.0 endpoint on port 8080 and automates Web
+Browser 4.0 to open `http://10.0.2.2:8080/`. It first enters the full URL,
+writes `browser-ready.sta`, and relaunches that state before pressing
+**go**. The relaunch ends the completed PCLink process cleanly while retaining
+the installed browser, provider settings, and entered URL. The lengthy PCLink
+transfer leaves the PC Card modem absent. URL preparation and live acceptance
+both insert it, and the bridge opens the new PTY immediately and answers the
+ROM's Hayes initialization. This prevents the saved modem actor from retaining
+a stale pre-save host session.
+
+A pass requires all of the following from one run: the ROM's Hayes dial
+sequence, Slirp LCP/IPCP with the guest at `10.0.2.15`, an exact `GET /` at
+the built-in server, and `snapshots/browser-result.png`. The timestamped
+directory also retains `http-requests.txt`, Slirp's PPP debug log, modem
+transcript, raw wire captures, and intermediate browser screenshots.
+
+The browser predates modern TLS, so plain HTTP is intentional. Slirp's
+`10.0.2.2` host alias avoids an external site and proves PPP, TCP, HTTP, and
+browser rendering together.

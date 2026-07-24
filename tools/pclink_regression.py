@@ -7,12 +7,14 @@ import argparse
 import os
 import re
 import select
+import shutil
 import struct
 import subprocess
 import sys
 import termios
 import time
 import zlib
+from math import ceil
 from datetime import datetime
 from pathlib import Path
 
@@ -34,13 +36,15 @@ DEFAULT_WORKDIR = (
     / "runtime"
     / "pclink-regression"
 )
-PTY_PATTERN = re.compile(rb"PTY: (/[^\r\n]+)")
+PTY_PATTERN = re.compile(rb":rs2321:pty PTY: (/[^\r\n]+)")
 ESCAPE_BYTES = frozenset((0x0E, 0x0F, 0x10))
 PC_LINK_MAGIC = b"ChMa"
 CONNECT_TAG = b"Cnct"
 CONNECTED_TAG = b"Cntd"
 SEND_PACKAGE_TAG = b"SPkg"
 GOODBYE_TAG = b"GBye"
+PING_TAG = b"Ping"
+PONG_TAG = b"Pong"
 
 
 class ProtocolError(ValueError):
@@ -200,6 +204,188 @@ emu.register_frame_done(function()
     elseif frames == 2650 then touch_button:set_value(0)
     elseif frames == {snapshot_frame} then
         machine.screens[":screen"]:snapshot("package-installed.png")
+    elseif frames == {snapshot_frame + 1400} then
+        machine.screens[":screen"]:snapshot("pclink-disconnected.png")
+    elseif frames == {exit_frame} then machine:exit()
+    end
+end)
+"""
+
+
+def lua_warm_provider_navigation(
+    snapshot_frame: int,
+    exit_frame: int,
+    probe_package: bool = False,
+    save_path: Path | None = None,
+    package_ready_path: Path | None = None,
+    package_snapshotted_path: Path | None = None,
+    internet_center_start: bool = False,
+    suppress_magicbus_warning: bool = False,
+) -> str:
+    """Navigate a provider-configured warm image from In box to PCLink."""
+    save_clause = ""
+    if save_path is not None:
+        quoted_path = (
+            str(save_path).replace("\\", "\\\\").replace('"', '\\"')
+        )
+        save_clause = (
+            f'    elseif frames == {snapshot_frame + 3050} then\n'
+            f'        machine:save("{quoted_path}")\n'
+        )
+    signal_clause = ""
+    if package_ready_path is not None and package_snapshotted_path is not None:
+        quoted_ready = (
+            str(package_ready_path).replace("\\", "\\\\").replace('"', '\\"')
+        )
+        quoted_snapshotted = (
+            str(package_snapshotted_path)
+            .replace("\\", "\\\\")
+            .replace('"', '\\"')
+        )
+        signal_clause = f"""    if not package_snapshotted then
+        local ready = io.open("{quoted_ready}", "r")
+        if ready then
+            ready:close()
+            machine.screens[":screen"]:snapshot("package-installed.png")
+            local acknowledged = io.open("{quoted_snapshotted}", "w")
+            if acknowledged then
+                acknowledged:write("snapshotted\\n")
+                acknowledged:close()
+            end
+            package_snapshotted = true
+        end
+    end
+"""
+    alert_dismissal = (
+        ""
+        if suppress_magicbus_warning
+        else f"""    elseif frames == {snapshot_frame + 1450} then press(413, 46)
+    elseif frames == {snapshot_frame + 1470} then touch_button:set_value(0)
+    elseif frames == {snapshot_frame + 1500} then press(413, 61)
+    elseif frames == {snapshot_frame + 1520} then touch_button:set_value(0)
+"""
+    )
+    post_install = (
+        f"""    elseif frames == {snapshot_frame + 1400} then
+        machine.screens[":screen"]:snapshot("pclink-disconnected.png")
+{alert_dismissal.rstrip()}
+    elseif frames == {snapshot_frame + 1650} then press(270, 220)
+    elseif frames == {snapshot_frame + 1670} then touch_button:set_value(0)
+    elseif frames == {snapshot_frame + 1850} then
+        machine.screens[":screen"]:snapshot("package-opened.png")
+    elseif frames == {snapshot_frame + 1900} then press(440, 10)
+    elseif frames == {snapshot_frame + 1920} then touch_button:set_value(0)
+    elseif frames == {snapshot_frame + 2100} then
+        machine.screens[":screen"]:snapshot("post-package-storeroom.png")
+    elseif frames == {snapshot_frame + 2200} then press(440, 10)
+    elseif frames == {snapshot_frame + 2220} then touch_button:set_value(0)
+    elseif frames == {snapshot_frame + 2400} then
+        machine.screens[":screen"]:snapshot("post-package-hallway.png")
+    elseif frames == {snapshot_frame + 2500} then press(440, 10)
+    elseif frames == {snapshot_frame + 2520} then touch_button:set_value(0)
+    elseif frames == {snapshot_frame + 2700} then
+        machine.screens[":screen"]:snapshot("post-package-downtown.png")
+    elseif frames == {snapshot_frame + 2800} then press(260, 200)
+    elseif frames == {snapshot_frame + 2820} then touch_button:set_value(0)
+    elseif frames == {snapshot_frame + 3000} then
+        machine.screens[":screen"]:snapshot("downtown-directory.png")
+{save_clause.rstrip()}
+"""
+        if probe_package
+        else f"""    elseif frames == {snapshot_frame + 1400} then
+        machine.screens[":screen"]:snapshot("pclink-disconnected.png")
+"""
+    )
+    debugger_clause = (
+        """local cpu = machine.devices[":maincpu"]
+cpu.debug:bpset(
+    0x13c29434,
+    "1",
+    "do v0=0; do pc=ra; g")
+cpu.debug:go()
+"""
+        if suppress_magicbus_warning
+        else ""
+    )
+    navigation_steps = (
+        f"""    if frames == 1300 then press(413, 61)
+    elseif frames == 1320 then touch_button:set_value(0)
+    elseif frames == 1600 then press(421, 70)
+    elseif frames == 1620 then touch_button:set_value(0)
+    elseif frames == 1900 then press(343, 48)
+    elseif frames == 1920 then touch_button:set_value(0)
+    elseif frames == 2200 then press(440, 10)
+    elseif frames == 2220 then touch_button:set_value(0)
+    elseif frames == 2500 then press(440, 10)
+    elseif frames == 2520 then touch_button:set_value(0)
+    elseif frames == 2800 then press(452, 255)
+    elseif frames == 2820 then touch_button:set_value(0)
+    elseif frames == 3000 then
+        machine.screens[":screen"]:snapshot("navigation-internet-center.png")
+    elseif frames == 3300 then press(430, 10)
+    elseif frames == 3320 then touch_button:set_value(0)
+    elseif frames == 3600 then
+        machine.screens[":screen"]:snapshot("navigation-downtown.png")
+    elseif frames == 3700 then press(301, 110)
+    elseif frames == 3720 then touch_button:set_value(0)
+    elseif frames == 4000 then press(440, 10)
+    elseif frames == 4020 then touch_button:set_value(0)
+    elseif frames == 4300 then press(60, 130)
+    elseif frames == 4320 then touch_button:set_value(0)
+    elseif frames == 4500 then press(170, 132)
+    elseif frames == 4520 then touch_button:set_value(0)
+    elseif frames == 4800 then
+        machine.screens[":screen"]:snapshot("navigation-storeroom.png")
+    elseif frames == 4850 then press(413, 61)
+    elseif frames == 4870 then touch_button:set_value(0)
+    elseif frames == 5000 then press(48, 155)
+    elseif frames == 5020 then touch_button:set_value(0)
+    elseif frames == {snapshot_frame} and not package_snapshotted then
+        machine.screens[":screen"]:snapshot("package-installed.png")
+"""
+        if internet_center_start
+        else f"""    if frames == 1300 then press(413, 61)
+    elseif frames == 1320 then touch_button:set_value(0)
+    elseif frames == 1600 then press(421, 70)
+    elseif frames == 1620 then touch_button:set_value(0)
+    elseif frames == 1900 then press(343, 48)
+    elseif frames == 1920 then touch_button:set_value(0)
+    elseif frames == 2200 then press(440, 10)
+    elseif frames == 2220 then touch_button:set_value(0)
+    elseif frames == 2500 then press(440, 10)
+    elseif frames == 2520 then touch_button:set_value(0)
+    elseif frames == 2800 then press(452, 255)
+    elseif frames == 2820 then touch_button:set_value(0)
+    elseif frames == 3000 then
+        machine.screens[":screen"]:snapshot("navigation-storeroom.png")
+    elseif frames == 3100 then press(60, 130)
+    elseif frames == 3120 then touch_button:set_value(0)
+    elseif frames == 3400 then press(48, 155)
+    elseif frames == 3420 then touch_button:set_value(0)
+    elseif frames == {snapshot_frame} and not package_snapshotted then
+        machine.screens[":screen"]:snapshot("package-installed.png")
+"""
+    )
+    return f"""local machine = manager.machine
+local ports = machine.ioport.ports
+local touch_x = ports[":TOUCH_X"]:field(0xffff)
+local touch_y = ports[":TOUCH_Y"]:field(0xffff)
+local touch_button = ports[":TOUCH_BUTTON"]:field(0x01)
+local frames = 0
+local package_snapshotted = false
+{debugger_clause.rstrip()}
+
+local function press(x, y)
+    touch_x:set_value(math.floor((x * 0xffff) / 479))
+    touch_y:set_value(math.floor((y * 0xffff) / 319))
+    touch_button:set_value(1)
+end
+
+emu.register_frame_done(function()
+    frames = frames + 1
+{signal_clause.rstrip()}
+{navigation_steps.rstrip()}
+{post_install.rstrip()}
     elseif frames == {exit_frame} then machine:exit()
     end
 end)
@@ -284,6 +470,29 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=DEFAULT_WORKDIR,
         help=f"persistent artifact root (default: {DEFAULT_WORKDIR})",
     )
+    parser.add_argument(
+        "--nvram-source",
+        type=Path,
+        help=(
+            "copy a provider-configured NVRAM directory into the run and "
+            "use warm-boot navigation"
+        ),
+    )
+    parser.add_argument(
+        "--probe-package",
+        action="store_true",
+        help="open the received package and capture its Package scene",
+    )
+    parser.add_argument(
+        "--internet-center-source",
+        action="store_true",
+        help="treat --nvram-source as starting on Internet Center's provider screen",
+    )
+    parser.add_argument(
+        "--connect-only",
+        action="store_true",
+        help="diagnose a PCLink connect/disconnect without sending a package",
+    )
     return parser.parse_args(argv)
 
 
@@ -292,30 +501,93 @@ def run_regression(args: argparse.Namespace) -> int:
     rompath = args.rompath.expanduser().resolve()
     package = args.package.expanduser().resolve()
     artifact_root = args.workdir.expanduser().resolve()
+    nvram_source = (
+        args.nvram_source.expanduser().resolve()
+        if args.nvram_source
+        else None
+    )
 
-    for label, path, kind in (
+    inputs = [
         ("MAME executable", mame, "file"),
         ("ROM path", rompath, "directory"),
-        ("package", package, "file"),
-    ):
+    ]
+    if not args.connect_only:
+        inputs.append(("package", package, "file"))
+    if nvram_source is not None:
+        inputs.append(("NVRAM source", nvram_source, "directory"))
+    for label, path, kind in inputs:
         valid = path.is_file() if kind == "file" else path.is_dir()
         if not valid:
             print(f"error: {label} not found: {path}", file=sys.stderr)
             return 2
-
+    if args.probe_package and nvram_source is None:
+        print(
+            "error: --probe-package requires --nvram-source",
+            file=sys.stderr,
+        )
+        return 2
+    if args.internet_center_source and nvram_source is None:
+        print(
+            "error: --internet-center-source requires --nvram-source",
+            file=sys.stderr,
+        )
+        return 2
+    if args.probe_package and args.connect_only:
+        print(
+            "error: --probe-package cannot be combined with --connect-only",
+            file=sys.stderr,
+        )
+        return 2
     stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
     workdir = artifact_root / stamp
     workdir.mkdir(parents=True)
     (workdir / "cfg").mkdir()
+    if nvram_source is not None:
+        shutil.copytree(nvram_source, workdir / "nvram")
 
-    # Allow the known 48 KiB test package and some installation time after a
-    # 19,200-baud transfer. Larger packages extend the scripted run.
-    wire_seconds = (package.stat().st_size * 1.08 * 10) / 19_200
-    exit_frame = max(4700, 2750 + int((wire_seconds + 10) * 60))
-    snapshot_frame = exit_frame - 200
+    # Schedule the screenshots from the exact escaped wire size. A broad
+    # package-size estimate is not precise enough once escaping and PCLink's
+    # per-frame length/CRC overhead are included.
+    metadata_wire = (
+        b""
+        if args.connect_only
+        else encode_packet(SEND_PACKAGE_TAG, package_metadata(package))
+    )
+    package_wire = (
+        b""
+        if args.connect_only
+        else encode_crc_stream(package.read_bytes() + b"\0\0\0\0")
+    )
+    wire_seconds = (len(metadata_wire) + len(package_wire)) * 10 / 19_200
+    navigation_frame = (
+        5100
+        if args.internet_center_source
+        else 3500 if nvram_source is not None else 2750
+    )
+    snapshot_frame = navigation_frame + ceil(wire_seconds * 60) + 120
+    exit_frame = snapshot_frame + (
+        3100 if args.probe_package else 1600
+    )
     lua_path = workdir / "pclink.lua"
+    post_install_state = workdir / "post-install.sta"
+    package_ready_path = workdir / "package-ready"
+    package_snapshotted_path = workdir / "package-snapshotted"
     lua_path.write_text(
-        lua_navigation(snapshot_frame, exit_frame), encoding="utf-8"
+        (
+            lua_warm_provider_navigation(
+                snapshot_frame,
+                exit_frame,
+                args.probe_package,
+                post_install_state if args.probe_package else None,
+                package_ready_path,
+                package_snapshotted_path,
+                args.internet_center_source,
+                args.probe_package,
+            )
+            if nvram_source is not None
+            else lua_navigation(snapshot_frame, exit_frame)
+        ),
+        encoding="utf-8",
     )
 
     command = [
@@ -339,10 +611,18 @@ def run_regression(args: argparse.Namespace) -> int:
         "none",
         "-sound",
         "none",
-        "-nothrottle",
+        # Keep host-side PTY scheduling gaps short in emulated time.  With
+        # unlimited speed, a full PTY buffer can drain while this process is
+        # descheduled and PCLink's serial watchdog expires before the next
+        # write, even though every frame subsequently arrives intact.
+        "-throttle",
+        "-speed",
+        "10",
         "-skip_gameinfo",
         "-oslog",
     ]
+    if args.probe_package:
+        command.extend(["-debug", "-debugger", "none"])
     try:
         process = subprocess.Popen(
             command,
@@ -358,6 +638,8 @@ def run_regression(args: argparse.Namespace) -> int:
     device_wire = bytearray()
     host_wire = bytearray()
     connect_wire_length: int | None = None
+    disconnect_completed = False
+    pong_seen = False
     fd: int | None = None
     error: str | None = None
     try:
@@ -409,18 +691,49 @@ def run_regression(args: argparse.Namespace) -> int:
         write_all(fd, bytes(host_wire), process, output)
 
         time.sleep(0.5)
-        metadata = encode_packet(SEND_PACKAGE_TAG, package_metadata(package))
-        package_stream = encode_crc_stream(package.read_bytes() + b"\0\0\0\0")
-        host_wire.extend(metadata)
-        host_wire.extend(package_stream)
-        write_all(fd, metadata, process, output)
-        write_all(fd, package_stream, process, output)
-
+        if not args.connect_only:
+            host_wire.extend(metadata_wire)
+            host_wire.extend(package_wire)
+            write_all(fd, metadata_wire, process, output)
+            write_all(fd, package_wire, process, output)
+        ping_wire = encode_packet(PING_TAG)
+        pong_wire = encode_packet(PONG_TAG)
+        goodbye_wire = encode_packet(GOODBYE_TAG)
+        host_wire.extend(ping_wire)
+        write_all(fd, ping_wire, process, output)
         deadline = time.monotonic() + max(60, exit_frame // 30)
         while process.poll() is None and time.monotonic() < deadline:
             drain_process_output(process, output)
-            if select.select([fd], [], [], 0.05)[0]:
+            if (
+                fd is not None
+                and not disconnect_completed
+                and pong_seen
+                and (
+                    nvram_source is None
+                    or package_snapshotted_path.is_file()
+                )
+            ):
+                # WinPcLink's documented Close Connection operation is
+                # initiated on the PC. Send the normal GBye request and leave
+                # the serial endpoint open long enough for Magic Cap to
+                # consume it; the surrounding MAME run owns the PTY lifetime.
+                host_wire.extend(goodbye_wire)
+                write_all(fd, goodbye_wire, process, output)
+                disconnect_completed = True
+            if fd is not None and select.select([fd], [], [], 0.05)[0]:
                 device_wire.extend(read_available(fd))
+                trailing = bytes(device_wire[connect_wire_length:])
+                if pong_wire in trailing:
+                    pong_seen = True
+                    if nvram_source is not None:
+                        package_ready_path.write_text(
+                            "package-ready\n",
+                            encoding="ascii",
+                        )
+                if goodbye_wire in trailing:
+                    # A device-side close is also valid (and is used by the
+                    # connect-only diagnostic if it races the PC request).
+                    disconnect_completed = True
         if process.poll() is None:
             raise RuntimeError("MAME did not reach the post-install checkpoint")
     except (OSError, RuntimeError, ProtocolError, ValueError) as caught:
@@ -460,27 +773,45 @@ def run_regression(args: argparse.Namespace) -> int:
         return 1
 
     assert connect_wire_length is not None
-    trailing = bytes(device_wire[connect_wire_length:])
-    if trailing:
-        try:
-            tag, _ = decode_packet(decode_crc_stream(trailing))
-        except ProtocolError as caught:
-            print(f"error: malformed device response: {caught}", file=sys.stderr)
-            return 1
-        if tag == GOODBYE_TAG:
-            print(
-                "error: communicator rejected the transfer with GBye",
-                file=sys.stderr,
-            )
-            return 1
-
+    if not disconnect_completed:
+        print(
+            "error: PCLink disconnect did not complete",
+            file=sys.stderr,
+        )
+        return 1
+    if not pong_seen:
+        print(
+            "error: communicator did not answer the final PCLink Ping",
+            file=sys.stderr,
+        )
+        return 1
     screenshot = workdir / "snapshots" / "package-installed.png"
     if not screenshot.is_file():
         print(f"error: install screenshot not produced: {screenshot}", file=sys.stderr)
         return 1
+    disconnect_screenshot = (
+        workdir / "snapshots" / "pclink-disconnected.png"
+    )
+    if not disconnect_screenshot.is_file():
+        print(
+            f"error: disconnect screenshot not produced: "
+            f"{disconnect_screenshot}",
+            file=sys.stderr,
+        )
+        return 1
+    if args.probe_package and not post_install_state.is_file():
+        print(
+            f"error: post-install state not produced: {post_install_state}",
+            file=sys.stderr,
+        )
+        return 1
 
-    print(f"PASS: installed {package.name} through PCLink")
+    if args.connect_only:
+        print("PASS: completed a PCLink connect/disconnect cycle")
+    else:
+        print(f"PASS: installed {package.name} through PCLink")
     print(f"Install screenshot: {screenshot}")
+    print(f"Disconnect screenshot: {disconnect_screenshot}")
     print(f"Persistent artifacts: {workdir}")
     return 0
 

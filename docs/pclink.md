@@ -76,14 +76,28 @@ The harness:
 2. taps the welcome screen and the three calibration points;
 3. opens the Storeroom computer;
 4. completes the PCLink handshake;
-5. transfers `DvorakKeyboard.pkg`; and
-6. saves a native 480×320 LCD snapshot after installation.
+5. transfers `DvorakKeyboard.pkg`;
+6. queues a final `Ping` and uses `Pong` as the completed-stream barrier;
+7. sends host-side `GBye`, matching WinPCLink's documented **Close
+   Connection** workflow; and
+8. saves native 480×320 LCD snapshots before and after disconnection.
 
 A passing run prints the persistent artifact directory. It contains the
 generated Lua automation, isolated NVRAM, MAME output, both raw serial
 directions, and `snapshots/package-installed.png`. The acceptance image shows
-`DvorakKeyboard` as a 21K object in built-in storage. An RX overrun or the
-device's `GBye` response fails the run.
+`DvorakKeyboard` as a 21K object in built-in storage. An RX overrun, missing
+final `Pong`, or incomplete disconnect fails the run.
+
+Longer sessions can subsequently display Magic Cap's **A problem happened
+with an attached device** or **Too many errors happened with an attached
+device** alert. Breakpoint traces place that alert in the background MagicBus
+actor: the current model does not answer all MagicBus peripheral commands, so
+its saved failure counter eventually reaches the ROM's limit of five. It is
+not a PCLink CRC, serial-abort, timeout, or package-install failure.
+For the instrumented `--probe-package` run only, a MAME debugger breakpoint
+makes `TotalFailuresExceedLimit` return false. This suppresses that unrelated
+background warning long enough to open and save the received object; it does
+not change the package protocol or mask PCLink failures.
 
 Use another archived input without copying it into Git:
 
@@ -97,14 +111,28 @@ Web Browser 4.0 uses the same path:
 ```sh
 python3 tools/pclink_regression.py \
   --package "$HOME/fun/magic-cap-assets/packages/WebBrowser40.mc2" \
-  --workdir "$HOME/fun/magic-cap-assets/runtime/webbrowser-install"
+  --nvram-source \
+    "$HOME/fun/magic-cap-assets/runtime/provider-from-state/nvram" \
+  --internet-center-source \
+  --probe-package \
+  --workdir \
+    "$HOME/fun/magic-cap-assets/runtime/combined-browser/browser-live-state"
 ```
 
-The run's `nvram/` directory is persistent and isolated, so a successful
-large-package install is not discarded with a temporary directory. The
-archived 500K Web Browser 4.0 package has been verified through this exact
-path. See
-[`modem.md`](modem.md) for the PPP bridge and browser test URL.
+`--nvram-source` copies the provider-configured NVRAM into the timestamped
+run before starting MAME; it never modifies the source.
+`--internet-center-source` selects the navigation path used by the exported
+provider checkpoint. `--probe-package` opens the received object, follows its
+**go to** action, and writes `post-install.sta` after returning to Downtown.
+That state includes the installed browser and PCLink RS-232 topology needed
+by the combined browser test in [`modem.md`](modem.md). The modem card is
+intentionally absent during the long serial transfer; the browser test
+inserts it only while its host bridge owns and answers the modem PTY.
+
+The run's `nvram/`, state, screenshots, and wire captures are persistent and
+isolated under `~/fun/magic-cap-assets/`, so the large install is neither
+discarded with `/tmp` nor copied into Git. The archived 500K Web Browser 4.0
+package has been verified through this exact path.
 
 ## Recovered wire format
 
@@ -124,7 +152,11 @@ exchange with this ROM:
 
 Package installation uses an `SPkg` command with a `0x404`-byte metadata
 block, followed by a separately framed stream containing the package and four
-zero bytes. The metadata records the file size twice, `0x80000000`, the
-filename's character count, and its UTF-16BE name. Unit tests cover framing,
-escaping across a frame boundary, CRC rejection, packets, and this metadata
-layout.
+zero bytes. The host queues one final `Ping` behind that tail and uses the
+replying `Pong` as proof that the guest parsed the complete stream, then sends
+the protocol's zero-payload `GBye` immediately. This ordering provides an
+unambiguous completed-stream checkpoint and follows WinPCLink's documented
+host-side close operation. The metadata records the file size twice,
+`0x80000000`, the filename's character count, and its UTF-16BE name. Unit
+tests cover framing, escaping across a frame boundary, CRC rejection,
+packets, and this metadata layout.
