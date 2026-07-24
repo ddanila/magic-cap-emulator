@@ -236,11 +236,66 @@ complain about. That is a much stronger signal than a framebuffer checksum.
 For the ones that do not return, the PC keeps moving through OS code rather
 than sitting in a tight loop, so they are waiting on something — task or scene
 context — rather than crashing. `announcement`'s dependence on session state
-points the same way. Reaching those probably needs the real `TestSite` scene
-rather than a forced call: the UI route there is still unmapped, since taps on
-the Downtown directory sign and street arrow did not respond in a first probe.
-The suites themselves are compiled into the ROM — the Mac SDK ships no test
-packages — so no extra input is needed, only the right context.
+points the same way. The suites themselves are compiled into the ROM — the Mac
+SDK ships no test packages — so no extra input is needed, only the right
+context. That context is the test machine.
+
+## The test machine and Command-T
+
+`TestSite` is not reachable as a scene by the obvious UI routes (taps on the
+Downtown directory sign and the street pan arrow do nothing), but the
+interesting entry point is not the scene — it is the **test machine**, and
+General Magic drove it with a single command they called **Command-T**. The
+dev-only strings name it: *"Command-T finished successfully."*, *"reboot at the
+end of command-T"*, and even the address results went to,
+`commandt@kelp.genmagic.com`.
+
+The relevant entry points, all in the Apollo USA development build:
+
+| Address | Symbol |
+|---|---|
+| `0x13e983d4` | `TestMachine_RunAllTests` |
+| `0x13e98288` | `TestMachine_RunTestSuites` |
+| `0x13e981f8` | `TestMachine_RunTestSuite` |
+| `0x13e98188` | `TestMachine_RunOneTest` |
+| `0x13e9837c` | `TestMachine_CommandTea` |
+| `0x13e98508` | `TestMachine_FillErUp` |
+| `0x13e978fc` | `TestMachine_InstallInto` |
+| `0x13e93ee0` | `RebootAnnouncingCommandTFinished__Fv` |
+
+These are dispatched methods (no direct `jal` callers), so they take the object
+in `$a0` the way the dispatcher passes it. The objects are live: after a warm
+boot, the indexical reference slots hold real references, so nothing needs
+installing first.
+
+| Indexical | RAM slot | Value observed |
+|---|---|---|
+| `System_iTestMachine` | `0x0002d4b4` | `0x00032a94` |
+| `System_iBasicSystemTestList` | `0x00029714` | `0x00032aa4` |
+| `TestSite_iTestCardList` | `0x000340fc` | `0x00032c3c` |
+| `TestSite_iLimitTestSuite` | `0x000340a4` | `0x00032bdc` |
+| `TestSite_iUnitTestTextSuite` | `0x000340ec` | `0x000331cc` |
+
+`TestMachine_RunAllTests(testMachine)` **does run**: forcing it makes the OS
+work for a few hundred frames, then show *"Cleaning up…"* and reboot — exactly
+what `RebootAnnouncingCommandTFinished` promises. It never reaches
+`AnnounceNonDebugFailure`. But it reboots too quickly to have run 28 suites,
+and the disassembly says why: it fetches a count and branches past the whole
+loop when that count is below one (`sltu` against 1 at `0x13e98460`). That
+matches the build's `No Tests` and `No Test Suites` strings — the machine's
+*tests-to-run list* is empty, even though the suite objects exist.
+
+`TestMachine_RunTestSuite(testMachine, suite)` with `iUnitTestTextSuite` in
+`$a1` behaves differently: no reboot, no complaint, and the OS keeps working
+well past 3,600 frames without returning — the same shape as the unit tests
+that need more context.
+
+So the remaining unlock is **populating the run list**, not reaching a scene.
+The candidates are `TestMachine_FillErUp`, `AddTestToRunOne__FP17RAMReferenceDummyPv`,
+and the per-suite `*_UpdateTestsToRun` methods; the `.dx` debugger database
+should give the method indices and the list object's field layout. With a
+populated list, `RunAllTests` becomes the acceptance run General Magic itself
+used, and the reboot announcement becomes its pass signal.
 
 ## Reproducing the comparison
 

@@ -109,12 +109,15 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
 
 ### Open questions
 
-- **Reach the development ROM's remaining test suites.** Three of its
-  OS-level unit tests already run as acceptance checks (see below); the other
-  no-argument suites do not return from a forced call, and the 28
-  `*TestSuite_RunTest` entry points take arguments. Both probably need the
-  build's `TestSite` scene, whose UI route is not mapped yet
-  ([`dev-rom.md`](docs/dev-rom.md)).
+- **Populate the development ROM's test-run list.** Three of its OS-level unit
+  tests already run as acceptance checks (see below). The bigger prize is
+  **Command-T**, General Magic's own full test run: `TestMachine_RunAllTests`
+  executes and reboots announcing completion, but it skips every suite because
+  the tests-to-run list is empty, even though the test machine and all suite
+  objects are live. Filling that list (`TestMachine_FillErUp`,
+  `AddTestToRunOne`, the per-suite `UpdateTestsToRun`, with method indices from
+  the SDK's `.dx` database) would turn the vendor's own acceptance run into
+  ours ([`dev-rom.md`](docs/dev-rom.md)).
 
 ## Resources
 
