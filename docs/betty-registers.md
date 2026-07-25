@@ -145,6 +145,61 @@ pointer field is written back so `SibServerSyncSoundOutDma` can read playback
 progress, and a write to `sibDMA` keeps the hardware-owned pointer rather than
 taking one from the CPU.
 
+## SIB telecom DMA
+
+The telecom channel is the built-in software modem's data path, and it is the
+same machinery with its fields in the low half of the shared registers:
+
+| Field | Sound | Telecom |
+|---|---|---|
+| Buffer size in `sibSize` | bits 29:18 | bits 13:2 |
+| DMA pointer in `sibDMA` | bits 29:18 | bits 13:2 |
+| One-shot / loop in `sibDMA` | bits 31 / 30 | bits 15 / 14 |
+| Channel enables in `sibDMA` | 17 (rx), 16 (tx) | 1 (rx), 0 (tx) |
+| Buffer addresses | `sibSoundRxStart` / `sibSoundTxStart` | `sibTelRxStart` (`0x06c`) / `sibTelTxStart` (`0x070`) |
+| `sibControl` enable, divisor | bit 4, bits 14:8 | bit 5, bits 22:16 |
+| `interrupt1` half / end / pointer | bits 22 / 21 / 18 | bits 20 / 19 / 17 |
+| Unbuffered hold ready | bit 10 `kIntSoundReceiveMask` | bit 9 `kIntTeleReceiveMask` |
+
+`SibServerStartTelecom` (`0x13c228e4`) programs it exactly like its sound
+counterpart: clear the half and end enables (`interrupt1Enable &= 0xffe7ffff`),
+clear the channel enables (`sibDMA &= 0xfffffffc`), write the size, then the
+buffer address, and arm.
+
+Two behaviors matter in the model. The telecom fields share **one** pointer for
+both directions, so transmit and receive run in lockstep at the same buffer
+index. And `kSibLoopModeMask` (`sibControl` bit 3) is a hardware loopback: with
+it set the SIB feeds transmit straight back into the receive buffer, which is
+what the modem's own loopback diagnostics rely on. The phone line and DAA are
+not modelled, so transmit samples are consumed at the programmed rate and
+receive delivers either the loopback or silence.
+
+The driver's own clock for this channel comes from `kSibTelDivMask`, separate
+from the sound divisor, so the two channels can run at different rates.
+
+`tools/telecom_regression.py` drives a transfer directly instead of waiting for
+the OS to dial, with the machine in IDT monitor mode so Magic Cap is not using
+the SIB at the same time:
+
+```sh
+python3 tools/telecom_regression.py               # loopback
+python3 tools/telecom_regression.py --no-loopback # control
+```
+
+The loopback run requires all 64 words to arrive, the half, end and pointer
+interrupts to latch, the one-shot to clear its own enables, and the pointer to
+wrap. The control run clears `kSibLoopModeMask` and requires the opposite —
+receive overwrites the buffer with silence — which is what proves the loop-mode
+bit gates the path rather than the check passing regardless.
+
+**What this does not yet do:** the OS only programs telecom DMA when it dials
+with the built-in modem, which needs a provider configured for it, so a plain
+boot exercises the sound channel alone. The register-level regression covers
+the hardware contract; driving the ROM's V.32 DSP over it — the code the TX39
+`MADD` extension exists for ([`tx39-cpu.md`](tx39-cpu.md)) — is the next step.
+
+## Verifying the sound path
+
 The buffered path is what the OS uses for its boot chime: on a cold boot it
 programs a 1024-word buffer at about 11 kHz roughly 14 seconds in. Verify with:
 

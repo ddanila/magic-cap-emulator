@@ -184,6 +184,8 @@ python3 tools/desk_regression.py
 python3 tools/power_regression.py
 python3 tools/sound_regression.py
 python3 tools/sound_regression.py --checkpoint dma
+python3 tools/telecom_regression.py
+python3 tools/telecom_regression.py --no-loopback
 python3 tools/tx39_regression.py
 python3 tools/pccard_regression.py
 python3 tools/pclink_regression.py

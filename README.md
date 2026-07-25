@@ -80,6 +80,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | Touch | Pointer input drives the touch macro incl. three-point calibration; desk is mouse-navigable | [`betty-registers.md`](docs/betty-registers.md) |
 | Persistence & power | Battery-backed DRAM + RTC as NVRAM; power-button suspend/wake across a retained-RAM relaunch | [`power-wake.md`](docs/power-wake.md) |
 | Sound | ROM's startup tone (unbuffered hold register) plus buffered SIB sound DMA: the OS's boot chime streams from DRAM with half/end interrupts and pointer writeback | [`betty-registers.md`](docs/betty-registers.md) |
+| SIB telecom DMA | The built-in modem's data path: shared `sibDMA` low half, lockstep rx/tx pointer, hardware loopback, half/end/pointer interrupts | [`betty-registers.md`](docs/betty-registers.md) |
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling | [`mame-bringup.md`](docs/mame-bringup.md) |
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap | [`pclink.md`](docs/pclink.md) |
@@ -100,11 +101,16 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
   boundary — it also gates the LCD, IR, sound, MagicBus, and modem Vcc rails.
   Entry points and header masks are in
   [`power-wake.md`](docs/power-wake.md#open-lead-the-battery-and-power-supply-model).
+- **Drive the built-in software modem over telecom DMA.** The data path is
+  modelled and has a loopback regression, but nothing has run the ROM's V.32
+  DSP across it yet — the OS only programs telecom DMA when dialling with the
+  built-in modem, which needs a provider configured for it. That DSP is why the
+  TX39 `MADD` extension exists.
 
 The machine stays `MACHINE_NOT_WORKING` while unmodeled hardware remains —
 incomplete MagicBus peripheral replies still make the ROM's background actor
 warn about an attached device in long sessions, and the built-in software modem
-is not connected. The power/wake path has a two-process headless acceptance test
+is not yet driven. The power/wake path has a two-process headless acceptance test
 in [`tools/power_regression.py`](tools/power_regression.py), and sound now
 covers both the unbuffered and buffered paths.
 
