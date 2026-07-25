@@ -181,6 +181,7 @@ python3 -m unittest discover -s tests -v
 python3 tools/serial_regression.py
 python3 tools/serial_regression.py --checkpoint betty
 python3 tools/desk_regression.py
+python3 tools/power_regression.py
 python3 tools/sound_regression.py
 python3 tools/tx39_regression.py
 python3 tools/pccard_regression.py
@@ -206,6 +207,16 @@ native LCD PNG. Every run keeps its Lua script, MAME output, NVRAM, and
 snapshot under a timestamped directory in
 `~/fun/magic-cap-assets/runtime/desk-regression/`; no binary artifact is
 written to this Git checkout.
+
+The power harness is deliberately two processes, not a same-process shortcut.
+It calibrates a fresh heap, enters normal VCC-off power-down, exits so only
+battery-backed RAM/RTC survive, then relaunches that NVRAM. It observes the
+ROM pass through `DeepDoze` and the retained shutdown's final
+`WaitForPowerDown`, holds the on-button, and requires Dino's rising-edge latch
+and live button status before proving execution has left the whole power-down
+path with VCC restored. Generated Lua, both process logs, NVRAM, and three LCD
+snapshots stay under
+`~/fun/magic-cap-assets/runtime/power-regression/`.
 
 The sound harness boots with SDL's dummy audio backend and asks MAME to write
 the mixed output to a persistent WAV capture. It verifies that the ROM's
@@ -305,7 +316,7 @@ the separate serial-terminal view.
 | Welcome | Circled hat, `Magic Cap™`, and `Touch the screen to begin` render and accept a pen tap |
 | Calibration | Upper-left, lower-right, and center targets accept synthesized Betty ADC samples |
 | Workbench | Live Dino buffer `0x003f6a00` reaches deterministic checksum `0x62d64ba4` |
-| Persistence | 4 MiB DRAM and Dino RTC use external NVRAM files; power-button sleep stops and wakes the CPU |
+| Persistence | 4 MiB DRAM and Dino RTC use external NVRAM files; a two-process regression proves retained-RAM power-down and on-button wake |
 | Sound | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
 | PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback, insertion, and live-OS checks |
 | PCLink | The Storeroom computer accepts the handshake and installs archived `DvorakKeyboard.pkg` into built-in storage |

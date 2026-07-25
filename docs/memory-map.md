@@ -147,8 +147,11 @@ boot path:
   and sample timing derived from Dino's 9.216 MHz SIB clock/divisor.
 - A battery-backed 32,768 Hz RTC counter, alarm and rollover interrupts,
   freeze/clear controls, and a separate persistent clock record.
-- Read-only power-good input plus cold-start/VCC power state. Clearing VCC
-  with StopCpu suspends the R3900; an on-button edge restores VCC and wakes it.
+- Read-only power-good/on-button inputs plus cold-start/VCC power state.
+  `StopCpu` suspends the R3900; a pending enabled interrupt releases a
+  VCC-on doze, while an on-button edge restores VCC after power-down. Dino's
+  bank-6 low-priority summary follows enabled status in banks 1–5, including
+  the polled `DeepDoze` wake path.
 - Synchronous stop-timer completion used by the low-level Betty reset.
 - Power-on mode input bit 3: high boots Magic Cap, low stays in the IDT
   monitor.

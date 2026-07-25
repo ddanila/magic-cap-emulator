@@ -2,7 +2,7 @@
 
 The first emulator for the [General Magic DataRover 840](https://pdamuseum.eu/pda/datarover840/) — the last and best Magic Cap communicator (1998), running Magic Cap 3.1 on a MIPS CPU. It is built as a MAME driver (fork: [ddanila/mame](https://github.com/ddanila/mame), `custom` branch); this repository holds the reverse-engineering notes, analysis tooling, and regression harnesses.
 
-**Current state:** the emulated machine boots ROM build 3.1.2j to the interactive Magic Cap workbench — touchscreen, persistent storage, sound, both PC Card slots, package installation over serial PCLink, and Web Browser 4.0 fetching a local HTTP page over live PC Card PPP all work. See [Status](#status).
+**Current state:** the emulated machine boots ROM build 3.1.2j to the interactive Magic Cap workbench — touchscreen, persistent storage and suspend/wake (including a retained-RAM relaunch), sound, both PC Card slots, package installation over serial PCLink, and Web Browser 4.0 fetching a local HTTP page over live PC Card PPP all work. See [Status](#status).
 
 Before this project (survey, July 2026) no emulator for any Magic Cap device existed — nothing in MAME, on GitHub, or in QEMU. The only way people ran Magic Cap was the Mac-hosted *Magic Cap Simulator*, a native recompile of the OS rather than a hardware emulator ([details below](#the-magic-cap-simulators)).
 
@@ -78,7 +78,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | Betty (SIB ASIC) | Boot reaches `BootCap`; the ROM's own `BettyTest` diagnostic passes | [`betty-registers.md`](docs/betty-registers.md) |
 | Display | 480×320 2bpp framebuffer renders splash → welcome → workbench | [`memory-map.md`](docs/memory-map.md) |
 | Touch | Pointer input drives the touch macro incl. three-point calibration; desk is mouse-navigable | [`betty-registers.md`](docs/betty-registers.md) |
-| Persistence & power | Battery-backed DRAM + RTC as NVRAM; power-button suspend/wake | [`memory-map.md`](docs/memory-map.md) |
+| Persistence & power | Battery-backed DRAM + RTC as NVRAM; power-button suspend/wake across a retained-RAM relaunch | [`power-wake.md`](docs/power-wake.md) |
 | Sound | ROM's startup tone rendered at the programmed rate (unbuffered path) | [`betty-registers.md`](docs/betty-registers.md) |
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling | [`mame-bringup.md`](docs/mame-bringup.md) |
@@ -92,18 +92,11 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
 ### Remaining work
 
 - **Buffered SIB sound DMA** (the startup tone uses the unbuffered path).
-- **Complete wake-path interaction.** In-session suspend/wake works, but a
-  warm boot of a heap that was saved *while suspended* re-enters suspend at
-  the end of boot, and a subsequent power-button wake is rejected. The SDK
-  ELF's power/wake code has now been read, and it reframes the bug: the
-  bank-1 masking is a deliberate software branch in
-  `EnableInterruptsForShutdown` taken when the `shutdownReason` global reads
-  `EMER`, which leaves the on-button bits out of the wake sources on purpose.
-  The handshake boot actually checks is `interrupt5` bits 23/22 (latched
-  on-button edges) then `powerControl` bit 31 (button held). Registers, bits,
-  RAM globals, driver requirements, and debugger breakpoints are in
-  [`power-wake.md`](docs/power-wake.md); the driver change and its
-  verification are still open, so the machine stays `MACHINE_NOT_WORKING`.
+
+The machine stays `MACHINE_NOT_WORKING` while buffered sound DMA and other
+unmodeled hardware remain; the power/wake path itself has a two-process
+headless acceptance test in
+[`tools/power_regression.py`](tools/power_regression.py).
 
 ### Open questions
 

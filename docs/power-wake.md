@@ -2,11 +2,10 @@
 
 This note records the Dino power/wake hardware interface and the OS logic
 around it, recovered from the unstripped Icras SDK ELF, the SDK's `Dino.h` /
-`Dino.asm.h` platform headers, and the release ROM image. It exists to close
-the analysis half of the remaining wake-path blocker in the
-[README](../README.md#remaining-work): in-session suspend/wake works, but a
-warm boot of a heap saved *while suspended* re-enters suspend and then rejects
-a power-button wake.
+`Dino.asm.h` platform headers, and the release ROM image. It also records the
+driver fix for the former wake-path blocker: a warm boot of a heap saved while
+suspended could enter the retained shutdown path but could not complete a
+power-button wake.
 
 Every address below was checked against the emulated ROM, not only the ELF —
 see [Reproducing this analysis](#reproducing-this-analysis).
@@ -75,7 +74,7 @@ RAM globals `wakeInterrupt1mirror`…`wakeInterrupt5mirror` (`0x0000e8b0` …
 `0x0000e8c0`) by bank and tests one bit, so the wake-event bitmap the OS
 reports is whatever the suspend path mirrored into RAM.
 
-## Why the button is rejected after a warm boot
+## The shutdown-reason branch
 
 `EnableInterruptsForShutdown` (`0x13c39e64`) programs all six interrupt-enable
 banks on the way into shutdown, and it has two branches keyed on the
@@ -96,15 +95,17 @@ if (shutdownReason == 'EMER') {
 DINO->interrupt6Enable = 0x00040000;
 ```
 
-This matches the observed symptom exactly — bank 1 masked to zero — and
-identifies it as a **software branch, not a missing register**: the machine
-took the `EMER` path. On that path bank 5 enables only bit 18
+This matched one observed heap exactly — bank 1 masked to zero — and
+identified that capture as a **software branch, not a missing register**: the
+machine took the `EMER` path. On that path bank 5 enables only bit 18
 (`kIntSpiEmptyMask`), so the on-button bits 22/23 are deliberately *not* wake
 sources. A power-button press after an emergency shutdown is designed to be
 ignored, which is why the subsequent wake is rejected rather than mishandled.
 
-That leaves two candidate root causes, and they are distinguishable by reading
-one word:
+That observation was state-specific, not the general retained-RAM failure.
+The clean automated reproduction described below retains `POFF`, restores the
+normal wake masks, and still failed in the old driver. Reading one word remains
+the way to distinguish the two cases:
 
 1. `shutdownReason` genuinely holds `EMER` in the restored heap — the ROM is
    behaving correctly and the emulator is reproducing a state the OS treats as
@@ -156,10 +157,9 @@ DINO->interrupt5Enable    |= 0x10000000;
 until `powerControl & kPowerInterruptStatusMask` is set, otherwise retrying
 while `ioControl & 0x4` holds.
 
-## What the driver has to provide
+## Driver behavior
 
-Requirements this analysis pins down, stated as emulator behavior rather than
-as a fix (the driver change and its verification are still open):
+Requirements pinned down by the analysis and now implemented by the driver:
 
 - **Latch on-button edges in `interrupt5` bits 23/22** and keep them latched
   across the suspend → wake boundary until the OS clears them by writing
@@ -172,6 +172,51 @@ as a fix (the driver change and its verification are still open):
   `Dino.asm.h` is the authoritative list of writable `powerControl` bits.
 - **Model `kPowerStopCpuMask` writes as the stop**, including the
   clear-then-set sequence `Doze` uses.
+
+The runtime trace exposed one more required link. `interrupt6` is Dino's
+read-only priority summary: bits 31/30 report high/low-priority enabled
+pending interrupts from banks 1–5. `DeepDoze` masks CPU interrupts and polls
+those two bits directly. The old driver asserted the R3900 IRQ line but never
+populated bank 6, so the ROM could latch a correct on-button edge and still
+spin in `RefreshMemory`.
+
+The fix therefore:
+
+- computes the low-priority bank-6 summary from enabled bank 1–5 status;
+- makes bank 6 read-only rather than write-to-clear;
+- suspends on a `StopCpu` rising edge as well as loss of VCC;
+- releases a VCC-on doze on an enabled interrupt, while VCC-off power-down
+  still requires the physical on-button;
+- derives power-control bit 31 from the live input port and applies the SDK's
+  exact `kPowerWriteMask` (`0x0000ffbf`); and
+- resets Betty/SIB on a VCC-off wake, but preserves them across a VCC-on doze.
+
+## Automated acceptance
+
+Run:
+
+```sh
+cd "$HOME/fun/magic-cap-emulator"
+python3 tools/power_regression.py
+```
+
+The harness uses a fresh private NVRAM directory and two MAME processes:
+
+1. Boot, calibrate, reach the desk, press power, and verify two stable
+   `WaitForPowerDown` samples with `shutdownReason == 'POFF'` and VCC off.
+2. Relaunch only the persisted RAM/RTC. The ROM moves through `DeepDoze` to a
+   VCC-on cleanup `Doze`; one button event lets that retained shutdown
+   transaction finish at VCC-off `WaitForPowerDown`.
+3. Hold the on-button from the final sleep. The acceptance checkpoint
+   requires `interrupt5 & 0x00800000`, live `powerControl & 0x80000000`, and
+   StopCpu released; later checkpoints must have VCC on and PCs outside
+   `DeepDoze` / `WaitForPowerDown`.
+
+The verified run latched exactly `interrupt5 = 0x00800000` while the button
+was held, read `powerControl = 0xa0002409`, and settled in the normal OS idle
+path with `powerControl = 0x20002c09`. All generated states, NVRAM, logs, Lua,
+and PNGs remain outside Git under
+`~/fun/magic-cap-assets/runtime/power-regression/`.
 
 ## Reproducing this analysis
 
