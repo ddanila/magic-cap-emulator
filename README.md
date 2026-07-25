@@ -81,7 +81,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | Persistence & power | Battery-backed DRAM + RTC as NVRAM; power-button suspend/wake across a retained-RAM relaunch | [`power-wake.md`](docs/power-wake.md) |
 | Battery & supply inputs | Both ADC channels answer within the ROM's own calibration thresholds, so the spurious backup-battery warning is gone; battery levels, AC adapter and battery cover are selectable, and removing the cover raises the IO interrupt the OS services | [`power-wake.md`](docs/power-wake.md#battery-levels) |
 | Sound | ROM's startup tone (unbuffered hold register) plus buffered SIB sound DMA: the OS's boot chime streams from DRAM with half/end interrupts and pointer writeback | [`betty-registers.md`](docs/betty-registers.md) |
-| SIB telecom DMA | The built-in modem's data path: shared `sibDMA` low half, lockstep rx/tx pointer, hardware loopback, half/end/pointer interrupts | [`betty-registers.md`](docs/betty-registers.md) |
+| Built-in software modem | Continuous 48-word SIB telecom DMA ring drives the ROM's V.32 pump/control/FIR through a TX39 `MADD` | [`builtin-modem.md`](docs/builtin-modem.md) |
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling | [`mame-bringup.md`](docs/mame-bringup.md) |
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap | [`pclink.md`](docs/pclink.md) |
@@ -99,12 +99,6 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
   blank the display and the charger does not recharge the modelled cells. No ROM
   behavior observed so far depends on it
   ([`power-wake.md`](docs/power-wake.md#outputs-the-os-writes)).
-- **Drive the built-in software modem over telecom DMA.** The data path is
-  modelled and has a loopback regression, but nothing has run the ROM's V.32
-  DSP across it yet — the OS only programs telecom DMA when dialling with the
-  built-in modem, which needs a provider configured for it. That DSP is why the
-  TX39 `MADD` extension exists.
-
 - **Acknowledge Magic Bus address assignment.** Long sessions still warn about
   an attached device. The mechanism is now pinned down — the OS broadcasts
   `MagicBus_AssignMagicBusAddress` every half minute, nothing answers, and the
@@ -113,10 +107,12 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
   acknowledge the assignment
   ([`memory-map.md`](docs/memory-map.md#the-attached-device-warning-diagnosed-but-not-fixed)).
 
-The machine stays `MACHINE_NOT_WORKING` while unmodeled hardware remains — the
-Magic Bus warning above, and the built-in software modem is not yet driven. The power/wake path has a two-process headless acceptance test
-in [`tools/power_regression.py`](tools/power_regression.py), and sound now
-covers both the unbuffered and buffered paths.
+The machine stays `MACHINE_NOT_WORKING` while unmodeled hardware remains,
+notably the Magic Bus peripheral reply and the power-supply outputs above.
+Power/wake has a two-process headless acceptance test in
+[`tools/power_regression.py`](tools/power_regression.py); sound covers both
+unbuffered and buffered paths, and the built-in modem now covers its ROM DSP
+path as well as the underlying DMA registers.
 
 ### Open questions
 
@@ -166,8 +162,8 @@ We don't own a DataRover 840, so correctness is judged by external signals only:
 ## Repo layout
 
 ```
-docs/       RE notes: memory map, Betty registers, ROM layout, bring-up, PCLink, modem, TX39 CPU, power/wake, development ROMs
-tools/      headless regression harnesses and analysis scripts (ROM info, ROM diff, serial, desk, sound, TX39, PC Card, PCLink, modem, development-ROM OS self-tests), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play
+docs/       RE notes: memory map, Betty registers, ROM layout, bring-up, PCLink, PC Card and built-in modems, TX39 CPU, power/wake, development ROMs
+tools/      headless regression harnesses and analysis scripts (ROM info, ROM diff, serial, desk, sound, telecom, TX39, PC Card, PCLink, both modem paths, development-ROM OS self-tests), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play
 tests/      unit tests for the tools, with captured serial fixtures
 roms/       optional git-ignored compatibility path; persistent assets live outside the repo in ~/fun/magic-cap-assets/
 ```

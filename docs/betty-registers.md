@@ -166,13 +166,15 @@ counterpart: clear the half and end enables (`interrupt1Enable &= 0xffe7ffff`),
 clear the channel enables (`sibDMA &= 0xfffffffc`), write the size, then the
 buffer address, and arm.
 
-Two behaviors matter in the model. The telecom fields share **one** pointer for
-both directions, so transmit and receive run in lockstep at the same buffer
-index. And `kSibLoopModeMask` (`sibControl` bit 3) is a hardware loopback: with
-it set the SIB feeds transmit straight back into the receive buffer, which is
-what the modem's own loopback diagnostics rely on. The phone line and DAA are
-not modelled, so transmit samples are consumed at the programmed rate and
-receive delivers either the loopback or silence.
+Three behaviors matter in the model. The telecom fields share **one** pointer
+for both directions, so transmit and receive run in lockstep at the same
+buffer index. An explicit `kSibTelDmaOnceMask` stops both directions at the
+end; without it, the 48-word two-half ring used by the software modem wraps
+continuously. And `kSibLoopModeMask` (`sibControl` bit 3) is a hardware
+loopback: with it set the SIB feeds transmit straight back into the receive
+buffer, which is what the modem's own loopback diagnostics rely on. The phone
+line and DAA are not modelled, so transmit samples are consumed at the
+programmed rate and receive delivers either the loopback or silence.
 
 The driver's own clock for this channel comes from `kSibTelDivMask`, separate
 from the sound divisor, so the two channels can run at different rates.
@@ -183,6 +185,7 @@ the SIB at the same time:
 
 ```sh
 python3 tools/telecom_regression.py               # loopback
+python3 tools/telecom_regression.py --continuous  # ROM modem ring
 python3 tools/telecom_regression.py --no-loopback # control
 ```
 
@@ -192,11 +195,12 @@ wrap. The control run clears `kSibLoopModeMask` and requires the opposite —
 receive overwrites the buffer with silence — which is what proves the loop-mode
 bit gates the path rather than the check passing regardless.
 
-**What this does not yet do:** the OS only programs telecom DMA when it dials
-with the built-in modem, which needs a provider configured for it, so a plain
-boot exercises the sound channel alone. The register-level regression covers
-the hardware contract; driving the ROM's V.32 DSP over it — the code the TX39
-`MADD` extension exists for ([`tx39-cpu.md`](tx39-cpu.md)) — is the next step.
+`tools/builtin_modem_regression.py` supplies the complementary ROM-level
+check: it opens Magic Cap's software-modem object, retains the continuous
+48-word RX/TX ring, selects V.32, and proves that the ROM reaches its
+V32ModulatorFIR and a TX39 `MADD`. See
+[`builtin-modem.md`](builtin-modem.md) for the exact symbols, input NVRAM, and
+scope.
 
 ## Verifying the sound path
 

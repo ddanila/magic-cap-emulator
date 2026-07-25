@@ -206,7 +206,10 @@ python3 tools/power_regression.py
 python3 tools/sound_regression.py
 python3 tools/sound_regression.py --checkpoint dma
 python3 tools/telecom_regression.py
+python3 tools/telecom_regression.py --continuous
 python3 tools/telecom_regression.py --no-loopback
+python3 tools/builtin_modem_regression.py \
+  --nvram-source /path/to/a/passing/combined-browser/run/nvram
 python3 tools/battery_regression.py
 python3 tools/magicbus_probe.py
 python3 tools/tx39_regression.py
@@ -373,12 +376,14 @@ the separate serial-terminal view.
 | Workbench | Live Dino buffer `0x003f6a00` reaches deterministic checksum `0x62d64ba4` |
 | Persistence | 4 MiB DRAM and Dino RTC use external NVRAM files; a two-process regression proves retained-RAM power-down and on-button wake |
 | Sound | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
+| Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 FIR code through a TX39 `MADD` |
 | PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback, insertion, and live-OS checks |
 | PCLink | The Storeroom computer accepts the handshake and installs archived `DvorakKeyboard.pkg` into built-in storage |
 | PC Card modem | Magic Cap detects the card, completes its Hayes sequence, and emits an async-HDLC PPP LCP frame |
 | Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
 
-The machine remains marked `MACHINE_NOT_WORKING` while the modeled hardware
-is still incomplete. Buffered sound DMA is one known later item; incomplete
-MagicBus peripheral replies also make the ROM's background MagicBus actor
-eventually display an attached-device warning in longer sessions.
+The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
+still incomplete. In particular, no Magic Bus peripheral acknowledges address
+assignment, so the ROM's background Magic Bus actor eventually displays an
+attached-device warning in longer sessions; power-supply output rails also
+round-trip without yet acting on their attached devices.

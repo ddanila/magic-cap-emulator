@@ -11,7 +11,10 @@ hardware model did:
     set the SIB feeds transmit straight back, so the two buffers must match;
   * `kIntTelDmaHalfMask`, `kIntTelDmaEndMask` and `kIntTelDmaPtrIncMask` latch
     in `interrupt1`;
-  * a one-shot transfer clears its own enables and leaves the pointer wrapped.
+  * an explicit one-shot transfer clears its own enables and leaves the
+    pointer wrapped;
+  * the default mode used by Magic Cap's software modem remains enabled and
+    continuously wraps the two-half buffer.
 
 It runs with the machine in IDT monitor mode so Magic Cap is not driving the
 SIB at the same time. See docs/betty-registers.md.
@@ -60,9 +63,14 @@ def monitor_config(system: str) -> str:
 """
 
 
-def automation_script(words: int = WORDS, loopback: bool = True) -> str:
-    """Return Lua that programs one telecom transfer, optionally looped back."""
+def automation_script(
+    words: int = WORDS,
+    loopback: bool = True,
+    continuous: bool = False,
+) -> str:
+    """Return Lua that programs one telecom transfer, optionally continuous."""
     loop_bit = "0x08" if loopback else "0x00"
+    dma_control = "0x0003" if continuous else "0x8003"
     return f"""local machine = manager.machine
 local program = machine.devices[":maincpu"].spaces["program"]
 local frames = 0
@@ -89,15 +97,16 @@ emu.register_frame_done(function()
         program:write_u32(SIB_SIZE, ((WORDS - 1) * 4) & 0x3ffc)
         -- kSibEnableSib | kSibEnableTel [| kSibLoopModeMask], divisor 25.
         program:write_u32(SIB_CONTROL, 0x00190000 | {loop_bit} | 0x20 | 0x01)
-        -- One-shot, both directions.
-        program:write_u32(SIB_DMA, 0x0003)
+        -- Both directions. kSibTelDmaOnceMask makes this an explicit
+        -- one-shot; without it the software modem uses a continuous ring.
+        program:write_u32(SIB_DMA, {dma_control})
         started = true
         print("TELECOM START")
 
     elseif started and frames > 120 then
         local dma = program:read_u32(SIB_DMA)
         local enables = dma & 0x0003
-        if enables == 0 or frames == 900 then
+        if enables == 0 or frames == 240 then
             local status = program:read_u32(INTERRUPT1)
             local match = 0
             for index = 0, WORDS - 1 do
@@ -178,6 +187,26 @@ def verify(result: dict[str, int]) -> tuple[bool, str]:
     )
 
 
+def verify_continuous(result: dict[str, int]) -> tuple[bool, str]:
+    """Check the buffer mode used by Magic Cap's built-in software modem."""
+    if result["match"] != result["words"]:
+        return False, (
+            f"loopback delivered {result['match']} of {result['words']} words; "
+            "receive DMA did not reproduce the transmitted buffer"
+        )
+    if not result["half"] or not result["end"] or not result["ptrinc"]:
+        return False, "continuous DMA did not latch all half/end/pointer events"
+    if result["enables"] != 3:
+        return False, (
+            "continuous transfer stopped; expected sibDMA RX/TX enables 3, "
+            f"got {result['enables']}"
+        )
+    return True, (
+        f"continuous telecom DMA kept RX/TX enabled after wrapping its "
+        f"{result['words']}-word buffer"
+    )
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mame", type=Path, default=DEFAULT_MAME)
@@ -192,7 +221,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "writes silence instead of the transmitted pattern"
         ),
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--continuous",
+        action="store_true",
+        help=(
+            "omit kSibTelDmaOnceMask and require RX/TX to remain enabled "
+            "after the buffer wraps, as used by the built-in software modem"
+        ),
+    )
+    args = parser.parse_args(argv)
+    if args.no_loopback and args.continuous:
+        parser.error("--no-loopback and --continuous are separate control runs")
+    return args
 
 
 def run_regression(args: argparse.Namespace) -> int:
@@ -215,7 +255,11 @@ def run_regression(args: argparse.Namespace) -> int:
     lua_path = run_dir / "telecom-regression.lua"
     log_path = run_dir / "mame-output.txt"
     lua_path.write_text(
-        automation_script(loopback=not args.no_loopback), encoding="utf-8"
+        automation_script(
+            loopback=not args.no_loopback,
+            continuous=args.continuous,
+        ),
+        encoding="utf-8",
     )
     (config_dir / f"{args.system}.cfg").write_text(
         monitor_config(args.system), encoding="utf-8"
@@ -262,9 +306,12 @@ def run_regression(args: argparse.Namespace) -> int:
         )
         return 1
 
-    passed, message = (
-        verify_no_loopback(result) if args.no_loopback else verify(result)
-    )
+    if args.no_loopback:
+        passed, message = verify_no_loopback(result)
+    elif args.continuous:
+        passed, message = verify_continuous(result)
+    else:
+        passed, message = verify(result)
     if not passed:
         print(f"FAIL: {message}; see {log_path}", file=sys.stderr)
         return 1

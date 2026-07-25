@@ -37,6 +37,16 @@ class ScriptTests(unittest.TestCase):
 
         self.assertIn("0x00190000 | 0x00 | 0x20 | 0x01", script)
 
+    def test_one_shot_sets_once_and_continuous_omits_it(self) -> None:
+        self.assertIn(
+            "program:write_u32(SIB_DMA, 0x8003)",
+            telecom.automation_script(),
+        )
+        self.assertIn(
+            "program:write_u32(SIB_DMA, 0x0003)",
+            telecom.automation_script(continuous=True),
+        )
+
     def test_script_uses_lua_compatible_numbers(self) -> None:
         # Lua rejects digit separators, which cost a run to discover.
         self.assertNotIn("_0000", telecom.automation_script())
@@ -113,6 +123,15 @@ class VerifyTests(unittest.TestCase):
 
         self.assertFalse(passed)
         self.assertIn("kSibLoopModeMask", message)
+
+    def test_continuous_requires_both_enables_to_remain_set(self) -> None:
+        passed, message = telecom.verify_continuous(result(enables=3))
+
+        self.assertTrue(passed, message)
+
+        passed, message = telecom.verify_continuous(result(enables=0))
+        self.assertFalse(passed)
+        self.assertIn("expected sibDMA RX/TX enables 3", message)
 
 
 if __name__ == "__main__":
