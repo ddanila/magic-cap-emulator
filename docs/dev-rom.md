@@ -194,7 +194,9 @@ verdict. It works in two phases, which matters:
    counting breakpoint on `AnnounceNonDebugFailure`, write a small stub into
    scratch DRAM, and point the PC at it. The stub calls the suite through
    `jalr` (a `jal` cannot reach `0x13e9xxxx` from low DRAM), then writes a
-   completion marker and parks in a spin loop.
+   completion marker and parks in a spin loop. The two number-format tests
+   first resolve `FormatterTestSuite` from the live basic-system test list and
+   enter through the ROM's own `FormatterTestSuite_RunTest` wrapper.
 
 A suite passes when the marker appears — the function returned — and the
 complaint counter is still zero.
@@ -204,8 +206,8 @@ cd "$HOME/fun/magic-cap-emulator"
 python3 tools/devrom_tests.py                       # every suite known to pass
 python3 tools/devrom_tests.py --suite font          # one suite
 python3 tools/devrom_tests.py --self-check          # validate the oracle
-python3 tools/devrom_tests.py --suite fmtinteger --rtc host   # a complaining
-                                                    # suite, realistic clock
+python3 tools/devrom_tests.py --suite fmtinteger --suite scanfloat
+python3 tools/devrom_tests.py --suite fmtinteger --trace-complaints
 ```
 
 Forcing the call during a *first* boot does not work: the tests never return
@@ -226,8 +228,8 @@ The driver resumes the RTC by adding the host wall-clock time that passed while
 the machine was off, which is what a real communicator does. For a headless
 check that means a different emulated time of day on every run, and that
 changes results: a full pass over the suites on the host clock failed six of
-twelve with "did not return", while three consecutive passes with the clock
-pinned each took all twelve.
+the original twelve with "did not return", while three consecutive passes
+with the clock pinned each took all twelve.
 
 `datarover840d` therefore exposes a **RTC on resume** machine configuration
 setting, and the harness selects `Freeze at saved value` by default
@@ -237,7 +239,7 @@ the host clock read RTC `0x00307cba` and `0x0031fcba` — three seconds of drift
 
 ### Results
 
-Twelve suites pass, judged by the ROM's own oracle:
+Fourteen suites pass, judged by the ROM's own oracle:
 
 | Suite | Symbol |
 |---|---|
@@ -253,6 +255,8 @@ Twelve suites pass, judged by the ROM's own oracle:
 | `paths` | `PathsUnitTests__Fv` |
 | `textmapping` | `TextMappingUnitTests__Fv` |
 | `objectname` | `ObjectNameTests__Fv` |
+| `fmtinteger` | `TestFormattingInteger__Fv` |
+| `scanfloat` | `TestScanningFloatingPoint__Fv` |
 
 These are OS-level self-tests written by the people who wrote this OS,
 executing against the emulated hardware and finding nothing to complain about
@@ -260,23 +264,45 @@ executing against the emulated hardware and finding nothing to complain about
 is particularly direct: it is the OS verifying the ROM image it is running
 from.
 
-Two suites **return but complain**, and the count is stable across repeated
-runs (29, 29, 29 for the first):
+### Why the apparent 66 complaints were not emulator failures
 
-| Suite | Symbol | Complaints |
-|---|---|---:|
-| `fmtinteger` | `TestFormattingInteger__Fv` | 29 |
-| `scanfloat` | `TestScanningFloatingPoint__Fv` | 37 |
+Calling the two formatter bodies directly produced stable totals of 29 and 37
+complaints. `--trace-complaints` identified every caller:
 
-This is the interesting category: the ROM ran a test and reported failures.
-Either the emulated hardware is wrong somewhere these tests reach, or they need
-setup a forced call does not provide (both touch numeric formatting against
-expected-result objects in the TestSite package). An FPU gap is ruled out —
-both images contain the same handful of coprocessor-1 references and the
-driver instantiates no FPU, so this is soft-float code either way. Identifying
-the failing check means capturing the caller of `AnnounceNonDebugFailure`;
-note that a breakpoint action chaining two `do` commands silently stops the
-machine instead of continuing, which looks exactly like "the test hung".
+| Directly called body | Complaint site | Count | Check |
+|---|---:|---:|---|
+| `TestFormattingInteger` | `0x13e8c540` | 29 | `CheckExpectedText` text mismatch |
+| `TestScanningFloatingPoint` | `0x13e8cd94` | 13 | scanner result/reference mismatch |
+| `TestScanningFloatingPoint` | `0x13e8cdb8` | 24 | parsed/expected double mismatch |
+
+The integer expectations make the missing context visible: they include
+locale-specific forms such as `(1)`, `1.000`, `eins`, and values suffixed with
+`DM`. The direct call was using the machine's ordinary number formatter
+instead of the test fixture's formatter, so simple values happened to match
+while locale-sensitive cases did not.
+
+The ROM's real entry point proves the required setup. At `0x13e8d07c`,
+`FormatterTestSuite_RunTest`:
+
+1. saves the current system number formatter;
+2. reads the `FormatterTestSuite.formatter` reference field at offset 8;
+3. installs that formatter;
+4. dispatches test 1 (`TestFormattingInteger`) or test 6
+   (`TestScanningFloatingPoint`);
+5. restores the saved formatter.
+
+The `.dx` database identifies `FormatterTestSuite` as class `0x05f9`.
+At runtime it is item nine of `System_iBasicSystemTestList`; the harness
+resolves that item dynamically rather than pinning a heap address. Through
+this wrapper, the same 34 integer text comparisons and 28 floating-point scan
+cases return with **zero complaints**. The 66 reports therefore came entirely
+from bypassing the ROM's fixture setup; they are neither an FPU gap nor a
+hardware-emulation defect.
+
+One debugger trap is worth retaining: a breakpoint action chaining two `do`
+commands silently stops the machine instead of continuing, which looks exactly
+like a hung test. The operand trace uses `logerror` plus one counter update and
+routes it through MAME's `-oslog` output.
 
 Fourteen more do not return from a forced call (`announcement`, `contact`,
 `datebook`, `fmtfixed`, `fmtfloat`, `numeraldouble`, `padprecision`,
@@ -390,7 +416,9 @@ comm -23 /tmp/dev.syms /tmp/rel.syms | grep -iE "test|suite" | head
 ```
 
 The candidate list for `devrom_tests.py` comes from the no-argument entry
-points — 84 of them, which is where the twelve passing suites were found:
+points — 84 of them. That search found the first twelve passing bodies; the two
+formatter bodies only became valid checks after their suite wrapper was
+reproduced:
 
 ```sh
 llvm-readelf --symbols "$dbg/Apollo/MagicCap-USA" \

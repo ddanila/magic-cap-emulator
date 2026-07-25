@@ -85,7 +85,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap | [`pclink.md`](docs/pclink.md) |
 | Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 fetches and renders deterministic local HTTP | [`modem.md`](docs/modem.md) |
 | Variants | `datarover840` / `840f` (writable flash) / `840j` / `840d` (1998-04-07 development ROM) all build and verify; `840d` also boots to the workbench | [`rom-layout.md`](docs/rom-layout.md), [`dev-rom.md`](docs/dev-rom.md) |
-| OS self-tests | Twelve of the development ROM's own unit-test suites — including `CheckROMPristineTable`, the OS verifying the ROM it runs from — execute against the emulated hardware and report no complaint, judged by the oracle the ROM names itself | [`dev-rom.md`](docs/dev-rom.md) |
+| OS self-tests | Fourteen of the development ROM's own unit-test suites — including `CheckROMPristineTable`, the OS verifying the ROM it runs from — execute against the emulated hardware and report no complaint, judged by the oracle the ROM names itself | [`dev-rom.md`](docs/dev-rom.md) |
 
 Each subsystem has a headless regression under [`tools/`](tools/); the full list and expected checkpoints are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
 
@@ -110,7 +110,7 @@ covers both the unbuffered and buffered paths.
 
 ### Open questions
 
-- **Run Command-T through the OS's own scheduler.** Twelve of the development
+- **Run Command-T through the OS's own scheduler.** Fourteen of the development
   ROM's unit tests already pass as acceptance checks, but they are the ones
   that never yield: forcing the PC cannot drive anything that waits on task or
   scene context, which is why **Command-T** — General Magic's full test run —
@@ -118,11 +118,6 @@ covers both the unbuffered and buffered paths.
   the OS's deferred-call path (`Timer_RunSoonIn`, `Timer_RunSoonAt`,
   `Semaphore_RunSoon`) and let the scheduler run it, taking method indices from
   the SDK's `.dx` database ([`dev-rom.md`](docs/dev-rom.md)).
-- **Explain 66 ROM complaints.** `TestFormattingInteger` and
-  `TestScanningFloatingPoint` return but report 29 and 37 failures, stably.
-  Either the emulated hardware is wrong where those tests reach, or they need
-  setup a forced call skips. Capturing the caller of `AnnounceNonDebugFailure`
-  identifies the failing check.
 
 ## Resources
 
@@ -155,7 +150,7 @@ We don't own a DataRover 840, so correctness is judged by external signals only:
 - **Screen appearance** vs. photos/screenshots of Magic Cap 3.x in the wild ([PDA Museum](https://pdamuseum.eu/pda/datarover840/), [Old VCR](http://oldvcr.blogspot.com/2022/12/magic-cap-from-magic-link-to-datarover.html), [Pen Computing review](http://www.pencomputing.com/magic_cap/data_rover_840.html)) and the Rosemary Simulator's UI as a behavioral reference.
 - **The ROM's own voice**: the IDT boot monitor and Magic Cap debug builds talk over the serial port — an emulated UART console is our primary instrument for everything that happens before (and behind) the screen.
 - **Internal consistency**: the ROM's own diagnostics (Betty register readback tests, memory sizing) passing is itself evidence the hardware model is right.
-- **The OS's own unit tests**: the 1998-04-07 development ROM retains General Magic's test framework, and three of its suites (date/time, cache, font) now run inside the emulator and report no complaint, using the failure oracle the ROM documents for itself. These are the strongest signals available without hardware — tests written by the OS authors, judging the emulated machine. See [`dev-rom.md`](docs/dev-rom.md).
+- **The OS's own unit tests**: the 1998-04-07 development ROM retains General Magic's test framework, and fourteen of its suites now run inside the emulator and report no complaint, using the failure oracle the ROM documents for itself. These are the strongest signals available without hardware — tests written by the OS authors, judging the emulated machine. See [`dev-rom.md`](docs/dev-rom.md).
 - **Simulator cross-checks**: the Rosemary simulator's object dumps describe the same structures our ROM stores, and its self-tests (if retained in the device ROM) are more ROM-provided diagnostics to drive — see [The Magic Cap Simulators](#the-magic-cap-simulators).
 
 ## Repo layout
