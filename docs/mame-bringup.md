@@ -183,6 +183,7 @@ python3 tools/serial_regression.py --checkpoint betty
 python3 tools/desk_regression.py
 python3 tools/power_regression.py
 python3 tools/sound_regression.py
+python3 tools/sound_regression.py --checkpoint dma
 python3 tools/tx39_regression.py
 python3 tools/pccard_regression.py
 python3 tools/pclink_regression.py
@@ -219,8 +220,13 @@ snapshots stay under
 `~/fun/magic-cap-assets/runtime/power-regression/`.
 
 The sound harness boots with SDL's dummy audio backend and asks MAME to write
-the mixed output to a persistent WAV capture. It verifies that the ROM's
-hardware-generated startup tone is present near 750 Hz for roughly 60 ms.
+the mixed output to a persistent WAV capture. Its default `beep` checkpoint
+verifies that the ROM's hardware-generated startup tone is present near 750 Hz
+for roughly 60 ms. `--checkpoint dma` runs far enough into the boot for the OS
+to play its chime through buffered SIB sound DMA and requires a second audible
+segment of 120-300 ms; see [`betty-registers.md`](betty-registers.md). The
+emulated DAC lands on the capture's second channel, so the analysis always
+picks the most occupied channel.
 The WAV, generated Lua, NVRAM, and log remain under
 `~/fun/magic-cap-assets/runtime/sound-regression/`.
 

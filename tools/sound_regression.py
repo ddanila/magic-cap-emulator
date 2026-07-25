@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Capture and verify the DataRover ROM's hardware-generated startup beep."""
+"""Capture and verify the DataRover ROM's sound output.
+
+Two checkpoints:
+
+  beep  the hardware-generated startup tone, produced through Betty's
+        unbuffered sound-hold register
+  dma   buffered SIB sound DMA - the OS programs sibSize, sibSoundTxStart and
+        sibDMA, and Dino streams the buffer to the speaker on its own. See
+        docs/betty-registers.md.
+"""
 
 from __future__ import annotations
 
@@ -26,6 +35,22 @@ DEFAULT_WORKDIR = (
 )
 
 
+# The buffered chime the OS plays during boot: 1024 words of two 16-bit
+# samples at roughly 11 kHz, so a little under 200 ms of audio.
+DMA_MIN_DURATION = 0.12
+DMA_MAX_DURATION = 0.30
+DMA_MIN_PEAK = 1_000
+DMA_SEGMENT_THRESHOLD = 150
+
+
+@dataclass(frozen=True)
+class Segment:
+    start: float
+    duration: float
+    peak: int
+    frequency: float
+
+
 @dataclass(frozen=True)
 class Tone:
     channel: int
@@ -35,18 +60,97 @@ class Tone:
     nonzero: int
 
 
-def automation_script() -> str:
-    """Return a short boot script that exits after the ROM emits its beep."""
-    return """local machine = manager.machine
+def automation_script(frames: int = 240) -> str:
+    """Return a boot script that exits after the requested frame."""
+    return f"""local machine = manager.machine
 local frames = 0
 
 emu.register_frame_done(function()
     frames = frames + 1
-    if frames == 240 then
+    if frames == {frames} then
         machine:exit()
     end
 end)
 """
+
+
+def find_segments(
+    samples: list[int],
+    sample_rate: int,
+    threshold: int = DMA_SEGMENT_THRESHOLD,
+    window: float = 0.01,
+) -> list[Segment]:
+    """Split one channel into audible segments separated by silence."""
+    span = max(1, int(sample_rate * window))
+    segments: list[Segment] = []
+    start: int | None = None
+    end = 0
+    for index in range(0, max(0, len(samples) - span), span):
+        chunk = samples[index : index + span]
+        if max(abs(sample) for sample in chunk) > threshold:
+            if start is None:
+                start = index
+            end = index + span
+        elif start is not None:
+            segments.append(_segment(samples, start, end, sample_rate))
+            start = None
+    if start is not None:
+        segments.append(_segment(samples, start, end, sample_rate))
+    return segments
+
+
+def _segment(
+    samples: list[int], start: int, end: int, sample_rate: int
+) -> Segment:
+    body = samples[start:end]
+    crossings = sum(
+        (left < 0) != (right < 0) for left, right in zip(body, body[1:])
+    )
+    duration = len(body) / sample_rate
+    return Segment(
+        start=start / sample_rate,
+        duration=duration,
+        peak=max(abs(sample) for sample in body),
+        frequency=crossings / (2.0 * duration) if duration else 0.0,
+    )
+
+
+def loudest_channel(path: Path) -> tuple[list[int], int]:
+    """Return the samples of the most occupied channel, plus its rate."""
+    with wave.open(str(path), "rb") as capture:
+        channels = capture.getnchannels()
+        sample_rate = capture.getframerate()
+        raw = capture.readframes(capture.getnframes())
+    interleaved = struct.unpack(f"<{len(raw) // 2}h", raw)
+    best = max(
+        (list(interleaved[channel::channels]) for channel in range(channels)),
+        key=lambda samples: sum(1 for sample in samples if sample),
+        default=[],
+    )
+    return best, sample_rate
+
+
+def verify_dma(segments: list[Segment]) -> tuple[bool, str]:
+    """The buffered chime must follow the startup beep as its own segment."""
+    if len(segments) < 2:
+        return False, (
+            f"expected the startup beep and a buffered DMA segment, "
+            f"found {len(segments)} audible segment(s)"
+        )
+    chime = segments[-1]
+    if not DMA_MIN_DURATION <= chime.duration <= DMA_MAX_DURATION:
+        return False, (
+            f"buffered segment lasts {chime.duration * 1000:.0f} ms, expected "
+            f"{DMA_MIN_DURATION * 1000:.0f}-{DMA_MAX_DURATION * 1000:.0f} ms"
+        )
+    if chime.peak < DMA_MIN_PEAK:
+        return False, (
+            f"buffered segment peaks at {chime.peak}, below {DMA_MIN_PEAK}"
+        )
+    return True, (
+        f"buffered SIB sound DMA played {chime.duration * 1000:.0f} ms at "
+        f"t={chime.start:.2f}s, {chime.frequency:.0f} Hz, peak {chime.peak}"
+    )
 
 
 def analyze_samples(samples: list[int], sample_rate: int, channel: int) -> Tone | None:
@@ -101,6 +205,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--mame", type=Path, default=DEFAULT_MAME)
     parser.add_argument("--rompath", type=Path, default=DEFAULT_ROMPATH)
     parser.add_argument("--workdir", type=Path, default=DEFAULT_WORKDIR)
+    parser.add_argument(
+        "--checkpoint",
+        choices=("beep", "dma"),
+        default="beep",
+        help=(
+            "'beep' verifies the unbuffered startup tone (default); 'dma' runs "
+            "long enough for the OS to play its buffered chime through SIB DMA"
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -122,7 +235,10 @@ def run_regression(args: argparse.Namespace) -> int:
     lua_path = run_dir / "sound-regression.lua"
     wav_path = run_dir / "boot.wav"
     log_path = run_dir / "mame-output.txt"
-    lua_path.write_text(automation_script(), encoding="utf-8")
+    # The buffered chime starts around frame 863 of a cold boot, so the DMA
+    # checkpoint has to keep running well past the startup beep.
+    exit_frame = 1200 if args.checkpoint == "dma" else 240
+    lua_path.write_text(automation_script(exit_frame), encoding="utf-8")
 
     command = [
         str(mame),
@@ -154,7 +270,7 @@ def run_regression(args: argparse.Namespace) -> int:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             check=False,
-            timeout=60,
+            timeout=60 if args.checkpoint == "beep" else 300,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         print(f"error: unable to capture sound: {error}", file=sys.stderr)
@@ -170,6 +286,31 @@ def run_regression(args: argparse.Namespace) -> int:
     if not wav_path.is_file():
         print(f"FAIL: WAV capture was not written: {wav_path}", file=sys.stderr)
         return 1
+
+    if args.checkpoint == "dma":
+        try:
+            samples, sample_rate = loudest_channel(wav_path)
+        except (OSError, EOFError, wave.Error, ValueError) as error:
+            print(
+                f"FAIL: invalid WAV capture: {error}; see {wav_path}",
+                file=sys.stderr,
+            )
+            return 1
+        segments = find_segments(samples, sample_rate)
+        passed, message = verify_dma(segments)
+        if not passed:
+            print(f"FAIL: {message}; see {wav_path}", file=sys.stderr)
+            for segment in segments:
+                print(
+                    f"  segment t={segment.start:.2f}s "
+                    f"{segment.duration * 1000:.0f} ms peak={segment.peak}",
+                    file=sys.stderr,
+                )
+            return 1
+        print(f"PASS: {message}")
+        print(f"Capture: {wav_path}")
+        print(f"Artifacts: {run_dir}")
+        return 0
 
     try:
         tone = analyze_wave(wav_path)

@@ -79,7 +79,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | Display | 480×320 2bpp framebuffer renders splash → welcome → workbench | [`memory-map.md`](docs/memory-map.md) |
 | Touch | Pointer input drives the touch macro incl. three-point calibration; desk is mouse-navigable | [`betty-registers.md`](docs/betty-registers.md) |
 | Persistence & power | Battery-backed DRAM + RTC as NVRAM; power-button suspend/wake across a retained-RAM relaunch | [`power-wake.md`](docs/power-wake.md) |
-| Sound | ROM's startup tone rendered at the programmed rate (unbuffered path) | [`betty-registers.md`](docs/betty-registers.md) |
+| Sound | ROM's startup tone (unbuffered hold register) plus buffered SIB sound DMA: the OS's boot chime streams from DRAM with half/end interrupts and pointer writeback | [`betty-registers.md`](docs/betty-registers.md) |
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling | [`mame-bringup.md`](docs/mame-bringup.md) |
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap | [`pclink.md`](docs/pclink.md) |
@@ -91,7 +91,6 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
 
 ### Remaining work
 
-- **Buffered SIB sound DMA** (the startup tone uses the unbuffered path).
 - **Battery and power-supply model.** Every development-ROM boot posts a
   backup-battery warning over the desk despite the driver answering both
   battery ADC channels with healthy readings. Not just cosmetic:
@@ -102,10 +101,12 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
   Entry points and header masks are in
   [`power-wake.md`](docs/power-wake.md#open-lead-the-battery-and-power-supply-model).
 
-The machine stays `MACHINE_NOT_WORKING` while buffered sound DMA and other
-unmodeled hardware remain; the power/wake path itself has a two-process
-headless acceptance test in
-[`tools/power_regression.py`](tools/power_regression.py).
+The machine stays `MACHINE_NOT_WORKING` while unmodeled hardware remains —
+incomplete MagicBus peripheral replies still make the ROM's background actor
+warn about an attached device in long sessions, and the built-in software modem
+is not connected. The power/wake path has a two-process headless acceptance test
+in [`tools/power_regression.py`](tools/power_regression.py), and sound now
+covers both the unbuffered and buffered paths.
 
 ### Open questions
 

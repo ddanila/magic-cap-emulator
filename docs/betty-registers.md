@@ -104,7 +104,60 @@ For audio, `SibServerBootBeep` writes `SoundCfgB = 0x8006`, selects Dino's
 11.025 kHz divisor, and supplies two signed 16-bit mono samples per write to
 the Dino sound-hold register. The driver models that path and gates samples
 on `SoundCfgB` bit 15; the ROM's startup tone is covered by
-`tools/sound_regression.py`. Buffered SIB sound DMA is not yet modeled.
+`tools/sound_regression.py`.
+
+## Buffered SIB sound DMA
+
+The OS does not feed real sounds by hand — it hands Dino a buffer and lets the
+SIB stream it. `SibServerStartSoundOut` (`0x13c22428`) and the queued
+`SibCmdStartSoundOut` (`0x13c23d3c`) program it in this order:
+
+1. clear the sound DMA half and end interrupt enables in `interrupt1Enable`;
+2. clear the transmit-DMA enable in `sibDMA`;
+3. write the buffer length into `sibSize` (`0x060`), sound field bits 29:18;
+4. zero `sibSoundHold`, then write the buffer address to `sibSoundTxStart`
+   (`0x068`) after folding the segment bits away;
+5. program the sample-rate divisor into `sibControl` bits 14:8;
+6. re-enable the half and end interrupts;
+7. set `kSibEnSoundTxDmaMask` in `sibDMA` (`0x090`) — playback starts here.
+
+`sibDMA` bits, from the SDK's `Dino.asm.h`:
+
+| Bit(s) | Name | Meaning |
+|---|---|---|
+| 31 | `kSibSoundDmaOnceMask` | one-shot |
+| 30 | `kSibSoundDmaLoopMask` | restart at the buffer start on completion |
+| 29:18 | `kSibSoundDmaPtrMask` | current position, in 32-bit words, written back by hardware |
+| 17, 16 | `kSibEnSoundRxDmaMask`, `kSibEnSoundTxDmaMask` | channel enables |
+| 15:0 | telecom equivalents | the same fields for the telecom channel |
+
+Both the size and pointer fields count 32-bit words, and the ROM stores the
+last valid index rather than a count, so the driver reads a buffer of
+`(field >> 18) + 1` words. Each word carries two signed 16-bit mono samples,
+most significant first, exactly like the hold register.
+
+The driver streams one word per sound tick while transmit DMA is enabled,
+raising `kIntSoundDmaPtrIncMask` (`interrupt1` bit 18) per word,
+`kIntSoundDmaHalfMask` (bit 22) at the halfway point, and
+`kIntSoundDmaEndMask` (bit 21) at the end. A looping buffer wraps; a one-shot
+buffer clears its own enable, which is what the ROM's boot chime uses. The
+pointer field is written back so `SibServerSyncSoundOutDma` can read playback
+progress, and a write to `sibDMA` keeps the hardware-owned pointer rather than
+taking one from the CPU.
+
+The buffered path is what the OS uses for its boot chime: on a cold boot it
+programs a 1024-word buffer at about 11 kHz roughly 14 seconds in. Verify with:
+
+```sh
+python3 tools/sound_regression.py --checkpoint dma
+```
+
+That runs long enough for the chime and requires two audible segments — the
+70 ms unbuffered startup beep and a buffered segment of 120-300 ms. Measured
+result: 200 ms at `t=14.36s`, about 820 Hz, peak 5593. With the DMA dispatch
+disabled the same capture contains only the beep, which is how the feature was
+confirmed rather than assumed. Note that the DAC output lands on the capture's
+second channel; the analysis picks the most occupied channel for that reason.
 The complete ROM diagnostic now runs as a regression:
 
 ```sh
