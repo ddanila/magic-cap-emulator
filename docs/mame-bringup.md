@@ -284,6 +284,26 @@ The 840F uses four persistent 2 MiB flash devices rather than the mask-ROM
 map. Japan/840F acquisition and layout details are in
 [`rom-layout.md`](rom-layout.md).
 
+## Writing Lua automation
+
+Points that cost time when writing a new harness:
+
+- **Read Dino registers at their physical addresses.** MAME's Lua program space
+  is not translated, so `program:read_u32(0x10c00140)` reads the RTC while the
+  kseg1 alias `0xb0c00140` returns `0xffffffff`. The existing harnesses use
+  `0x10c0xxxx` for the same reason.
+- **Keep a breakpoint action to one command.** `cpu.debug:bpset(addr, "1", "do
+  d@0x300044=d@0x300044+1; g")` works; chaining two `do` commands before the
+  `g` stops the machine at the first hit instead of continuing, which looks
+  exactly like the code under test hanging.
+- **`jal` cannot reach the whole ROM.** Its target keeps the top four address
+  bits, so a stub in low DRAM must call `0x13e9xxxx` through `jalr` with the
+  address built by `lui`/`ori`.
+- **Forcing the PC only drives code that does not yield.** Setting
+  `cpu.state["PC"]` runs a leaf-ish ROM function fine, but anything that waits
+  on a task, timer, or scene never returns to the injected frame: the scheduler
+  resumes other work and abandons it. See [`dev-rom.md`](dev-rom.md).
+
 ## Native LCD snapshot
 
 MAME's native snapshot mode writes one image per emulated screen. With the LCD

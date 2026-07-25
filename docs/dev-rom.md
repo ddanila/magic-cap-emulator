@@ -389,6 +389,22 @@ llvm-readelf --symbols \
 comm -23 /tmp/dev.syms /tmp/rel.syms | grep -iE "test|suite" | head
 ```
 
+The candidate list for `devrom_tests.py` comes from the no-argument entry
+points — 84 of them, which is where the twelve passing suites were found:
+
+```sh
+llvm-readelf --symbols "$dbg/Apollo/MagicCap-USA" \
+  | awk '$4=="FUNC" && $2!="00000000" {print $2, $8}' \
+  | grep -E "__Fv$" | grep -iE "test|verify|check|validate" \
+  | grep -viE "TestName|CanRun" | sort -k2
+```
+
+Not everything it lists is a test: the same pattern catches setup and teardown
+helpers (`BeginUsingTestProvider`, `CreateTestPackage`, `DestroyTestPackages`,
+`RetractTestAnnouncements`) and things better left alone in an automated run
+(`FaxTest`, `CheckPowerButton`, `ResetCardCheckState`). Read the name before
+adding it.
+
 ## Acquisition
 
 The SDK is a single 74,208,013-byte StuffIt 5 archive, `magicdeveloper.sit`,

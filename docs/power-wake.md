@@ -135,6 +135,46 @@ in the SDK headers):
 `InitObjectRuntime` read it — the code is the OS's primary cross-boot signal,
 so it is worth watching in any wake investigation.
 
+## Open lead: the battery and power-supply model
+
+Every development-ROM boot posts *"Your communicator's backup battery is almost
+out of power"* over the desk, and longer release sessions can post the
+main-battery warning. The driver already answers the two battery ADC channels —
+`touch_adc_value()` returns fixed readings for Betty ADC inputs 24 (main) and
+28 (backup), chosen to sit between the Apollo calibration table's low and full
+thresholds — so the values, the channel mapping, or the thresholds are not
+matching what the OS expects, or the complaint comes from a different signal
+entirely.
+
+This is worth more than cosmetic cleanup: `MainBatteryIsLow` is broadcast to
+roughly a dozen servers, including `Modem_MainBatteryIsLow`,
+`PCLinkServer_MainBatteryIsLow`, `PhoneServer_MainBatteryIsLow`,
+`PostOffice_MainBatteryIsLow`, `SerialServer_MainBatteryIsLow`, and
+`DisplayServer_MainBatteryIsLow`. A wrongly-low battery state can therefore
+perturb subsystems that have nothing to do with power, so it is a plausible
+confounder for any flaky acceptance run.
+
+Where to look, all in the release build unless noted:
+
+| Address | Symbol | Why |
+|---|---|---|
+| `0x13c399ac` | `MainBatteryServer_InitAtoDChannel` | Which Betty ADC channel the OS actually programs |
+| `0x13c39ad0` | `BackupBatteryServer_InitAtoDChannel` | Same for the backup cell |
+| `0x13c399cc` / `0x13c39af0` | `*_InitializeBatteryFields` | The thresholds and field layout |
+| `0x13c3b118` | `PowerSupplyGen2MFS_BatteryCoverAttached` | Cover state, a separate signal from voltage |
+| `0x13c3b0d4` | `PowerSupplyGen2MFS_ACAdapterAttached` | External power |
+| `0x13c3aeb0` / `0x13c3af14` | `PowerSupplyGen2MFS_{,Set}BatteryChargerEnabled` | Charger control |
+| `0x13c3aa1c` / `0x13c3aaf8` | `MainBatteryCoverPositive/Negative` | Cover-switch edge handlers |
+| `0x13c35370` | `BackupBatteryServer_Charging` | Whether the OS thinks the backup cell is charging |
+
+The platform header names the signals: `Gen2MFS.asm.h` defines
+`kMainBatteryCoverPositive` / `kMainBatteryCoverNegative` as
+`kioPositiveInterrupt2` / `kioNegativeInterrupt2`, plus
+`kIOMfioChargerEnableMask` (MFIO select 1) and `kIOMfioLCDPowerMask`
+(MFIO select 17). The same class also gates the Vcc rails for the LCD, IR,
+sound, MagicBus, and modem, so it is the right place to model board power as a
+whole rather than patching ADC constants.
+
 ## Entering sleep
 
 `Doze` (`0x13c3b250`) is minimal — clear then set `kPowerStopCpuMask`:

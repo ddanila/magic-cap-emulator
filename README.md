@@ -92,6 +92,15 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
 ### Remaining work
 
 - **Buffered SIB sound DMA** (the startup tone uses the unbuffered path).
+- **Battery and power-supply model.** Every development-ROM boot posts a
+  backup-battery warning over the desk despite the driver answering both
+  battery ADC channels with healthy readings. Not just cosmetic:
+  `MainBatteryIsLow` is broadcast to about a dozen servers including the modem,
+  PCLink, phone, and post office, so a wrongly-low battery can perturb
+  unrelated subsystems. The `PowerSupplyGen2MFS` class is the right modeling
+  boundary — it also gates the LCD, IR, sound, MagicBus, and modem Vcc rails.
+  Entry points and header masks are in
+  [`power-wake.md`](docs/power-wake.md#open-lead-the-battery-and-power-supply-model).
 
 The machine stays `MACHINE_NOT_WORKING` while buffered sound DMA and other
 unmodeled hardware remain; the power/wake path itself has a two-process
