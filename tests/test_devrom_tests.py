@@ -95,14 +95,27 @@ class ResultParsingTests(unittest.TestCase):
 
 
 class SuiteTableTests(unittest.TestCase):
-    def test_default_suites_are_the_returning_ones(self) -> None:
+    def test_default_suites_are_the_passing_ones(self) -> None:
         expected = tuple(
-            name for name, suite in devrom_tests.SUITES.items() if suite["returns"]
+            name
+            for name, suite in devrom_tests.SUITES.items()
+            if suite["status"] == "passes"
         )
 
         self.assertEqual(devrom_tests.DEFAULT_SUITES, expected)
         self.assertIn("datetime", devrom_tests.DEFAULT_SUITES)
+        self.assertIn("rompristine", devrom_tests.DEFAULT_SUITES)
+        # A suite the ROM complains about must not be a default check, and
+        # neither must one that cannot be driven by a forced call.
+        self.assertNotIn("fmtinteger", devrom_tests.DEFAULT_SUITES)
         self.assertNotIn("contact", devrom_tests.DEFAULT_SUITES)
+
+    def test_every_suite_has_a_known_status(self) -> None:
+        for name, suite in devrom_tests.SUITES.items():
+            with self.subTest(suite=name):
+                self.assertIn(
+                    suite["status"], {"passes", "complains", "noreturn"}
+                )
 
     def test_addresses_are_inside_the_development_rom(self) -> None:
         for name, suite in devrom_tests.SUITES.items():

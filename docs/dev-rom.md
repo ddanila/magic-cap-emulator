@@ -201,9 +201,11 @@ complaint counter is still zero.
 
 ```sh
 cd "$HOME/fun/magic-cap-emulator"
-python3 tools/devrom_tests.py                       # the suites that return
+python3 tools/devrom_tests.py                       # every suite known to pass
 python3 tools/devrom_tests.py --suite font          # one suite
 python3 tools/devrom_tests.py --self-check          # validate the oracle
+python3 tools/devrom_tests.py --suite fmtinteger --rtc host   # a complaining
+                                                    # suite, realistic clock
 ```
 
 Forcing the call during a *first* boot does not work: the tests never return
@@ -218,20 +220,70 @@ exactly once, and requires a count of exactly one. That control passes, so a
 zero count in a normal run is a real negative rather than a detector that
 silently did nothing.
 
+### Reproducibility: pin the clock
+
+The driver resumes the RTC by adding the host wall-clock time that passed while
+the machine was off, which is what a real communicator does. For a headless
+check that means a different emulated time of day on every run, and that
+changes results: a full pass over the suites on the host clock failed six of
+twelve with "did not return", while the same set with the clock pinned passed
+all twelve.
+
+`datarover840d` therefore exposes a **RTC on resume** machine configuration
+setting, and the harness selects `Freeze at saved value` by default
+(`--rtc host` restores the realistic behavior). Measured directly, two runs on
+the host clock read RTC `0x00307cba` and `0x0031fcba` — three seconds of drift
+— while two frozen runs both read `0x0015fcba`.
+
 ### Results
 
-| Suite | Symbol | Result |
-|---|---|---|
-| `datetime` | `DateTimeUnitTests__Fv` | **passes** — returns, no complaint |
-| `cache` | `CacheUnitTests__Fv` | **passes** |
-| `font` | `FontUnitTests__Fv` | **passes** |
-| `announcement` | `AnnouncementUnitTests__Fv` | does not return from a freshly calibrated machine; does return from a longer-lived session's NVRAM |
-| `contact` | `ContactUnitTests__Fv` | does not return (checked to 9,000 frames) |
-| `datebook` | `DatebookTaskUnitTests__Fv` | does not return |
+Twelve suites pass, judged by the ROM's own oracle:
 
-The three that pass are three OS-level self-tests, written by the people who
-wrote this OS, executing against the emulated hardware and finding nothing to
-complain about. That is a much stronger signal than a framebuffer checksum.
+| Suite | Symbol |
+|---|---|
+| `datetime` | `DateTimeUnitTests__Fv` |
+| `cache` | `CacheUnitTests__Fv` |
+| `font` | `FontUnitTests__Fv` |
+| `rompristine` | `CheckROMPristineTable__Fv` |
+| `endianswap` | `TestEndianSwapping__Fv` |
+| `objectmap` | `TestObjectMap__Fv` |
+| `cliquetable` | `TestCliqueTable__Fv` |
+| `fastenedstack` | `TestFastenedStack__Fv` |
+| `interchangetable` | `TestDynamicInterchangeTable__Fv` |
+| `paths` | `PathsUnitTests__Fv` |
+| `textmapping` | `TextMappingUnitTests__Fv` |
+| `objectname` | `ObjectNameTests__Fv` |
+
+These are OS-level self-tests written by the people who wrote this OS,
+executing against the emulated hardware and finding nothing to complain about
+— a much stronger signal than a framebuffer checksum. `CheckROMPristineTable`
+is particularly direct: it is the OS verifying the ROM image it is running
+from.
+
+Two suites **return but complain**, and the count is stable across repeated
+runs (29, 29, 29 for the first):
+
+| Suite | Symbol | Complaints |
+|---|---|---:|
+| `fmtinteger` | `TestFormattingInteger__Fv` | 29 |
+| `scanfloat` | `TestScanningFloatingPoint__Fv` | 37 |
+
+This is the interesting category: the ROM ran a test and reported failures.
+Either the emulated hardware is wrong somewhere these tests reach, or they need
+setup a forced call does not provide (both touch numeric formatting against
+expected-result objects in the TestSite package). An FPU gap is ruled out —
+both images contain the same handful of coprocessor-1 references and the
+driver instantiates no FPU, so this is soft-float code either way. Identifying
+the failing check means capturing the caller of `AnnounceNonDebugFailure`;
+note that a breakpoint action chaining two `do` commands silently stops the
+machine instead of continuing, which looks exactly like "the test hung".
+
+Fourteen more do not return from a forced call (`announcement`, `contact`,
+`datebook`, `fmtfixed`, `fmtfloat`, `numeraldouble`, `padprecision`,
+`lossofaccuracy`, `scaninteger`, `scanfixed`, `scantime`, `buggbm15189`,
+`bugrwt12821`, `textstyle`). The PC keeps moving through OS code, so they wait
+on task or scene context rather than crashing — the same limitation that stops
+Command-T being driven this way.
 
 For the ones that do not return, the PC keeps moving through OS code rather
 than sitting in a tight loop, so they are waiting on something — task or scene

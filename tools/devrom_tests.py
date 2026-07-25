@@ -47,16 +47,51 @@ FAILURE_ORACLE = 0x13E97834
 # started from a longer-lived session's NVRAM, so that group is
 # state-dependent rather than broken. They stay listed because which suites
 # need more context is itself a finding.
+# No-argument test entry points (84 exist in the development build). `status`
+# records what a forced call from a freshly calibrated machine does:
+#
+#   "passes"    returns, and the ROM never enters AnnounceNonDebugFailure
+#   "complains" returns, but the ROM reports failures - either a real defect in
+#               the emulated hardware or a test that needs setup we do not do
+#   "noreturn"  keeps the OS running with the PC moving through OS code but
+#               never comes back, so it waits on task or scene context; a
+#               forced call cannot drive these (see docs/dev-rom.md)
 SUITES: dict[str, dict[str, object]] = {
-    "datetime": {"address": 0x13E9DBFC, "symbol": "DateTimeUnitTests__Fv", "returns": True},
-    "cache": {"address": 0x13E9C824, "symbol": "CacheUnitTests__Fv", "returns": True},
-    "font": {"address": 0x13E9D488, "symbol": "FontUnitTests__Fv", "returns": True},
-    "announcement": {"address": 0x13E9D5B8, "symbol": "AnnouncementUnitTests__Fv", "returns": False},
-    "contact": {"address": 0x13E9CCA0, "symbol": "ContactUnitTests__Fv", "returns": False},
-    "datebook": {"address": 0x13E9C1EC, "symbol": "DatebookTaskUnitTests__Fv", "returns": False},
+    "datetime": {"address": 0x13E9DBFC, "symbol": "DateTimeUnitTests__Fv", "status": "passes"},
+    "cache": {"address": 0x13E9C824, "symbol": "CacheUnitTests__Fv", "status": "passes"},
+    "font": {"address": 0x13E9D488, "symbol": "FontUnitTests__Fv", "status": "passes"},
+    "rompristine": {"address": 0x13E948F4, "symbol": "CheckROMPristineTable__Fv", "status": "passes"},
+    "endianswap": {"address": 0x13E8E524, "symbol": "TestEndianSwapping__Fv", "status": "passes"},
+    "objectmap": {"address": 0x13E8E494, "symbol": "TestObjectMap__Fv", "status": "passes"},
+    "cliquetable": {"address": 0x13E89DFC, "symbol": "TestCliqueTable__Fv", "status": "passes"},
+    "fastenedstack": {"address": 0x13E899CC, "symbol": "TestFastenedStack__Fv", "status": "passes"},
+    "interchangetable": {"address": 0x13E8AE24, "symbol": "TestDynamicInterchangeTable__Fv", "status": "passes"},
+    "paths": {"address": 0x13E9C81C, "symbol": "PathsUnitTests__Fv", "status": "passes"},
+    "textmapping": {"address": 0x13E9C684, "symbol": "TextMappingUnitTests__Fv", "status": "passes"},
+    "objectname": {"address": 0x13E9DEDC, "symbol": "ObjectNameTests__Fv", "status": "passes"},
+    # Returns, but the ROM complains. Under investigation: both touch numeric
+    # formatting/scanning, so they are the most likely place for a genuine
+    # CPU-level difference to show up.
+    "fmtinteger": {"address": 0x13E8C564, "symbol": "TestFormattingInteger__Fv", "status": "complains"},
+    "scanfloat": {"address": 0x13E8CDE8, "symbol": "TestScanningFloatingPoint__Fv", "status": "complains"},
+    # Need context a forced call does not provide.
+    "announcement": {"address": 0x13E9D5B8, "symbol": "AnnouncementUnitTests__Fv", "status": "noreturn"},
+    "contact": {"address": 0x13E9CCA0, "symbol": "ContactUnitTests__Fv", "status": "noreturn"},
+    "datebook": {"address": 0x13E9C1EC, "symbol": "DatebookTaskUnitTests__Fv", "status": "noreturn"},
+    "fmtfixed": {"address": 0x13E8C7F4, "symbol": "TestFormattingFixed__Fv", "status": "noreturn"},
+    "fmtfloat": {"address": 0x13E8CD14, "symbol": "TestFormattingFloatingPoint__Fv", "status": "noreturn"},
+    "numeraldouble": {"address": 0x13E8C968, "symbol": "TestNumeralFromDouble__Fv", "status": "noreturn"},
+    "padprecision": {"address": 0x13E8CCD0, "symbol": "TestPadToMaxPrecision__Fv", "status": "noreturn"},
+    "lossofaccuracy": {"address": 0x13E8CC78, "symbol": "TestLossOfAccuracy__Fv", "status": "noreturn"},
+    "scaninteger": {"address": 0x13E8C748, "symbol": "TestScanningInteger__Fv", "status": "noreturn"},
+    "scanfixed": {"address": 0x13E8C8BC, "symbol": "TestScanningFixed__Fv", "status": "noreturn"},
+    "scantime": {"address": 0x13E8CEA4, "symbol": "TestScanningTime__Fv", "status": "noreturn"},
+    "buggbm15189": {"address": 0x13E8CBE0, "symbol": "TestBuggbm15189__Fv", "status": "noreturn"},
+    "bugrwt12821": {"address": 0x13E8CC3C, "symbol": "TestBugRWT12821__Fv", "status": "noreturn"},
+    "textstyle": {"address": 0x13E9D140, "symbol": "TextStyleUnitTests__Fv", "status": "noreturn"},
 }
 DEFAULT_SUITES = tuple(
-    name for name, suite in SUITES.items() if suite["returns"]
+    name for name, suite in SUITES.items() if suite["status"] == "passes"
 )
 
 # Scratch DRAM for the call stub and its result words. The harness hijacks the
@@ -92,6 +127,24 @@ def call_stub_words(target: int) -> list[int]:
         0x1000FFFF,                       # b    .   (park)
         0x00000000,                       # nop
     ]
+
+
+def config_xml(system: str) -> str:
+    """Return a MAME config that pins the RTC to its saved value.
+
+    The driver normally advances the RTC by the host wall-clock time that
+    passed while the machine was off, so a suite would see a different time of
+    day on every run. Freezing it keeps these checks reproducible.
+    """
+    return f"""<?xml version="1.0"?>
+<mameconfig version="10">
+    <system name="{system}">
+        <input>
+            <port tag=":RTC_RESUME" type="CONFIG" mask="1" defvalue="1" value="0" />
+        </input>
+    </system>
+</mameconfig>
+"""
 
 
 def calibration_script() -> str:
@@ -238,11 +291,20 @@ def run_mame(
     log_path: Path,
 ) -> bytes:
     """Run one headless MAME session and return its combined output."""
+    config_dir = nvram_dir.parent / "cfg"
+    config_dir.mkdir(exist_ok=True)
+    if args.rtc == "frozen":
+        (config_dir / f"{args.system}.cfg").write_text(
+            config_xml(args.system), encoding="utf-8"
+        )
+
     command = [
         str(args.mame),
         args.system,
         "-rompath",
         str(args.rompath),
+        "-cfg_directory",
+        str(config_dir),
         "-nvram_directory",
         str(nvram_dir),
         "-snapshot_directory",
@@ -356,8 +418,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="append",
         choices=sorted(SUITES),
         help=(
-            "suite to run; repeatable. Default: the suites that return in a "
-            f"bounded window ({', '.join(DEFAULT_SUITES)})"
+            "suite to run; repeatable. Default: every suite known to pass "
+            f"({len(DEFAULT_SUITES)} of {len(SUITES)})"
+        ),
+    )
+    parser.add_argument(
+        "--rtc",
+        choices=("frozen", "host"),
+        default="frozen",
+        help=(
+            "'frozen' (default) pins the resumed RTC to its saved value for "
+            "reproducible runs; 'host' keeps the driver's realistic behavior of "
+            "advancing it by elapsed host time"
         ),
     )
     parser.add_argument(

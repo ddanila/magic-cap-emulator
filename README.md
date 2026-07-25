@@ -85,7 +85,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap | [`pclink.md`](docs/pclink.md) |
 | Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 fetches and renders deterministic local HTTP | [`modem.md`](docs/modem.md) |
 | Variants | `datarover840` / `840f` (writable flash) / `840j` / `840d` (1998-04-07 development ROM) all build and verify; `840d` also boots to the workbench | [`rom-layout.md`](docs/rom-layout.md), [`dev-rom.md`](docs/dev-rom.md) |
-| OS self-tests | Three of the development ROM's own unit-test suites (date/time, cache, font) run against the emulated hardware and report no complaint, judged by the oracle the ROM names itself | [`dev-rom.md`](docs/dev-rom.md) |
+| OS self-tests | Twelve of the development ROM's own unit-test suites — including `CheckROMPristineTable`, the OS verifying the ROM it runs from — execute against the emulated hardware and report no complaint, judged by the oracle the ROM names itself | [`dev-rom.md`](docs/dev-rom.md) |
 
 Each subsystem has a headless regression under [`tools/`](tools/); the full list and expected checkpoints are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
 
@@ -107,15 +107,19 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
 
 ### Open questions
 
-- **Populate the development ROM's test-run list.** Three of its OS-level unit
-  tests already run as acceptance checks (see below). The bigger prize is
-  **Command-T**, General Magic's own full test run: `TestMachine_RunAllTests`
-  executes and reboots announcing completion, but it skips every suite because
-  the tests-to-run list is empty, even though the test machine and all suite
-  objects are live. Filling that list (`TestMachine_FillErUp`,
-  `AddTestToRunOne`, the per-suite `UpdateTestsToRun`, with method indices from
-  the SDK's `.dx` database) would turn the vendor's own acceptance run into
-  ours ([`dev-rom.md`](docs/dev-rom.md)).
+- **Run Command-T through the OS's own scheduler.** Twelve of the development
+  ROM's unit tests already pass as acceptance checks, but they are the ones
+  that never yield: forcing the PC cannot drive anything that waits on task or
+  scene context, which is why **Command-T** — General Magic's full test run —
+  and fourteen other suites stay out of reach. The fix is to queue the call via
+  the OS's deferred-call path (`Timer_RunSoonIn`, `Timer_RunSoonAt`,
+  `Semaphore_RunSoon`) and let the scheduler run it, taking method indices from
+  the SDK's `.dx` database ([`dev-rom.md`](docs/dev-rom.md)).
+- **Explain 66 ROM complaints.** `TestFormattingInteger` and
+  `TestScanningFloatingPoint` return but report 29 and 37 failures, stably.
+  Either the emulated hardware is wrong where those tests reach, or they need
+  setup a forced call skips. Capturing the caller of `AnnounceNonDebugFailure`
+  identifies the failing check.
 
 ## Resources
 
