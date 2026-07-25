@@ -318,6 +318,60 @@ points the same way. The suites themselves are compiled into the ROM — the Mac
 SDK ships no test packages — so no extra input is needed, only the right
 context. That context is the test machine.
 
+## Running whole suites: `RunTests`
+
+Calling a no-argument test body directly only works for tests that need no
+setup, and it cannot reach the 28 `*TestSuite_*` classes at all. There is a
+better entry point, and it is the one the test machine itself uses:
+
+```c
+suite = ReadReferenceField(System_iBasicSystemTestList, offset);
+RunTests(System_iTestMachine, suite, index);   /* 0x13e97c90 */
+```
+
+Three things make this the right lever:
+
+- **Index 0 runs the entire suite.** Driving the formatter suite with index 0
+  entered `FormatterTestSuite_RunTest` seven times and ran every test body
+  behind it; index 1 ran only `TestFormattingInteger`, index 2 only
+  `TestFormattingFixed`.
+- **It returns.** `TestMachine_RunOneTest` (`0x13e98188`) wraps the same
+  `RunTests` call with `TestsComplete`, and that never comes back to an
+  injected frame — a forced call parks inside it. `RunTests` on its own
+  completes in about sixty frames.
+- **Going through the suite installs the fixture.** The formatter tests report
+  failures when their bodies are called naked and none when run this way, which
+  is the same effect that made those 66 complaints disappear.
+
+Suite objects live at offsets `0x04` upward in the list object; `0x24` is the
+formatter suite. One caveat found the hard way: on a freshly calibrated boot
+the test machine and its list are not resolvable at frame 900 — the read
+returns nothing — so the call has to happen later. 2400 works and is the
+default.
+
+```sh
+python3 tools/devrom_suites.py                 # every suite slot
+python3 tools/devrom_suites.py --offset 0x24   # one suite
+```
+
+Each suite runs in its own boot from a copy of one calibrated NVRAM, with the
+RTC pinned, and is judged by the same oracle as the individual tests: the suite
+must return without entering `AnnounceNonDebugFailure`.
+
+Sweeping every slot gives **13 of 16 suites running clean with no complaint**,
+and each suite is several tests — the formatter suite alone runs seven:
+
+| Result | Slots |
+|---|---|
+| Ran clean | `0x08`, `0x0c`, `0x14`, `0x18`, `0x1c`, `0x20`, `0x24`, `0x28`, `0x30`, `0x34`, `0x38`, `0x3c`, `0x40` |
+| Did not return | `0x04`, `0x10`, `0x2c` |
+
+No suite reported a single complaint, which is the meaningful part: thirteen
+suites of the OS authors' own tests exercise the emulated machine and find
+nothing wrong with it. The three that do not return are the next thread —
+they behave like the individual tests that wait on task or scene context,
+so they may need the scheduler route rather than a forced call.
+
 ## The test machine and Command-T
 
 `TestSite` is not reachable as a scene by the obvious UI routes (taps on the

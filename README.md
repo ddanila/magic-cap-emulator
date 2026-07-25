@@ -87,7 +87,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap | [`pclink.md`](docs/pclink.md) |
 | Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 fetches and renders deterministic local HTTP | [`modem.md`](docs/modem.md) |
 | Variants | `datarover840` / `840f` (writable flash) / `840j` / `840d` (1998-04-07 development ROM) all build and verify; `840d` also boots to the workbench | [`rom-layout.md`](docs/rom-layout.md), [`dev-rom.md`](docs/dev-rom.md) |
-| OS self-tests | Fourteen of the development ROM's own unit-test suites — including `CheckROMPristineTable`, the OS verifying the ROM it runs from — execute against the emulated hardware and report no complaint, judged by the oracle the ROM names itself | [`dev-rom.md`](docs/dev-rom.md) |
+| OS self-tests | Fourteen of the development ROM's own unit tests — including `CheckROMPristineTable`, the OS verifying the ROM it runs from — plus 13 of its 16 whole test suites driven through `RunTests` the way the test machine drives them, all reporting no complaint against the oracle the ROM names itself | [`dev-rom.md`](docs/dev-rom.md) |
 
 Each subsystem has a headless regression under [`tools/`](tools/); the full list and expected checkpoints are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
 

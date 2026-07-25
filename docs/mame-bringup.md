@@ -215,6 +215,7 @@ python3 tools/pclink_regression.py
 python3 tools/modem_bridge.py --probe
 python3 tools/modem_bridge.py --acceptance
 python3 tools/devrom_tests.py
+python3 tools/devrom_suites.py
 ```
 
 The serial harness writes generated configuration and logs under
