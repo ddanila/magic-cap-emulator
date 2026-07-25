@@ -211,7 +211,8 @@ python3 tools/telecom_regression.py --no-loopback
 python3 tools/builtin_modem_regression.py \
   --nvram-source /path/to/a/passing/combined-browser/run/nvram
 python3 tools/battery_regression.py
-python3 tools/magicbus_probe.py --require-clean
+python3 tools/magicbus_probe.py
+python3 tools/ir_probe.py --require-clean
 python3 tools/tx39_regression.py
 python3 tools/pccard_regression.py
 python3 tools/pclink_regression.py

@@ -108,6 +108,14 @@ path as well as the underlying DMA registers. Magic Bus discovery and
 bidirectional keyboard traffic are covered by
 [`tools/magicbus_probe.py`](tools/magicbus_probe.py).
 
+- **Route IrDA traffic to a peer.** Beaming does not use Dino's IR module —
+  that block is consumer-IR timing plus the Betty reset GPIO. IrDA rides a
+  Dino UART in pulsed mode (`kUartPulseLow6CLockMask`), which the driver
+  already round-trips, and the OS's IrLAP stack initialises on every boot but
+  never opens the link without a user beaming. What is missing is an IR
+  endpoint for pulsed-mode traffic and a way to drive the Beam window
+  ([`irda.md`](docs/irda.md)).
+
 ### Open questions
 
 - **Run Command-T through the OS's own scheduler.** Fourteen of the development
