@@ -226,8 +226,8 @@ The driver resumes the RTC by adding the host wall-clock time that passed while
 the machine was off, which is what a real communicator does. For a headless
 check that means a different emulated time of day on every run, and that
 changes results: a full pass over the suites on the host clock failed six of
-twelve with "did not return", while the same set with the clock pinned passed
-all twelve.
+twelve with "did not return", while three consecutive passes with the clock
+pinned each took all twelve.
 
 `datarover840d` therefore exposes a **RTC on resume** machine configuration
 setting, and the harness selects `Freeze at saved value` by default
