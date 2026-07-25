@@ -105,10 +105,16 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
   built-in modem, which needs a provider configured for it. That DSP is why the
   TX39 `MADD` extension exists.
 
-The machine stays `MACHINE_NOT_WORKING` while unmodeled hardware remains —
-incomplete MagicBus peripheral replies still make the ROM's background actor
-warn about an attached device in long sessions, and the built-in software modem
-is not yet driven. The power/wake path has a two-process headless acceptance test
+- **Acknowledge Magic Bus address assignment.** Long sessions still warn about
+  an attached device. The mechanism is now pinned down — the OS broadcasts
+  `MagicBus_AssignMagicBusAddress` every half minute, nothing answers, and the
+  fifth recorded failure posts the alert — and three register-level fixes were
+  tried and ruled out. What is missing is any Magic Bus peripheral to
+  acknowledge the assignment
+  ([`memory-map.md`](docs/memory-map.md#the-attached-device-warning-diagnosed-but-not-fixed)).
+
+The machine stays `MACHINE_NOT_WORKING` while unmodeled hardware remains — the
+Magic Bus warning above, and the built-in software modem is not yet driven. The power/wake path has a two-process headless acceptance test
 in [`tools/power_regression.py`](tools/power_regression.py), and sound now
 covers both the unbuffered and buffered paths.
 

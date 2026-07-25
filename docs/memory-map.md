@@ -162,6 +162,66 @@ boot path:
 These are deliberately boot-oriented behaviors, not a claim that all Dino
 timing and interrupt semantics are complete.
 
+## Magic Bus
+
+Magic Bus is Dino's peripheral bus for external accessories, at `0x0e0`-`0x0fc`:
+`mbusControl1`, `mbusControl2`, the DMA start/length/count registers,
+`mbusCommand` and `mbusData`. Bits 31:29 of `mbusControl1` are status —
+`kMbusEnabledStatusMask`, `kMbusEmptyStatusMask` and `kMbusIntStatusMask` — and
+the driver now synthesises them rather than returning whatever the OS last
+wrote, since a write must not be able to set a status bit. `TestMBReqLine`
+(`0x13c28364`) reads bit 29, which is the bus request line.
+
+The transfer itself is synchronous in the driver: enabling the module shifts
+the byte out immediately, so it reports transmit-buffer-available and
+`kIntMbusEmptyMask` together, plus `kIntMbusDmaEndMask` when transmit DMA is
+enabled.
+
+### The "attached device" warning, diagnosed but not fixed
+
+Long sessions post *"A problem happened while using an attached device"* over
+the desk. Counting entries into the ROM's own Magic Bus routines on the release
+build shows the mechanism precisely, once every 30 seconds or so:
+
+```text
+GetPollingCommand -> MagicBus_AssignMagicBusAddress -> IssueMagicBusCommand
+                  -> MagicBus_HandleMagicBusFailure
+```
+
+`MagicBusActor_Main` then checks `TotalFailuresExceedLimit`, and once the count
+passes the ROM's limit of five it posts the alert and calls
+`ResetMagicBusForPeripheralAttachment`. Nothing else is involved:
+`DebounceMBReqLineToStartUpMagicBus`, `HandlerMagicBusMBReqLine`,
+`GetPeripheralInfo` and `InitMagicBusPeripheral` are never entered, and neither
+is the low-level `MagicBusError` path. So the OS is not reacting to a phantom
+request line — it broadcasts an address assignment on its own schedule and
+treats the silence as a peripheral failure.
+
+Three fixes were tried against that and **none changed the failure count**:
+
+1. making `kMbusIntStatusMask` always read clear, so `TestMBReqLine` reports no
+   request — polling continues regardless, so this was not the gate;
+2. reporting the shifter as drained (`kIntMbusEmptyMask`, plus the DMA-end bit)
+   as well as transmit-buffer-available, in case the OS was waiting for the
+   transmission to finish;
+3. raising `kIntMbusRxErrMask` to say explicitly that nobody answered. This one
+   was reverted: asserting a receive error on an idle bus is not defensible, and
+   it did not help either.
+
+The first two are kept because they are faithful to the documented register
+behavior on their own terms. What remains is that **the driver has no Magic Bus
+peripheral at all**, so an address assignment can never be acknowledged. Two
+ways forward: model a minimal slave that acknowledges the assignment through
+`kIntMbusReceiveMask` and the `mbusData` path that
+`HandlerMagicBusCommandDone` services, which needs the wire format reverse
+engineered; or find whatever real hardware presents on an empty bus that stops
+the OS counting failures. Without hardware the second cannot be settled by
+inspection, so the first is the practical route.
+
+Note that these addresses are release-build addresses. The development ROM
+shifts them, so a probe built for one image silently measures nothing on the
+other.
+
 ## Glacier blocks
 
 The monitor initializes two custom 16-bit GPIO/interrupt blocks at
