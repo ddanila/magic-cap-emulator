@@ -116,8 +116,10 @@ Boot first shows a small bare top hat. That is only the early splash. The
 interactive welcome scene is the larger hat inside a dark circle with
 `Magic Cap™` and `Touch the screen to begin`. Click it, then click the three
 calibration targets in order: upper-left, lower-right, center. The verified
-result is the Magic Cap 3.1.2j workbench. A main-battery warning can appear
-over the desk while the battery model is still being refined.
+result is the Magic Cap 3.1.2j workbench. **Machine Configuration** carries
+**Main battery** and **Backup battery** settings for exercising the OS's
+low-power paths; the defaults are healthy readings taken from the ROM's own
+calibration records (see [`power-wake.md`](power-wake.md#battery-levels)).
 
 `-lightgun_device mouse` maps the host pointer to the resistive pen axes.
 Add `-nokeepaspect` for interactive use: SDL normalizes the pointer over the
@@ -186,6 +188,7 @@ python3 tools/sound_regression.py
 python3 tools/sound_regression.py --checkpoint dma
 python3 tools/telecom_regression.py
 python3 tools/telecom_regression.py --no-loopback
+python3 tools/battery_regression.py
 python3 tools/tx39_regression.py
 python3 tools/pccard_regression.py
 python3 tools/pclink_regression.py

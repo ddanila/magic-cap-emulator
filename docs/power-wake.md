@@ -135,24 +135,73 @@ in the SDK headers):
 `InitObjectRuntime` read it — the code is the OS's primary cross-boot signal,
 so it is worth watching in any wake investigation.
 
-## Open lead: the battery and power-supply model
+## Battery levels
 
-Every development-ROM boot posts *"Your communicator's backup battery is almost
-out of power"* over the desk, and longer release sessions can post the
-main-battery warning. The driver already answers the two battery ADC channels —
-`touch_adc_value()` returns fixed readings for Betty ADC inputs 24 (main) and
-28 (backup), chosen to sit between the Apollo calibration table's low and full
-thresholds — so the values, the channel mapping, or the thresholds are not
-matching what the OS expects, or the complaint comes from a different signal
-entirely.
+The OS samples two Betty ADC channels — 24 for the main cells and 28 for the
+backup cell, selected by `MainBatteryServer_InitAtoDChannel` (`0x13c399ac`) and
+`BackupBatteryServer_InitAtoDChannel` (`0x13c39ad0`).
 
-This is worth more than cosmetic cleanup: `MainBatteryIsLow` is broadcast to
+`BatteryServer_CalculateLevel` (`0x13c35988`) turns a reading into a percentage
+in 16.16 fixed point: it clamps below the object's "empty" field and above its
+"full" field, and otherwise returns `100 * (reading - empty) / (full - empty)`.
+Those fields come from a **calibration record** that
+`*_InitializeBatteryFields` picks through a jump table indexed by
+`SibServerBettyRevision`, which returns 1 for the revision `0x1002` the driver
+reports. Decoding the selected records — the words are counts scaled by 4096 —
+gives the thresholds the model has to satisfy:
+
+| Channel | Record | Empty | Low | Full |
+|---|---|---:|---:|---:|
+| Main, 24 | `0x13e96dc0` | 80 | 320 | 800 |
+| Backup, 28 | `0x13e96e20` | 400 | 816 | 1600 |
+
+**The bug this explains.** The driver answered 340 on the backup channel —
+*below* that channel's empty point — so the OS computed 0% and posted a
+backup-battery warning over the desk on every development-ROM boot. The healthy
+default is now 1000, which clears the 816 warning point with margin. The backup
+channel's full point sits above the 10-bit value the ADC returns, so a healthy
+cell reads mid-scale rather than 100%; the main channel's full point is 800, so
+a full main cell does report 100%.
+
+**Levels are selectable** through a **Main battery** / **Backup battery**
+machine configuration, so the low paths can be exercised without waiting for a
+cell to drain. Each setting is positioned inside a regime the record defines:
+
+| Setting | Reading | Observed behavior |
+|---|---:|---|
+| Main Full | 800 | boots normally; 100% |
+| Main Low | 200 | between empty and the warning point — in testing the machine stayed on the welcome scene rather than reaching the desk, which is not yet explained |
+| Main Empty | 60 | below empty |
+| Backup Good | 1000 | no warning |
+| Backup Low | 700 | between empty and the warning point; no visible change on the desk |
+| Backup Empty | 300 | the OS posts *"your communicator's backup battery is completely out of power"* |
+
+The exact readings at which the OS switches between its "almost out of power"
+and "completely out of power" wording are not pinned down: 300 produces the
+"completely" alert while 350 and 700 produce no visible alert at all, which does
+not follow from the percentage formula alone. Treat the table above as measured
+behavior rather than a complete model of the OS's messaging.
+
+`tools/battery_regression.py` locks this in by booting twice and requiring the
+OS to react — a healthy desk and an empty-backup desk must produce different
+screen checksums:
+
+```sh
+python3 tools/battery_regression.py
+```
+
+The control matters here more than usual. A model that always reported a
+healthy cell would pass a one-sided check, which is exactly how the wrong
+backup value survived until now.
+
+Why this is worth more than cosmetic cleanup: `MainBatteryIsLow` is broadcast to
 roughly a dozen servers, including `Modem_MainBatteryIsLow`,
 `PCLinkServer_MainBatteryIsLow`, `PhoneServer_MainBatteryIsLow`,
 `PostOffice_MainBatteryIsLow`, `SerialServer_MainBatteryIsLow`, and
 `DisplayServer_MainBatteryIsLow`. A wrongly-low battery state can therefore
-perturb subsystems that have nothing to do with power, so it is a plausible
-confounder for any flaky acceptance run.
+perturb subsystems that have nothing to do with power.
+
+## Still unmodelled around the power supply
 
 Where to look, all in the release build unless noted:
 
