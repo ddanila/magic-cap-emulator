@@ -126,7 +126,7 @@ SIB stream it. `SibServerStartSoundOut` (`0x13c22428`) and the queued
 | Bit(s) | Name | Meaning |
 |---|---|---|
 | 31 | `kSibSoundDmaOnceMask` | one-shot |
-| 30 | `kSibSoundDmaLoopMask` | restart at the buffer start on completion |
+| 30 | `kSibSoundDmaLoopMask` | explicit loop-mode flag |
 | 29:18 | `kSibSoundDmaPtrMask` | current position, in 32-bit words, written back by hardware |
 | 17, 16 | `kSibEnSoundRxDmaMask`, `kSibEnSoundTxDmaMask` | channel enables |
 | 15:0 | telecom equivalents | the same fields for the telecom channel |
@@ -139,11 +139,15 @@ most significant first, exactly like the hold register.
 The driver streams one word per sound tick while transmit DMA is enabled,
 raising `kIntSoundDmaPtrIncMask` (`interrupt1` bit 18) per word,
 `kIntSoundDmaHalfMask` (bit 22) at the halfway point, and
-`kIntSoundDmaEndMask` (bit 21) at the end. A looping buffer wraps; a one-shot
-buffer clears its own enable, which is what the ROM's boot chime uses. The
-pointer field is written back so `SibServerSyncSoundOutDma` can read playback
-progress, and a write to `sibDMA` keeps the hardware-owned pointer rather than
-taking one from the CPU.
+`kIntSoundDmaEndMask` (bit 21) at the end. With neither mode bit set, the ROM
+uses the buffer as a continuously serviced two-half ring: its half/full
+handlers refill the halves and the hardware wraps without clearing transmit
+enable. An explicit one-shot clears its own enable at the end; explicit loop
+mode also remains enabled. This distinction matters: stopping every transfer
+that lacked `kSibSoundDmaLoopMask` stranded Magic Cap's speaker state during
+the development ROM's moving-sound test. The pointer field is written back so
+`SibServerSyncSoundOutDma` can read playback progress, and a write to `sibDMA`
+keeps the hardware-owned pointer rather than taking one from the CPU.
 
 ## SIB telecom DMA
 

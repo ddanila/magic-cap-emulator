@@ -368,9 +368,9 @@ and each suite is several tests — the formatter suite alone runs seven:
 
 No suite reported a single complaint, which is the meaningful part: thirteen
 suites of the OS authors' own tests exercise the emulated machine and find
-nothing wrong with it. The three that do not return are the next thread —
-they behave like the individual tests that wait on task or scene context,
-so they may need the scheduler route rather than a forced call.
+nothing wrong with it. The three that do not return behave like the individual
+tests that wait on task or scene context. The scheduler-driven Command-T run
+below resolves that limitation and completes all 16.
 
 ## The test machine and Command-T
 
@@ -408,26 +408,68 @@ installing first.
 | `TestSite_iLimitTestSuite` | `0x000340a4` | `0x00032bdc` |
 | `TestSite_iUnitTestTextSuite` | `0x000340ec` | `0x000331cc` |
 
-`TestMachine_RunAllTests(testMachine)` **does run**: forcing it makes the OS
-work for a few hundred frames, then show *"Cleaning up…"* and reboot — exactly
-what `RebootAnnouncingCommandTFinished` promises. It never reaches
-`AnnounceNonDebugFailure`. But it reboots too quickly to have run 28 suites,
-and the disassembly says why: it fetches a count and branches past the whole
-loop when that count is below one (`sltu` against 1 at `0x13e98460`). That
-matches the build's `No Tests` and `No Test Suites` strings — the machine's
-*tests-to-run list* is empty, even though the suite objects exist.
+The tempting forced-call route was misleading. `TestMachine_RunAllTests`
+returned almost immediately because its mutable tests-to-run list was empty,
+while `TestMachine_RunTestSuite` parked as soon as a test yielded. The
+canonical Command-T method supplies the missing intent directly:
+`TestMachine_CommandTea` dispatches
+`TestMachine_RunTestSuites(testMachine, System_iBasicSystemTestList)`.
 
-`TestMachine_RunTestSuite(testMachine, suite)` with `iUnitTestTextSuite` in
-`$a1` behaves differently: no reboot, no complaint, and the OS keeps working
-well past 3,600 frames without returning — the same shape as the unit tests
-that need more context.
+### Native scheduler harness
 
-So the remaining unlock is **populating the run list**, not reaching a scene.
-The candidates are `TestMachine_FillErUp`, `AddTestToRunOne__FP17RAMReferenceDummyPv`,
-and the per-suite `*_UpdateTestsToRun` methods; the `.dx` debugger database
-should give the method indices and the list object's field layout. With a
-populated list, `RunAllTests` becomes the acceptance run General Magic itself
-used, and the reboot announcement becomes its pass signal.
+`tools/devrom_command_t.py` runs that method in its real task context:
+
+```sh
+cd "$HOME/fun/magic-cap-emulator"
+python3 tools/devrom_command_t.py
+```
+
+By default the harness calibrates a fresh `datarover840d`, copies its NVRAM
+into an isolated run directory under
+`~/fun/magic-cap-assets/runtime/devrom-command-t/`, then starts Command-T.
+`--nvram-source DIR` can reuse an already calibrated NVRAM without modifying
+the source. ROMs, NVRAM, Lua scripts, screenshots, and logs remain outside the
+Git checkout.
+
+This is deliberately not another forced call:
+
+1. The harness waits until the CPU is in the ordinary `Doze`/`DeepDoze` entry
+   path rather than sampling a transient interrupt or DRAM-refresh context.
+2. A short injected stub calls
+   `Semaphore_RunSoon(false, bootstrap, System_iTestMachine)`, jumps back to
+   the sampled idle PC so no MIPS branch-delay target remains pending, then
+   Lua restores registers 1–31, HI, LO, SR, and PC exactly.
+3. The real system run queue invokes `bootstrap` at a dispatcher boundary.
+   It calls `Semaphore_RunSoon(true, callback, testMachine)`, attaching the
+   final completion to the current user actor.
+4. The user queue invokes `callback`, which calls
+   `TestMachine_CommandTea` and returns normally through both scheduler
+   frames.
+
+`CompletionFunction` is a MIPS transition-vector pointer, not a raw code
+address: word zero is the entry PC and word one is `$gp`. Both descriptors and
+their code live at user-accessible low-DRAM addresses; the initial injection
+alone uses the uncached kseg1 alias. `FlushInstructionCache` makes those
+instructions visible before the system queue receives the descriptor.
+
+The acceptance oracles are ROM entry points, not timing guesses. The run must
+enter `TestMachine_RunTestSuites` once, enter `RunTests` 16 times, reach
+`TestsComplete` once, return from `TestMachine_CommandTea`, and never enter
+`AnnounceNonDebugFailure`. A verified result is:
+
+```text
+queued=1 restored=1 bootstrap=1 user_queued=1 entered=1 returned=1
+run_suites=1 run_tests=16 complete=1 complaints=0 reboot=0
+```
+
+This run also exposed a hardware-model bug that the forced suites could not:
+BasicTestSuite test 17, `play moving sound`, completed its first five sounds
+and then waited forever for `Speaker_Busy` to clear. Dino sound DMA had
+stopped after its first buffer even though the ROM had not requested
+`kSibSoundDmaOnceMask`. The normal mode is a continuously serviced two-half
+ring; only explicit one-shot mode stops at the end. With that corrected,
+Command-T serviced 107 half and 106 full sound interrupts, left no active
+sounds, completed all 16 suites, and reported no complaint.
 
 ## Reproducing the comparison
 

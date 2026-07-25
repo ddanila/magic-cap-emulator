@@ -220,6 +220,7 @@ python3 tools/modem_bridge.py --probe
 python3 tools/modem_bridge.py --acceptance
 python3 tools/devrom_tests.py
 python3 tools/devrom_suites.py
+python3 tools/devrom_command_t.py
 ```
 
 These automated launchers select MAME's SDL `dummy` video and audio drivers as
@@ -312,6 +313,13 @@ two number-format tests through the ROM's own formatter-suite wrapper so their
 required locale setup is present. [`dev-rom.md`](dev-rom.md) covers the
 two-phase design and the suites that need more context than a forced call
 provides.
+
+`tools/devrom_command_t.py` is the full scheduler-level acceptance run. It
+queues the canonical `TestMachine_CommandTea` through the real system and user
+run queues, restores the interrupted CPU context, and requires all 16 basic
+suites plus `TestsComplete` to return without a ROM complaint. It also covers
+the continuous buffered-sound ring through the moving-sound test. A fresh
+calibrated NVRAM is the default; use `--nvram-source` to copy and reuse one.
 
 **Machine configuration → RTC on resume.** Resuming battery-backed state
 normally advances the RTC by the host wall-clock time that passed while the
