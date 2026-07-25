@@ -117,9 +117,17 @@ interactive welcome scene is the larger hat inside a dark circle with
 `Magic Cap™` and `Touch the screen to begin`. Click it, then click the three
 calibration targets in order: upper-left, lower-right, center. The verified
 result is the Magic Cap 3.1.2j workbench. **Machine Configuration** carries
-**Main battery** and **Backup battery** settings for exercising the OS's
-low-power paths; the defaults are healthy readings taken from the ROM's own
-calibration records (see [`power-wake.md`](power-wake.md#battery-levels)).
+**Main battery**, **Backup battery**, **AC adapter** and **Battery cover**
+settings for exercising the OS's power paths; the defaults are healthy readings
+taken from the ROM's own calibration records, on battery power with the cover
+fitted (see [`power-wake.md`](power-wake.md#battery-levels)). Removing the cover
+before power-on leaves the machine unable to bring the display up, which is why
+the regression toggles it mid-session.
+
+Machine configuration changes made interactively — or from a Lua script —
+persist into the cfg directory, so a stray setting can silently affect later
+runs. Every headless harness here passes its own `-cfg_directory` for that
+reason.
 
 `-lightgun_device mouse` maps the host pointer to the resistive pen axes.
 Add `-nokeepaspect` for interactive use: SDL normalizes the pointer over the

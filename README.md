@@ -79,7 +79,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | Display | 480×320 2bpp framebuffer renders splash → welcome → workbench | [`memory-map.md`](docs/memory-map.md) |
 | Touch | Pointer input drives the touch macro incl. three-point calibration; desk is mouse-navigable | [`betty-registers.md`](docs/betty-registers.md) |
 | Persistence & power | Battery-backed DRAM + RTC as NVRAM; power-button suspend/wake across a retained-RAM relaunch | [`power-wake.md`](docs/power-wake.md) |
-| Battery levels | Both ADC channels answer within the ROM's own calibration thresholds, so the spurious backup-battery warning is gone; levels are selectable to exercise the low paths | [`power-wake.md`](docs/power-wake.md#battery-levels) |
+| Battery & supply inputs | Both ADC channels answer within the ROM's own calibration thresholds, so the spurious backup-battery warning is gone; battery levels, AC adapter and battery cover are selectable, and removing the cover raises the IO interrupt the OS services | [`power-wake.md`](docs/power-wake.md#battery-levels) |
 | Sound | ROM's startup tone (unbuffered hold register) plus buffered SIB sound DMA: the OS's boot chime streams from DRAM with half/end interrupts and pointer writeback | [`betty-registers.md`](docs/betty-registers.md) |
 | SIB telecom DMA | The built-in modem's data path: shared `sibDMA` low half, lockstep rx/tx pointer, hardware loopback, half/end/pointer interrupts | [`betty-registers.md`](docs/betty-registers.md) |
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
@@ -93,11 +93,12 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
 
 ### Remaining work
 
-- **The rest of the power supply.** Battery levels are modelled, but
-  `PowerSupplyGen2MFS` also gates the LCD, IR, sound, MagicBus and modem Vcc
-  rails and reports the battery cover, charger and AC adapter, none of which the
-  driver answers yet. Entry points and header masks are in
-  [`power-wake.md`](docs/power-wake.md#still-unmodelled-around-the-power-supply).
+- **Act on the power-supply outputs.** The charger and the LCD, IR, sound,
+  MagicBus and modem Vcc rails round-trip through `mfioDataOutput`, so the OS
+  reads back what it wrote, but nothing acts on them: LCD power off does not
+  blank the display and the charger does not recharge the modelled cells. No ROM
+  behavior observed so far depends on it
+  ([`power-wake.md`](docs/power-wake.md#outputs-the-os-writes)).
 - **Drive the built-in software modem over telecom DMA.** The data path is
   modelled and has a loopback regression, but nothing has run the ROM's V.32
   DSP across it yet — the OS only programs telecom DMA when dialling with the

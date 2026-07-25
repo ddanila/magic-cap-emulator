@@ -201,6 +201,62 @@ roughly a dozen servers, including `Modem_MainBatteryIsLow`,
 `DisplayServer_MainBatteryIsLow`. A wrongly-low battery state can therefore
 perturb subsystems that have nothing to do with power.
 
+## External power and the battery cover
+
+`PowerSupplyGen2MFS` reads two more inputs, and both are now modelled:
+
+| Signal | Accessor | Register | Bit | Sense |
+|---|---|---|---|---|
+| AC adapter attached | `PowerSupplyGen2MFS_ACAdapterAttached` (`0x13c3b0d4`) | `powerControl` `0x1c4` | 30 (`kPowerInterruptStatusMask`) | 1 = attached |
+| Battery cover fitted | `PowerSupplyGen2MFS_BatteryCoverAttached` (`0x13c3b118`) | `ioControl` `0x180` | 2 | **inverted** — the bit is set while the cover is off |
+
+The cover switch is wired to IO interrupt 2 (`Gen2MFS.asm.h`:
+`kMainBatteryCoverPositive` = `kioPositiveInterrupt2`,
+`kIntIOMainCoverOpenPosMask` = `kIntIOInt2PosMask`), so its edges latch in
+`interrupt5` bit 9 when the cover comes off and bit 2 when it goes back on,
+which is what `MainBatteryCoverPositive` (`0x13c3aa1c`) and its negative
+counterpart service. Both signals are exposed as an **AC adapter** /
+**Battery cover** machine configuration, defaulting to a machine running on its
+own cells with the cover fitted — which is what the boot path expects, and what
+the driver reported implicitly before.
+
+Note that `PowerDownDevice` (`0x13c3a550`) reads both: it leaves its wait loop
+as soon as `powerControl` bit 30 is set, and otherwise keeps retrying while
+`ioControl` bit 2 says the cover is off. The defaults keep that loop
+terminating exactly as before.
+
+Observed behavior:
+
+| Change | Effect |
+|---|---|
+| Cover removed **while the desk is up** | The OS reacts — 163 pixels change in the name-bar region, deterministically. Covered by `tools/battery_regression.py` |
+| Cover removed **before power-on** | The machine never brings the display up. Reasonable for hardware whose cover holds the cells, so the harness always toggles mid-session instead |
+| AC adapter attached | No observable difference found — not at boot, and not in the wording of the backup-battery alert, despite that alert mentioning being unplugged. The input is modelled because the ROM reads it; no behavior has been demonstrated |
+
+## Outputs the OS writes
+
+The charger and the supply rails are outputs, and the driver already round-trips
+them: `mfioDataOutput` (`0x184`) stores what the OS writes and reads it back, so
+`PowerSupplyGen2MFS_BatteryChargerEnabled`, `VccLCDEnabled` and the rest observe
+their own settings. `Gen2MFS.asm.h` names the pins:
+
+| MFIO | Signal |
+|---|---|
+| 26 | DRAM Vcc on |
+| 19 | Li-ion status (input) |
+| 18 | Vpp on, card programming voltage |
+| 17 | LCD power |
+| 16 | MagicBus Vcc off |
+| 2 | Card interrupt |
+| 1 | Charger enable |
+| 0 | Telecom ring-detect status (input) |
+
+What is deliberately **not** modelled is the *effect* of those outputs: turning
+LCD power off does not blank the emulated display, and the charger does not
+change the battery readings over time. Nothing in the ROM's behavior so far
+depends on it, and guessing at it would risk the display and sleep paths that
+already work.
+
 ## Still unmodelled around the power supply
 
 Where to look, all in the release build unless noted:

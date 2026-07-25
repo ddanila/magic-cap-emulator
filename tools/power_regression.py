@@ -25,6 +25,11 @@ POWER_STOP_CPU = 0x00000010
 POWER_VCC_ON = 0x00000001
 DEEP_DOZE_START = 0x13C3B28C
 DEEP_DOZE_END = 0x13C3B450
+# Plain Doze stops the CPU here instead of running DRAM self-refresh.  Which
+# routine the retained shutdown ends in depends on the battery model: with a
+# healthy backup cell the OS keeps DRAM alive through DeepDoze, and with a cell
+# it believes is dead there is nothing to retain, so it takes plain Doze.
+DOZE_STOP = 0x13C3B270
 WAIT_FOR_POWER_DOWN = 0x13C3B1C8
 CHECKPOINT_PATTERN = re.compile(
     rb"POWER_CHECK ([A-Z_]+) "
@@ -356,9 +361,14 @@ def run_regression(args: argparse.Namespace) -> int:
         return _failure("warm DeepDoze did not enable the on-button", run_dir)
     if not (
         DEEP_DOZE_START <= cleanup_doze_a[0] < DEEP_DOZE_END
-        and cleanup_doze_b[0] == 0x13C3B270
+        and (
+            cleanup_doze_b[0] == DOZE_STOP
+            or DEEP_DOZE_START <= cleanup_doze_b[0] < DEEP_DOZE_END
+        )
     ):
-        return _failure("retained shutdown did not advance to Doze", run_dir)
+        return _failure(
+            "retained shutdown did not stop the CPU in a doze routine", run_dir
+        )
     if (
         final_sleep_a[0] != WAIT_FOR_POWER_DOWN
         or final_sleep_b[0] != WAIT_FOR_POWER_DOWN

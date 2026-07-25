@@ -42,13 +42,39 @@ class ScriptTests(unittest.TestCase):
 
 
 class CheckpointTests(unittest.TestCase):
-    def test_parses_a_screen_checksum(self) -> None:
-        output = b"BATTERY_CHECKPOINT SCREEN=54C0E76A\n"
+    def test_parses_both_checkpoints(self) -> None:
+        output = (
+            b"BATTERY_CHECKPOINT WHEN=before SCREEN=54C0E76A\n"
+            b"BATTERY_COVER_REMOVED\n"
+            b"BATTERY_CHECKPOINT WHEN=after SCREEN=58C0E76A\n"
+        )
 
-        self.assertEqual(battery.parse_checkpoint(output), 0x54C0E76A)
+        points = battery.parse_checkpoints(output)
 
-    def test_missing_checkpoint_is_none(self) -> None:
-        self.assertIsNone(battery.parse_checkpoint(b"Average speed: 300%\n"))
+        self.assertEqual(points["before"], 0x54C0E76A)
+        self.assertEqual(points["after"], 0x58C0E76A)
+
+    def test_missing_checkpoints_yield_nothing(self) -> None:
+        self.assertEqual(battery.parse_checkpoints(b"Average speed: 300%\n"), {})
+
+
+class CoverScriptTests(unittest.TestCase):
+    def test_cover_run_throws_the_switch_between_checkpoints(self) -> None:
+        script = battery.automation_script("x.png", remove_cover=True)
+
+        self.assertIn(f"frames == {battery.COVER_TOGGLE_FRAME} and true", script)
+        self.assertIn(f":field({battery.COVER_REMOVED})", script)
+        # The toggle has to land after the first checkpoint and before the
+        # second, or the comparison proves nothing.  Anchor on the cover field
+        # itself: touch presses call set_value too.
+        toggle = script.index(f":field({battery.COVER_REMOVED}):set_value")
+        self.assertLess(script.index("WHEN=before"), toggle)
+        self.assertLess(toggle, script.index("WHEN=after"))
+
+    def test_plain_run_never_touches_the_cover(self) -> None:
+        script = battery.automation_script("x.png")
+
+        self.assertIn(f"frames == {battery.COVER_TOGGLE_FRAME} and false", script)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the battery model against the ROM's own calibration thresholds.
+"""Check the battery and power-supply inputs the OS reads.
 
 `BatteryServer_CalculateLevel` turns a Betty ADC reading into a percentage
 between the "empty" and "full" fields of the Apollo calibration record the ROM
@@ -17,8 +17,13 @@ boot. This harness boots twice and requires the OS to react to the difference:
   * with the backup cell set to Empty the screen differs, because the OS posts
     "your communicator's backup battery is completely out of power".
 
-The second run is the control. Without it a broken model that always reads
-healthy would pass, exactly as it did before this check existed.
+It also covers the battery cover, which `PowerSupplyGen2MFS_BatteryCoverAttached`
+reads from `ioControl` bit 2 inverted: removing it mid-session must change the
+screen, because the OS notices the switch through IO interrupt 2.
+
+The extra runs are controls. Without them a model that always reported a
+healthy, closed-up machine would pass, exactly as it did before this check
+existed.
 """
 
 from __future__ import annotations
@@ -44,7 +49,15 @@ DEFAULT_WORKDIR = (
 HEALTHY = 0x00
 BACKUP_EMPTY = 0x08
 
-CHECKPOINT = re.compile(rb"BATTERY_CHECKPOINT SCREEN=([0-9A-F]{8})")
+# POWER_SUPPLY bit 1 removes the battery cover; the harness toggles it while
+# the desk is up rather than at power-on, because a machine that boots with no
+# cover has no cells and never brings the display up.
+COVER_REMOVED = 0x02
+COVER_TOGGLE_FRAME = 2300
+
+CHECKPOINT = re.compile(
+    rb"BATTERY_CHECKPOINT WHEN=(\w+) SCREEN=([0-9A-F]{8})"
+)
 
 
 def config_xml(system: str, battery: int) -> str:
@@ -62,8 +75,13 @@ def config_xml(system: str, battery: int) -> str:
 """
 
 
-def automation_script(snapshot: str) -> str:
-    """Boot through calibration, then checksum the whole screen."""
+def automation_script(snapshot: str, remove_cover: bool = False) -> str:
+    """Boot through calibration, checksum the screen, then checksum it again.
+
+    The second checkpoint exists for the cover case: the switch is thrown
+    between the two, so a reaction shows up as a changed "after" checksum.
+    """
+    toggle = "true" if remove_cover else "false"
     return f"""local machine = manager.machine
 local ports = machine.ioport.ports
 local touch_x = ports[":TOUCH_X"]:field(0xffff)
@@ -77,6 +95,16 @@ local function press(x, y)
     touch_button:set_value(1)
 end
 
+local function screen()
+    local program = machine.devices[":maincpu"].spaces["program"]
+    local framebuffer = program:read_u32(0x10c00030) & 0xfffffff0
+    local total = 0
+    for offset = 0, 38396, 4 do
+        total = (total + program:read_u32(framebuffer + offset)) & 0xffffffff
+    end
+    return total
+end
+
 emu.register_frame_done(function()
     frames = frames + 1
     if frames == 1220 then press(240, 160)
@@ -88,29 +116,35 @@ emu.register_frame_done(function()
     elseif frames == 1820 then press(240, 160)
     elseif frames == 1840 then touch_button:set_value(0)
     elseif frames == 2200 then
-        local program = machine.devices[":maincpu"].spaces["program"]
-        local framebuffer = program:read_u32(0x10c00030) & 0xfffffff0
-        local screen = 0
-        for offset = 0, 38396, 4 do
-            screen = (screen + program:read_u32(framebuffer + offset)) & 0xffffffff
-        end
-        print(string.format("BATTERY_CHECKPOINT SCREEN=%08X", screen))
+        print(string.format("BATTERY_CHECKPOINT WHEN=before SCREEN=%08X", screen()))
         machine.screens[":screen"]:snapshot("{snapshot}")
-    elseif frames == 2260 then
+    elseif frames == {COVER_TOGGLE_FRAME} and {toggle} then
+        machine.ioport.ports[":POWER_SUPPLY"]:field({COVER_REMOVED}):set_value({COVER_REMOVED})
+        print("BATTERY_COVER_REMOVED")
+    elseif frames == 2900 then
+        print(string.format("BATTERY_CHECKPOINT WHEN=after SCREEN=%08X", screen()))
+        machine.screens[":screen"]:snapshot("after-{snapshot}")
         machine:exit()
     end
 end)
 """
 
 
-def parse_checkpoint(output: bytes) -> int | None:
-    match = CHECKPOINT.search(output)
-    return int(match.group(1), 16) if match else None
+def parse_checkpoints(output: bytes) -> dict[str, int]:
+    """Map checkpoint name to screen checksum."""
+    return {
+        match.group(1).decode("ascii"): int(match.group(2), 16)
+        for match in CHECKPOINT.finditer(output)
+    }
 
 
 def run_case(
-    args: argparse.Namespace, base_dir: Path, name: str, battery: int
-) -> int | None:
+    args: argparse.Namespace,
+    base_dir: Path,
+    name: str,
+    battery: int,
+    remove_cover: bool = False,
+) -> dict[str, int]:
     run_dir = base_dir / name
     config_dir = run_dir / "cfg"
     nvram_dir = run_dir / "nvram"
@@ -119,7 +153,9 @@ def run_case(
     nvram_dir.mkdir()
     snapshot_dir.mkdir()
     lua_path = run_dir / f"{name}.lua"
-    lua_path.write_text(automation_script(f"{name}.png"), encoding="utf-8")
+    lua_path.write_text(
+        automation_script(f"{name}.png", remove_cover), encoding="utf-8"
+    )
     (config_dir / f"{args.system}.cfg").write_text(
         config_xml(args.system, battery), encoding="utf-8"
     )
@@ -153,7 +189,7 @@ def run_case(
     )
     output = completed.stdout + completed.stderr
     (run_dir / "mame-output.txt").write_bytes(output)
-    return parse_checkpoint(output)
+    return parse_checkpoints(output)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -189,25 +225,51 @@ def run_regression(args: argparse.Namespace) -> int:
 
     healthy = run_case(args, base_dir, "healthy", HEALTHY)
     empty = run_case(args, base_dir, "backup-empty", BACKUP_EMPTY)
+    cover = run_case(args, base_dir, "cover-removed", HEALTHY, remove_cover=True)
 
-    if healthy is None or empty is None:
-        print(
-            "FAIL: a run produced no screen checkpoint; see "
-            f"{base_dir}",
-            file=sys.stderr,
+    for name, points in (
+        ("healthy", healthy), ("backup-empty", empty), ("cover-removed", cover)
+    ):
+        missing = {"before", "after"} - points.keys()
+        if missing:
+            print(
+                f"FAIL: {name} run reported no {'/'.join(sorted(missing))} "
+                f"checkpoint; see {base_dir}",
+                file=sys.stderr,
+            )
+            return 1
+
+    failures = []
+
+    # The cover run is identical to the healthy one until the switch is thrown,
+    # which is what makes its "after" difference attributable.
+    if cover["before"] != healthy["before"]:
+        failures.append(
+            f"the cover run diverged before the switch was thrown "
+            f"({cover['before']:#010x} vs {healthy['before']:#010x})"
         )
-        return 1
-    if healthy == empty:
-        print(
-            f"FAIL: the desk looks identical ({healthy:#010x}) with a healthy "
-            "backup cell and an empty one, so the OS is not seeing the reading",
-            file=sys.stderr,
+    if empty["before"] == healthy["before"]:
+        failures.append(
+            f"an empty backup cell left the desk unchanged "
+            f"({healthy['before']:#010x}), so the OS is not seeing the reading"
         )
+    if cover["after"] == healthy["after"]:
+        failures.append(
+            f"removing the battery cover left the desk unchanged "
+            f"({healthy['after']:#010x}), so the OS is not seeing ioControl bit 2"
+        )
+
+    if failures:
+        for failure in failures:
+            print(f"FAIL: {failure}", file=sys.stderr)
+        print(f"Artifacts: {base_dir}", file=sys.stderr)
         return 1
 
     print(
-        f"PASS: healthy desk {healthy:#010x} differs from the empty-backup "
-        f"desk {empty:#010x}; the OS reacts to the modelled cell"
+        f"PASS: empty backup cell changes the desk "
+        f"({healthy['before']:#010x} -> {empty['before']:#010x}); removing the "
+        f"battery cover changes it too "
+        f"({healthy['after']:#010x} -> {cover['after']:#010x})"
     )
     print(f"Artifacts: {base_dir}")
     return 0
