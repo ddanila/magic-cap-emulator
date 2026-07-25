@@ -221,6 +221,10 @@ python3 tools/devrom_tests.py
 python3 tools/devrom_suites.py
 ```
 
+These automated launchers select MAME's SDL `dummy` video and audio drivers as
+well as disabling emulated video/audio output.  They therefore run without
+creating a host GUI window; `tools/start_manual.sh` remains interactive.
+
 The serial harness writes generated configuration and logs under
 `~/fun/magic-cap-assets/runtime/serial-regression/`. Override its defaults with
 `--mame`, `--rompath`, `--workdir`, or `--seconds`. The `betty` checkpoint

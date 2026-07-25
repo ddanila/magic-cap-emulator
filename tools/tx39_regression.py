@@ -145,6 +145,10 @@ def run_regression(args: argparse.Namespace) -> int:
         "none",
         "-sound",
         "none",
+        "-videodriver",
+        "dummy",
+        "-audiodriver",
+        "dummy",
         "-nothrottle",
         "-skip_gameinfo",
     ]

@@ -242,6 +242,10 @@ def _run_phase(
         "none",
         "-sound",
         "none",
+        "-videodriver",
+        "dummy",
+        "-audiodriver",
+        "dummy",
         "-nothrottle",
         "-skip_gameinfo",
     ]

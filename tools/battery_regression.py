@@ -181,6 +181,10 @@ def run_case(
         "none",
         "-sound",
         "none",
+        "-videodriver",
+        "dummy",
+        "-audiodriver",
+        "dummy",
         "-nothrottle",
         "-skip_gameinfo",
     ]

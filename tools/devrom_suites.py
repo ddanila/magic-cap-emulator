@@ -216,6 +216,7 @@ def run_mame(args, lua: Path, nvram: Path, log: Path, seconds: int) -> bytes:
             "-autoboot_script", str(lua),
             "-debug", "-debugger", "none",
             "-video", "none", "-sound", "none",
+            "-videodriver", "dummy", "-audiodriver", "dummy",
             "-nothrottle", "-skip_gameinfo",
             "-seconds_to_run", str(seconds),
         ],

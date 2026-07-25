@@ -619,6 +619,10 @@ def browser_prepare_command(
         "none",
         "-sound",
         "none",
+        "-videodriver",
+        "dummy",
+        "-audiodriver",
+        "dummy",
         "-nothrottle",
     ]
     command.extend(["-state", str(source_state), "-rs2321", "pty"])
@@ -707,7 +711,11 @@ def run_bridge(args: argparse.Namespace) -> int:
         or args.browser_acceptance
         or args.headless
     ):
-        command.extend(["-video", "none", "-sound", "none", "-nothrottle"])
+        command.extend([
+            "-video", "none", "-sound", "none",
+            "-videodriver", "dummy", "-audiodriver", "dummy",
+            "-nothrottle",
+        ])
 
     mame_log_path = run_dir / "mame-output.txt"
     modem_log_path = run_dir / "modem-transcript.txt"

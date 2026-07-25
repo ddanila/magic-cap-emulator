@@ -156,6 +156,7 @@ def main(argv: list[str] | None = None) -> int:
             "-autoboot_script", str(lua_path),
             "-debug", "-debugger", "none",
             "-video", "none", "-sound", "none",
+            "-videodriver", "dummy", "-audiodriver", "dummy",
             "-nothrottle", "-skip_gameinfo",
         ],
         cwd=mame.parent,

@@ -1161,6 +1161,10 @@ def run_regression(args: argparse.Namespace) -> int:
         "none",
         "-sound",
         "none",
+        "-videodriver",
+        "dummy",
+        "-audiodriver",
+        "dummy",
         # Keep host-side PTY scheduling gaps short in emulated time.  With
         # unlimited speed, a full PTY buffer can drain while this process is
         # descheduled and PCLink's serial watchdog expires before the next
