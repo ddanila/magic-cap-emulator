@@ -1,24 +1,15 @@
 #!/usr/bin/env python3
-"""Measure the Magic Bus failure cycle behind the "attached device" warning.
+"""Exercise Magic Bus discovery and an AT-keyboard request end to end.
 
-Long sessions post *"A problem happened while using an attached device"*. This
-counts entries into the ROM's own Magic Bus routines to show why, once every
-half minute or so:
+The probe counts entries into the release ROM's own Magic Bus routines. After
+the ROM discovers the modeled ``ATKB`` peripheral, Lua presses and releases
+Caps Lock on MAME's keyboard matrix. A complete run reaches peripheral-info
+validation, the keyboard client's request and Set-2 dispatch routines, and the
+return LED-control write without entering either Magic Bus error path.
 
-    GetPollingCommand -> MagicBus_AssignMagicBusAddress
-                      -> IssueMagicBusCommand
-                      -> MagicBus_HandleMagicBusFailure
-
-`MagicBusActor_Main` then checks `TotalFailuresExceedLimit`, and the alert
-appears once the count passes the ROM's limit of five. The peripheral
-discovery paths are never entered, so the OS is not reacting to anything the
-driver signals: it broadcasts an address assignment and counts the silence,
-because the driver has no Magic Bus peripheral to acknowledge it.
-
-This is an instrument rather than a pass/fail gate: it prints the counts and
-exits 0. Pass `--require-clean` to demand zero failures, which is what a
-working peripheral model should produce - use it as the acceptance check when
-implementing one. See docs/memory-map.md.
+This is an instrument by default and prints every count. Pass
+``--require-clean`` to make the complete discovery-and-keypress sequence an
+acceptance gate. See docs/memory-map.md.
 
 The addresses are from the release build. The development ROM shifts them, so
 this refuses to run against anything else rather than silently measuring
@@ -54,9 +45,15 @@ WATCHED = (
     ("req_line", 0x13C28364, "TestMBReqLine"),
     ("mbreq_handler", 0x13C295D4, "HandlerMagicBusMBReqLine"),
     ("peripheral_info", 0x13C29284, "GetPeripheralInfo"),
+    ("low_errors", 0x13C28B3C, "MagicBusError"),
+    ("keyboard_attached", 0x13C27594, "MagicBusATKeyboard_Attached"),
+    ("keyboard_requests", 0x13C27B20, "MagicBusATKeyboard_PeripheralRequest"),
+    ("keyboard_dispatch", 0x13C2763C, "MagicBusATKeyboard_DispatchATKeys"),
+    ("keyboard_led", 0x13C27C84, "MagicBusATKeyboard_SetLedStatus"),
 )
 SCRATCH = 0x0030_0000
 COUNTS = re.compile(rb"MAGICBUS COUNTS ([^\n]+)")
+KEY_FRAME = 600
 
 
 def automation_script(frames: int) -> str:
@@ -72,6 +69,8 @@ def automation_script(frames: int) -> str:
     return f"""local machine = manager.machine
 local cpu = machine.devices[":maincpu"]
 local program = cpu.spaces["program"]
+local caps_lock = machine.ioport.ports[
+    ":magicbus_keyboard:pc_keyboard_3"].fields["Caps"]
 local frames = 0
 
 local function watch(slot, address, name)
@@ -86,6 +85,10 @@ emu.register_frame_done(function()
     frames = frames + 1
     if frames == 60 then
 {setup}
+    elseif frames == {KEY_FRAME} then
+        caps_lock:set_value(caps_lock.mask)
+    elseif frames == {KEY_FRAME + 10} then
+        caps_lock:set_value(0)
     elseif frames == {frames} then
         print("MAGICBUS COUNTS " .. {report})
         machine:exit()
@@ -104,6 +107,25 @@ def parse_counts(output: bytes) -> dict[str, int]:
     }
 
 
+def acceptance_errors(counts: dict[str, int]) -> list[str]:
+    """Explain which observable parts of a complete transaction are absent."""
+    errors = []
+    for name in ("failures", "low_errors"):
+        if counts.get(name):
+            errors.append(f"{name}={counts[name]}")
+    for name in (
+        "assign",
+        "peripheral_info",
+        "keyboard_attached",
+        "keyboard_requests",
+        "keyboard_dispatch",
+        "keyboard_led",
+    ):
+        if not counts.get(name):
+            errors.append(f"{name}=0")
+    return errors
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mame", type=Path, default=DEFAULT_MAME)
@@ -114,12 +136,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--frames",
         type=int,
         default=9000,
-        help="emulated frames to watch; failures accrue roughly every 1800",
+        help="emulated frames to watch (must exceed 610 for key injection)",
     )
     parser.add_argument(
         "--require-clean",
         action="store_true",
-        help="fail unless no Magic Bus failure was recorded",
+        help="require discovery, keyboard delivery, and zero bus errors",
     )
     return parser.parse_args(argv)
 
@@ -176,16 +198,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {name:<{width}}  {counts.get(name, 0):4d}  {symbol}")
     print(f"Artifacts: {run_dir}")
 
-    if args.require_clean and counts.get("failures"):
+    errors = acceptance_errors(counts)
+    if args.require_clean and errors:
         print(
-            f"FAIL: {counts['failures']} Magic Bus failure(s) recorded in "
-            f"{args.frames} frames; no peripheral acknowledged the address "
-            "assignment",
+            "FAIL: incomplete Magic Bus transaction: " + ", ".join(errors),
             file=sys.stderr,
         )
         return 1
     if args.require_clean:
-        print("PASS: no Magic Bus failure recorded")
+        print("PASS: AT keyboard discovered and key data dispatched with no errors")
     return 0
 
 

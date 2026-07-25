@@ -99,17 +99,12 @@ directions, and `snapshots/package-installed.png`. The acceptance image shows
 `DvorakKeyboard` as a 21K object in built-in storage. An RX overrun, missing
 final `Pong`, or incomplete disconnect fails the run.
 
-Longer sessions can subsequently display Magic Cap's **A problem happened
-with an attached device** or **Too many errors happened with an attached
-device** alert. Breakpoint traces place that alert in the background MagicBus
-actor: the current model does not answer all MagicBus peripheral commands, so
-its saved failure counter eventually reaches the ROM's limit of five. It is
-not a PCLink CRC, serial-abort, timeout, or package-install failure.
-For the instrumented `--probe-package` run only, a MAME debugger breakpoint
-makes `TotalFailuresExceedLimit` return false. The script also dismisses
-either already-posted alert shape before opening the received object, and
-fails if the resulting capture is unchanged from the alert capture. This
-handling does not change the package protocol or mask PCLink failures.
+The earlier package probe had to patch
+`TotalFailuresExceedLimit` and blindly dismiss two possible attached-device
+alerts. Those workarounds are gone: the modeled Magic Bus keyboard now
+completes discovery and background polling without adding failures, so the
+PCLink acceptance run no longer changes ROM control flow or risks tapping an
+unrelated control where an alert used to be.
 
 Use another archived input without copying it into Git:
 

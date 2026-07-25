@@ -168,70 +168,104 @@ Magic Bus is Dino's peripheral bus for external accessories, at `0x0e0`-`0x0fc`:
 `mbusControl1`, `mbusControl2`, the DMA start/length/count registers,
 `mbusCommand` and `mbusData`. Bits 31:29 of `mbusControl1` are status —
 `kMbusEnabledStatusMask`, `kMbusEmptyStatusMask` and `kMbusIntStatusMask` — and
-the driver now synthesises them rather than returning whatever the OS last
-wrote, since a write must not be able to set a status bit. `TestMBReqLine`
-(`0x13c28364`) reads bit 29, which is the bus request line.
+the driver synthesizes them rather than returning whatever the OS last wrote.
+`TestMBReqLine` (`0x13c28364`) samples bit 29 as the peripheral request line.
+Its positive and negative edges latch interrupt-bank-2 bits `0x08` and `0x04`.
 
-The transfer itself is synchronous in the driver: enabling the module shifts
-the byte out immediately, so it reports transmit-buffer-available and
-`kIntMbusEmptyMask` together, plus `kIntMbusDmaEndMask` when transmit DMA is
-enabled.
+The controller completes transfers synchronously but preserves the ROM's four
+transaction classes:
 
-### The "attached device" warning, diagnosed but not fixed
+- type 1 returns peripheral data through `mbusData` for four bytes or through
+  receive DMA for larger blocks, then raises command-detect and, for DMA,
+  DMA-end;
+- type 2 accepts host data from `mbusData` or transmit DMA and raises the
+  matching empty/DMA-end completion;
+- type 3 completes when the transmit shifter becomes empty; and
+- type 4 is a command-only transaction.
 
-Long sessions post *"A problem happened while using an attached device"* over
-the desk. Counting entries into the ROM's own Magic Bus routines on the release
-build shows the mechanism precisely, once every 30 seconds or so:
+Enabling the controller reports transmit-buffer-available, which the IDT
+monitor waits for before writing `mbusCommand`. The command write then reports
+both transmit-buffer-available and empty. This distinction matters because the
+ROM reprograms `mbusControl1` several times while staging DMA.
 
-```text
-GetPollingCommand -> MagicBus_AssignMagicBusAddress -> IssueMagicBusCommand
-                  -> MagicBus_HandleMagicBusFailure
-```
+### Address assignment and peripheral information
 
-`MagicBusActor_Main` then checks `TotalFailuresExceedLimit`, and once the count
-passes the ROM's limit of five it posts the alert and calls
-`ResetMagicBusForPeripheralAttachment`. Nothing else is involved:
-`DebounceMBReqLineToStartUpMagicBus`, `HandlerMagicBusMBReqLine`,
-`GetPeripheralInfo` and `InitMagicBusPeripheral` are never entered, and neither
-is the low-level `MagicBusError` path. So the OS is not reacting to a phantom
-request line — it broadcasts an address assignment on its own schedule and
-treats the silence as a peripheral failure.
+The SDK ELF retains both the command table and the debug types needed to
+recover the protocol. A wire command is the command-table halfword XORed with
+the addressed peripheral's code. The modeled endpoint uses address zero and
+implements every command the ROM sends to its built-in keyboard client:
 
-Three fixes were tried against that and **none changed the failure count**:
+| Wire word | High-level command | Use |
+|---:|---:|---|
+| `def0` | 31, broadcast | ask an unaddressed peripheral to identify itself |
+| `dca8` | 24, address 0 | accept address zero |
+| `dce0` | 21, address 0 | finish assignment |
+| `dcf8` | 32, address 0 | begin peripheral discovery |
+| `cc5c` / `cc60` | 12 / 13 | select the ID or full information record |
+| `cc24` | 2 | read the selected record or keyboard data |
+| `cc18` | 1 | read a pending request record |
+| `cc3c` | 5 | write keyboard reset, LED or typematic control |
+| `dcc8` / `decc` | 28 | addressed/broadcast request polling |
 
-1. making `kMbusIntStatusMask` always read clear, so `TestMBReqLine` reports no
-   request — polling continues regardless, so this was not the gate;
-2. reporting the shifter as drained (`kIntMbusEmptyMask`, plus the DMA-end bit)
-   as well as transmit-buffer-available, in case the OS was waiting for the
-   transmission to finish;
-3. raising `kIntMbusRxErrMask` to say explicitly that nobody answered. This one
-   was reverted: asserting a receive error on an idle bus is not defensible, and
-   it did not help either.
+`MagicBus_AssignMagicBusAddress` broadcasts command 31. The keyboard raises
+MBReq, accepts command 24, and drops MBReq; the ROM then finishes assignment
+and reads ID `ATKB`. It next accepts an 88-byte
+`MagicbusPeripheralInfo` record. The record layout was recovered from STABS
+types in the unstripped SDK image:
 
-The first two are kept because they are faithful to the documented register
-behavior on their own terms. What remains is that **the driver has no Magic Bus
-peripheral at all**, so an address assignment can never be acknowledged. Two
-ways forward: model a minimal slave that acknowledges the assignment through
-`kIntMbusReceiveMask` and the `mbusData` path that
-`HandlerMagicBusCommandDone` services, which needs the wire format reverse
-engineered; or find whatever real hardware presents on an empty bus that stops
-the OS counting failures. Without hardware the second cannot be settled by
-inspection, so the first is the practical route.
+- length at byte 2 and peripheral ID at byte 4;
+- hardware, software and protocol revisions at bytes 8–10;
+- three frequency/delay pairs at bytes 12–35;
+- latency and request timing at bytes 36–51;
+- power figures at bytes 52–63;
+- maximum request length at byte 64;
+- variable strings beginning at byte 80; and
+- a big-endian 16-bit checksum after `pInfoLength + 2` bytes.
 
-`tools/magicbus_probe.py` measures this cycle, so whoever implements a
-peripheral can tell immediately whether it worked:
+The ROM initializes its built-in `MagicBusATKeyboard` client only after that
+length and checksum validate. “Magic Bus accessory” in MAME's machine
+configuration defaults to **AT keyboard** and can be changed to **None**. A
+reset applies a changed selection. **None** deliberately leaves address
+assignment unanswered; this ROM counts that silence as a peripheral failure
+and can eventually show the attached-device alert, matching the previously
+unmodeled empty-bus behavior.
+
+### Keyboard request and control traffic
+
+MAME's AT-keyboard encoder supplies Set-2 make/break bytes. When bytes are
+queued, the peripheral asserts MBReq. The ROM polls it, reads a 16-byte request
+record whose type byte is 14, and dispatches that record to
+`MagicBusATKeyboard_PeripheralRequest`. The client then issues command 2; the
+reply is a count byte followed by at most 15 scan bytes. The request line stays
+low while the request record sits in the ROM's software queue and is raised
+again only if another batch remains. Reasserting it immediately was found to
+trap `GetPollingCommand` in repeated request reads and is therefore covered by
+the regression.
+
+Traffic also works in the other direction. The ROM's eight-byte `K` packets
+reset the keyboard, update its LEDs, and set its repeat rate. The driver
+forwards those operations to MAME's AT keyboard and consumes controller
+self-test/acknowledgement bytes rather than exposing them as key transitions.
+Magic Bus state, the scan FIFO, and all in-flight transaction state participate
+in save states.
+
+The old driver had no endpoint. Its scheduled address-assignment broadcast
+therefore entered `MagicBus_HandleMagicBusFailure` about every 30 seconds and
+eventually posted the attached-device alert. No alert suppression remains in
+the PCLink tooling. The acceptance probe now exercises discovery plus both
+directions of keyboard traffic: it injects Caps Lock, observes Set-2 dispatch,
+and requires the ROM to send the corresponding LED update back to the device.
 
 ```sh
-python3 tools/magicbus_probe.py                  # report the counts
-python3 tools/magicbus_probe.py --require-clean  # demand zero failures
+python3 tools/magicbus_probe.py
+python3 tools/magicbus_probe.py --require-clean
 ```
 
-It prints entries into each routine in the chain over a fixed window; the
-current release build records three failures in 9,000 frames. `--require-clean`
-is the acceptance check a working peripheral model should pass. The probe
-refuses to run against the development ROM, because those addresses shift and
-it would silently measure nothing — a mistake that cost a run during this
-investigation.
+The gate requires address assignment, validated peripheral info, keyboard
+attachment, request handling, scan dispatch and LED control, with zero entries
+into `MagicBusError` or `MagicBus_HandleMagicBusFailure`. The probe refuses the
+development ROM because those routine addresses shift and would silently
+measure nothing.
 
 ## Glacier blocks
 

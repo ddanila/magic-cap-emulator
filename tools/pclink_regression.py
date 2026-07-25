@@ -585,7 +585,6 @@ def lua_warm_provider_navigation(
     package_ready_path: Path | None = None,
     package_snapshotted_path: Path | None = None,
     internet_center_start: bool = False,
-    suppress_magicbus_warning: bool = False,
     browser_acceptance: bool = False,
     http_port: int = 8080,
     owner_first_name: str | None = None,
@@ -638,13 +637,6 @@ def lua_warm_provider_navigation(
         end
     end
 """
-    alert_dismissal = (
-        f"""    elseif frames == {post_base + 1450} then press(413, 46)
-    elseif frames == {post_base + 1470} then touch_button:set_value(0)
-    elseif frames == {post_base + 1500} then press(413, 61)
-    elseif frames == {post_base + 1520} then touch_button:set_value(0)
-"""
-    )
     if browser_acceptance:
         key_positions = {
             **{
@@ -668,7 +660,6 @@ def lua_warm_provider_navigation(
         ).rstrip()
         post_install = f"""    elseif frames == {post_base + 1400} then
         machine.screens[":screen"]:snapshot("pclink-disconnected.png")
-{alert_dismissal.rstrip()}
     elseif frames == {post_base + 1650} then press(270, 220)
     elseif frames == {post_base + 1670} then touch_button:set_value(0)
     elseif frames == {post_base + 1850} then
@@ -700,7 +691,6 @@ def lua_warm_provider_navigation(
     elif probe_package:
         post_install = f"""    elseif frames == {post_base + 1400} then
         machine.screens[":screen"]:snapshot("pclink-disconnected.png")
-{alert_dismissal.rstrip()}
     elseif frames == {post_base + 1650} then press(270, 220)
     elseif frames == {post_base + 1670} then touch_button:set_value(0)
     elseif frames == {post_base + 1850} then
@@ -727,18 +717,6 @@ def lua_warm_provider_navigation(
         post_install = f"""    elseif frames == {post_base + 1400} then
         machine.screens[":screen"]:snapshot("pclink-disconnected.png")
 """
-    debugger_clause = (
-        """-- MAME exposes the raw MIPS names R2/R31, not v0/ra aliases.
-local cpu = machine.devices[":maincpu"]
-cpu.debug:bpset(
-    0x13c29434,
-    "1",
-    "do R2=0; do PC=R31; g")
-cpu.debug:go()
-"""
-        if suppress_magicbus_warning
-        else ""
-    )
     if owner_first_name is not None:
         assert owner_last_name is not None
         navigation_steps = lua_provider_first_run_navigation(
@@ -812,7 +790,6 @@ local touch_button = ports[":TOUCH_BUTTON"]:field(0x01)
 local frames = 0
 local package_snapshotted = false
 local package_ready_frame = nil
-{debugger_clause.rstrip()}
 
 local function press(x, y)
     touch_x:set_value(math.floor((x * 0xffff) / 479))
@@ -1119,20 +1096,19 @@ def run_regression(args: argparse.Namespace) -> int:
     lua_path.write_text(
         (
             lua_warm_provider_navigation(
-                snapshot_frame,
-                exit_frame,
-                probe_package,
-                post_install_state
+                snapshot_frame=snapshot_frame,
+                exit_frame=exit_frame,
+                probe_package=probe_package,
+                save_path=post_install_state
                 if probe_package and not combined_browser
                 else None,
-                package_ready_path,
-                package_snapshotted_path,
-                args.internet_center_source,
-                probe_package or args.owner_first_name is not None,
-                combined_browser,
-                args.http_port,
-                args.owner_first_name,
-                args.owner_last_name,
+                package_ready_path=package_ready_path,
+                package_snapshotted_path=package_snapshotted_path,
+                internet_center_start=args.internet_center_source,
+                browser_acceptance=combined_browser,
+                http_port=args.http_port,
+                owner_first_name=args.owner_first_name,
+                owner_last_name=args.owner_last_name,
             )
             if provider_source
             else lua_navigation(snapshot_frame, exit_frame)

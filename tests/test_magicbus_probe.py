@@ -37,6 +37,13 @@ class ScriptTests(unittest.TestCase):
     def test_report_frame_is_configurable(self) -> None:
         self.assertIn("frames == 1234", probe.automation_script(1234))
 
+    def test_injects_a_magicbus_keyboard_key(self) -> None:
+        script = probe.automation_script(9000)
+
+        self.assertIn('":magicbus_keyboard:pc_keyboard_3"', script)
+        self.assertIn("caps_lock:set_value(caps_lock.mask)", script)
+        self.assertIn("caps_lock:set_value(0)", script)
+
 
 class CountTests(unittest.TestCase):
     def test_parses_a_count_line(self) -> None:
@@ -49,6 +56,36 @@ class CountTests(unittest.TestCase):
 
     def test_missing_line_yields_nothing(self) -> None:
         self.assertEqual(probe.parse_counts(b"Average speed: 300%\n"), {})
+
+    def test_complete_transaction_is_accepted(self) -> None:
+        counts = {
+            "failures": 0,
+            "low_errors": 0,
+            "assign": 1,
+            "peripheral_info": 1,
+            "keyboard_attached": 1,
+            "keyboard_requests": 1,
+            "keyboard_dispatch": 1,
+            "keyboard_led": 1,
+        }
+
+        self.assertEqual(probe.acceptance_errors(counts), [])
+
+    def test_missing_dispatch_and_bus_errors_are_reported(self) -> None:
+        counts = {
+            "failures": 2,
+            "low_errors": 1,
+            "assign": 1,
+            "peripheral_info": 1,
+            "keyboard_attached": 1,
+            "keyboard_requests": 1,
+            "keyboard_led": 1,
+        }
+
+        self.assertEqual(
+            probe.acceptance_errors(counts),
+            ["failures=2", "low_errors=1", "keyboard_dispatch=0"],
+        )
 
 
 class SystemGuardTests(unittest.TestCase):

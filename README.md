@@ -82,6 +82,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | Battery & supply inputs | Both ADC channels answer within the ROM's own calibration thresholds, so the spurious backup-battery warning is gone; battery levels, AC adapter and battery cover are selectable, and removing the cover raises the IO interrupt the OS services | [`power-wake.md`](docs/power-wake.md#battery-levels) |
 | Sound | ROM's startup tone (unbuffered hold register) plus buffered SIB sound DMA: the OS's boot chime streams from DRAM with half/end interrupts and pointer writeback | [`betty-registers.md`](docs/betty-registers.md) |
 | Built-in software modem | Continuous 48-word SIB telecom DMA ring drives the ROM's V.32 pump/control/FIR through a TX39 `MADD` | [`builtin-modem.md`](docs/builtin-modem.md) |
+| Magic Bus | Address assignment, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling | [`mame-bringup.md`](docs/mame-bringup.md) |
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap | [`pclink.md`](docs/pclink.md) |
@@ -99,20 +100,13 @@ Each subsystem has a headless regression under [`tools/`](tools/); the full list
   blank the display and the charger does not recharge the modelled cells. No ROM
   behavior observed so far depends on it
   ([`power-wake.md`](docs/power-wake.md#outputs-the-os-writes)).
-- **Acknowledge Magic Bus address assignment.** Long sessions still warn about
-  an attached device. The mechanism is now pinned down — the OS broadcasts
-  `MagicBus_AssignMagicBusAddress` every half minute, nothing answers, and the
-  fifth recorded failure posts the alert — and three register-level fixes were
-  tried and ruled out. What is missing is any Magic Bus peripheral to
-  acknowledge the assignment
-  ([`memory-map.md`](docs/memory-map.md#the-attached-device-warning-diagnosed-but-not-fixed)).
-
 The machine stays `MACHINE_NOT_WORKING` while unmodeled hardware remains,
-notably the Magic Bus peripheral reply and the power-supply outputs above.
-Power/wake has a two-process headless acceptance test in
+notably the power-supply outputs above. Power/wake has a two-process headless acceptance test in
 [`tools/power_regression.py`](tools/power_regression.py); sound covers both
 unbuffered and buffered paths, and the built-in modem now covers its ROM DSP
-path as well as the underlying DMA registers.
+path as well as the underlying DMA registers. Magic Bus discovery and
+bidirectional keyboard traffic are covered by
+[`tools/magicbus_probe.py`](tools/magicbus_probe.py).
 
 ### Open questions
 

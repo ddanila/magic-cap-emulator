@@ -96,7 +96,7 @@ class PCLinkProtocolTests(unittest.TestCase):
         self.assertNotIn("power_button", script)
         self.assertIn("frames == 4900", script)
 
-    def test_warm_provider_navigation_dismisses_alerts_and_opens_pclink(
+    def test_warm_provider_navigation_opens_pclink(
         self,
     ) -> None:
         script = pclink_regression.lua_warm_provider_navigation(5200, 5400)
@@ -112,7 +112,7 @@ class PCLinkProtocolTests(unittest.TestCase):
         self.assertNotIn("power_button", script)
         self.assertIn("frames == 5400", script)
 
-    def test_package_probe_recovers_alert_and_opens_received_package(
+    def test_package_probe_opens_received_package(
         self,
     ) -> None:
         script = pclink_regression.lua_warm_provider_navigation(
@@ -122,8 +122,7 @@ class PCLinkProtocolTests(unittest.TestCase):
             Path("/tmp/post-install.sta"),
         )
 
-        self.assertIn("press(413, 46)", script)
-        self.assertIn("press(413, 61)", script)
+        self.assertNotIn("press(413, 46)", script)
         self.assertIn("press(270, 220)", script)
         self.assertIn("pclink-disconnected.png", script)
         self.assertIn("package-opened.png", script)
@@ -173,7 +172,6 @@ class PCLinkProtocolTests(unittest.TestCase):
         script = pclink_regression.lua_warm_provider_navigation(
             pclink_frame + 120,
             pclink_frame + 2000,
-            suppress_magicbus_warning=True,
             owner_first_name="Ada",
             owner_last_name="Lovelace",
         )
@@ -201,7 +199,7 @@ class PCLinkProtocolTests(unittest.TestCase):
         self.assertIn("navigation-storeroom.png", script)
         self.assertIn("press(48, 155)", script)
         self.assertIn(f"frames == {pclink_frame}", script)
-        self.assertIn("0x13c29434", script)
+        self.assertNotIn("0x13c29434", script)
 
     def test_name_card_automation_rejects_non_keyboard_characters(
         self,
@@ -211,7 +209,7 @@ class PCLinkProtocolTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "non-empty name"):
             pclink_regression.name_card_key_steps("", 100)
 
-    def test_package_probe_dismisses_both_magicbus_alert_variants(
+    def test_package_probe_has_no_magicbus_warning_workaround(
         self,
     ) -> None:
         script = pclink_regression.lua_warm_provider_navigation(
@@ -219,13 +217,12 @@ class PCLinkProtocolTests(unittest.TestCase):
             7200,
             probe_package=True,
             save_path=Path("/tmp/post-install.sta"),
-            suppress_magicbus_warning=True,
         )
 
-        self.assertIn("press(413, 46)", script)
-        self.assertIn("press(413, 61)", script)
-        self.assertIn("0x13c29434", script)
-        self.assertIn("do R2=0; do PC=R31; g", script)
+        self.assertNotIn("0x13c29434", script)
+        self.assertNotIn("do R2=0; do PC=R31; g", script)
+        self.assertNotIn("frames == 6650", script)
+        self.assertNotIn("frames == 6700", script)
 
     def test_combined_acceptance_stays_live_through_browser_http(
         self,
@@ -236,7 +233,6 @@ class PCLinkProtocolTests(unittest.TestCase):
             probe_package=True,
             package_ready_path=Path("/tmp/package-ready"),
             package_snapshotted_path=Path("/tmp/package-snapshotted"),
-            suppress_magicbus_warning=True,
             browser_acceptance=True,
             http_port=8080,
         )
