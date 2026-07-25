@@ -218,9 +218,20 @@ engineered; or find whatever real hardware presents on an empty bus that stops
 the OS counting failures. Without hardware the second cannot be settled by
 inspection, so the first is the practical route.
 
-Note that these addresses are release-build addresses. The development ROM
-shifts them, so a probe built for one image silently measures nothing on the
-other.
+`tools/magicbus_probe.py` measures this cycle, so whoever implements a
+peripheral can tell immediately whether it worked:
+
+```sh
+python3 tools/magicbus_probe.py                  # report the counts
+python3 tools/magicbus_probe.py --require-clean  # demand zero failures
+```
+
+It prints entries into each routine in the chain over a fixed window; the
+current release build records three failures in 9,000 frames. `--require-clean`
+is the acceptance check a working peripheral model should pass. The probe
+refuses to run against the development ROM, because those addresses shift and
+it would silently measure nothing — a mistake that cost a run during this
+investigation.
 
 ## Glacier blocks
 

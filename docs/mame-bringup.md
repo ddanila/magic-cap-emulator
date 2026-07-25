@@ -129,6 +129,17 @@ persist into the cfg directory, so a stray setting can silently affect later
 runs. Every headless harness here passes its own `-cfg_directory` for that
 reason.
 
+### Known gap: save-state coverage
+
+The machine is `MACHINE_SUPPORTS_SAVE`, but not every driver member is
+registered with `save_item`. The PC Card modem's 16550 state is the notable
+group — `m_fcr`, `m_ier`, `m_lcr`, `m_mcr`, `m_divisor`, `m_rx_data`,
+`m_rx_head`, `m_rx_count`, `m_tx_irq_pending` and `m_pccard_ready` — so a
+restored session brings the card back with those fields zeroed, which is the
+likely reason the modem needs re-enumerating after a state load. Anything added
+to the driver should be registered at the same time; two DMA flags were missed
+that way and fixed afterwards.
+
 `-lightgun_device mouse` maps the host pointer to the resistive pen axes.
 Add `-nokeepaspect` for interactive use: SDL normalizes the pointer over the
 whole window while `-keepaspect` letterboxes the 3:2 screen, so with
@@ -197,6 +208,7 @@ python3 tools/sound_regression.py --checkpoint dma
 python3 tools/telecom_regression.py
 python3 tools/telecom_regression.py --no-loopback
 python3 tools/battery_regression.py
+python3 tools/magicbus_probe.py
 python3 tools/tx39_regression.py
 python3 tools/pccard_regression.py
 python3 tools/pclink_regression.py
