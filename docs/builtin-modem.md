@@ -83,3 +83,10 @@ This deliberately proves the missing ROM/Dino/DSP boundary, not an imaginary
 telephone network. The external DAA, carrier acquisition, and remote modem are
 still not modelled, and the test invokes the lower ROM boundary rather than
 automating the Internet Center's dial dialogs.
+
+The product-level target is more specific. *Using Magic Cap*, pp. 135–163 and
+216, documents the built-in fax modem on a telephone line, including selectable
+tone/pulse dialing and fax workflows. Closing this gap therefore means driving
+the real Telephone or Internet Center setup through dialing, DAA/ring/carrier
+behavior and a remote peer—not merely making the current lower-level DSP probe
+count more functions. See [`user-guide.md`](user-guide.md).

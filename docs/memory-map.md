@@ -184,6 +184,14 @@ the driver synthesizes them rather than returning whatever the OS last wrote.
 `TestMBReqLine` (`0x13c28364`) samples bit 29 as the peripheral request line.
 Its positive and negative edges latch interrupt-bank-2 bits `0x08` and `0x04`.
 
+The physical connector is broader than the current endpoint. *Using Magic
+Cap*, p. 217, describes PCs, external modems, external keyboards and other
+accessories, with multiple devices commonly daisy-chained. The present machine
+configuration intentionally models only one optional `ATKB` keyboard. A future
+topology should enumerate multiple independently addressed descriptors rather
+than treating “more Magic Bus” as extra keyboard scan codes; the acceptance
+backlog is in [`user-guide.md`](user-guide.md).
+
 The controller completes transfers synchronously but preserves the ROM's four
 transaction classes:
 

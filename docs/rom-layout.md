@@ -39,6 +39,14 @@ build carries an on-device test framework the release ROM does not — see
 [`dev-rom.md`](dev-rom.md) for the comparison and
 `tools/fetch_assets.sh macsdk` for acquisition.
 
+The product-level behavioral reference is Icras's 234-page
+[*Using Magic Cap*][user-guide-pdf], written specifically for Magic Cap 3.1 on
+the DataRover 840. The mirrored file is
+`~/fun/magic-cap-assets/docs/Using_Magic_Cap.pdf`, with SHA-256
+`20010cefe051b94fde9f8fa16273a6c33547e85cc061fb5e80625296fa21f22a`.
+Its acceptance requirements and current coverage are mapped in
+[`user-guide.md`](user-guide.md).
+
 ### Mirror everything at once
 
 These inputs live on personal and community hosts that could disappear, so the
@@ -47,13 +55,13 @@ download. `tools/fetch_assets.sh` reproduces and checks it:
 
 ```sh
 cd "$HOME/fun/magic-cap-emulator"
-tools/fetch_assets.sh all       # ROMs, packages, Windows tools, manual, SDK
+tools/fetch_assets.sh all       # ROMs, packages, Windows tools, manuals, SDK
 tools/fetch_assets.sh --verify  # check the existing mirror, download nothing
 ```
 
 It is idempotent (an asset whose checksum matches is not re-fetched), takes
-group names (`rom japan packages wintools manual sdk`), and re-extracts from
-the local containers when only an extracted file is missing. Extracted-artifact
+group names (`rom japan packages wintools manual sdk macsdk`), and re-extracts
+from the local containers when only an extracted file is missing. Extracted-artifact
 checksums are hard assertions; a container archive that upstream re-packed is
 reported as a warning, since the payload is what matters. The SDK group needs
 `unshield`; everything else needs only `curl` and `unzip`.
@@ -294,3 +302,4 @@ observed boot path.
 [archive]: https://archive.org/details/DataRover840
 [packages]: https://joshcarter.com/magic_cap/packages/
 [update]: https://joshcarter.com/magic_cap/faqs/updating_flash_rom/
+[user-guide-pdf]: https://bitsavers.trailing-edge.com/pdf/generalMagic/Using_Magic_Cap.pdf

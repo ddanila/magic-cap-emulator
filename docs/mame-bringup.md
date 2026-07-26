@@ -308,7 +308,12 @@ The PC Card harness copies the verified 840F flasher into its persistent run
 directory, inserts that disposable copy after the workbench appears, and
 checks common memory, CIS bytes, write/readback, Glacier card-detect signals,
 and Magic Cap's live slot state. The source image and exact acquisition
-instructions are in [`rom-layout.md`](rom-layout.md).
+instructions are in [`rom-layout.md`](rom-layout.md). This is deliberately a
+raw electrical/card-window check, not the complete product workflow:
+*Using Magic Cap*, pp. 183–198 and 210–215, additionally specifies blank-card
+setup and naming after power-on, live Option-insert erase/setup, card-battery
+reporting, package translation, and backup/restore. Those are tracked as a
+separate acceptance path in [`user-guide.md`](user-guide.md).
 
 The PCLink harness uses the real UART-A PTY and recovered WinPCLink framing to
 install an archived package through the Storeroom computer. It fails on a
@@ -435,8 +440,9 @@ the separate serial-terminal view.
 
 The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
 still incomplete. The current gaps are the board-level effect of power-supply
-outputs, complete PC Card modem save state, the built-in modem's external line
-side, microphone/sound-receive DMA, and hardware fidelity beyond the register
+outputs, the product-level storage-card lifecycle, complete PC Card modem save
+state, the built-in modem's external line side, microphone/sound-receive DMA,
+multi-device Magic Bus topology, and hardware fidelity beyond the register
 behavior exercised by the ROM; see
 [`README.md`](../README.md#remaining-work). Magic Bus discovery and its
 AT-keyboard traffic are functional and covered by the headless probe.

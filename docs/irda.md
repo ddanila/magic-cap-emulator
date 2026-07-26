@@ -103,6 +103,15 @@ The headless harness:
 6. decodes the captured SIR frames and requires the peer names and serialized
    name-card payload.
 
+This matches the product workflow in *Using Magic Cap*, pp. 78–79 and 133:
+show a card or page, open the Magic lamp, choose Beam, allow discovery to fill
+the recipient, select a name if more than one peer is visible, then send. The
+guide also defines two boundaries that the PTY transport intentionally does not
+pretend to model: physical line-of-sight/range, and incompatibility between
+Magic Cap 3.1 beaming and earlier Magic Cap versions. A notebook-page transfer
+and an explicit old-version rejection remain optional product-level extensions;
+see [`user-guide.md`](user-guide.md).
+
 A representative passing transfer sent 22 complete frames / 1,491 bytes from
 Alice and 15 frames / 323 bytes from Bob. The sender stream contains
 `alice Sender`, `Dear bob,` and the ROM-generated

@@ -2,8 +2,8 @@
 #
 # Mirror every hobbyist-hosted research input into the persistent asset tree.
 #
-# The ROM images, SDK bundle, packages, and CPU manual live on personal and
-# community hosts that can disappear. This script makes the local mirror
+# The ROM images, SDK bundle, packages, and reference manuals live on personal
+# and community hosts that can disappear. This script makes the local mirror
 # reproducible and checkable, so bring-up never depends on a live download.
 # It is idempotent: an asset whose checksum already matches is left alone.
 #
@@ -204,14 +204,20 @@ if want wintools; then
   assert "$dl_exe" "$dl_sha"
 fi
 
-# --- TX39 core architecture manual ----------------------------------------
+# --- Product and CPU reference manuals ------------------------------------
 if want manual; then
-  echo 'TX39 core manual'
-  manual_sha=cf9fd5fa551814bb681fefd9576114ba8d8b8e8d7bb1903e943dee546405ad38
+  echo 'Reference manuals'
+  user_guide_sha=20010cefe051b94fde9f8fa16273a6c33547e85cc061fb5e80625296fa21f22a
+  fetch \
+    https://bitsavers.trailing-edge.com/pdf/generalMagic/Using_Magic_Cap.pdf \
+    "$ASSETS/docs/Using_Magic_Cap.pdf" "$user_guide_sha"
+  assert "$ASSETS/docs/Using_Magic_Cap.pdf" "$user_guide_sha"
+
+  tx39_manual_sha=cf9fd5fa551814bb681fefd9576114ba8d8b8e8d7bb1903e943dee546405ad38
   fetch \
     https://www.bitsavers.org/components/toshiba/_dataSheet/TMPR39xx-um_199507.pdf \
-    "$ASSETS/docs/TMPR39xx-um_199507.pdf" "$manual_sha"
-  assert "$ASSETS/docs/TMPR39xx-um_199507.pdf" "$manual_sha"
+    "$ASSETS/docs/TMPR39xx-um_199507.pdf" "$tx39_manual_sha"
+  assert "$ASSETS/docs/TMPR39xx-um_199507.pdf" "$tx39_manual_sha"
 fi
 
 # --- Icras SDK 3.2: the unstripped Apollo ELF and platform headers ---------

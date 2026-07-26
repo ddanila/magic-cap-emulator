@@ -40,6 +40,13 @@ The phone number is only displayed and sent in `ATDT`, so a test number such
 as `+1 (650) 555-1212` is safe. Slirp does not authenticate the username or
 password; non-empty placeholder values are sufficient.
 
+This is the same product-level route documented in *Using Magic Cap*,
+pp. 105–120 and 165–174: provider configuration in Internet Center followed by
+dial-up Web access. The current acceptance stops at deterministic plain HTTP;
+mail-service behavior and the separate built-in telephone-line modem are not
+implied by this passing PC Card path. See
+[`user-guide.md`](user-guide.md).
+
 Use these IPv4 values when Magic Cap asks:
 
 ```text

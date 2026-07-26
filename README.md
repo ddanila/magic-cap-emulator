@@ -33,8 +33,9 @@ The USA ROM image (build 3.1.2j) comes from the [Rosemary Software Archive](http
 - These inputs are hobbyist-hosted and could disappear, so the local mirror is
   the dependency rather than the download: `tools/fetch_assets.sh all` fetches
   and checksum-verifies every research input (USA/Japan ROMs, 840F flasher,
-  packages, the original Windows tools, the TX39 manual, and the SDK's Apollo
-  ELF), and `--verify` re-checks the mirror without any network access. Exact
+  packages, the original Windows tools, the DataRover user guide, the TX39
+  manual, and the SDK's Apollo ELF), and `--verify` re-checks the mirror
+  without any network access. Exact
   per-file provenance is in
   [`docs/rom-layout.md`](docs/rom-layout.md#mirror-everything-at-once).
 
@@ -100,9 +101,16 @@ checkpoints are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
 - **Act on the power-supply outputs.** The charger and the LCD, IR, sound,
   MagicBus and modem Vcc rails round-trip through `mfioDataOutput`, so the OS
   reads back what it wrote, but nothing acts on them: LCD power off does not
-  blank the display and the charger does not recharge the modelled cells. No
-  ROM behavior observed so far depends on it
+  blank the display and the charger does not recharge the modelled cells. The
+  DataRover guide explicitly promises live AC charging and a configurable
+  1–60 minute idle shutoff, making both concrete acceptance targets
   ([`power-wake.md`](docs/power-wake.md#outputs-the-os-writes)).
+
+- **Complete the storage-card lifecycle.** Both Glacier slots currently pass
+  raw common-memory, CIS, insertion and write/readback checks. They do not yet
+  cover Magic Cap's blank-card setup/format flow, storage-card battery levels,
+  live Option-insert erase/setup, package translation, or backup/restore
+  ([`user-guide.md`](docs/user-guide.md#acceptance-backlog-derived-from-the-guide)).
 
 - **Complete PC Card modem save states.** The main driver state is registered,
   but the optional modem card's 16550 registers and receive queue are not.
@@ -112,15 +120,22 @@ checkpoints are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
 
 - **Model the built-in modem's external line side.** The SIB telecom DMA ring
   and ROM V.32 DSP execute, but the external DAA, carrier acquisition, and a
-  remote modem are not represented. This is separate from the working PC Card
-  PPP path ([`builtin-modem.md`](docs/builtin-modem.md)).
+  remote modem are not represented. Tone/pulse dialing and fax are documented
+  product behaviors beyond that boundary. This is separate from the working
+  PC Card PPP path ([`builtin-modem.md`](docs/builtin-modem.md)).
 
 - **Implement microphone/audio input.** Speaker playback covers the
   unbuffered hold register and continuously serviced sound-TX DMA ring, but
   `sibSoundRxStart`, the sound-RX DMA enable/interrupt path, and a host
-  microphone source are not implemented. Recording applications are therefore
-  unverified
+  microphone source are not implemented. The guide's email sound-stamp
+  record/stop/play workflow is the intended end-to-end acceptance test
   ([`betty-registers.md`](docs/betty-registers.md#buffered-sib-sound-dma)).
+
+- **Expand Magic Bus beyond one keyboard.** The product connector supports
+  PCs, external modems, keyboards and other accessories, commonly in a daisy
+  chain. The driver currently presents either one `ATKB` device or an empty
+  bus; multiple addressable devices and other accessory classes remain
+  uncovered ([`memory-map.md`](docs/memory-map.md#magic-bus)).
 
 - **Improve hardware fidelity beyond observed ROM needs.** TX39 configuration
   and cache-lock registers and many Dino registers are behavioral shadows.
@@ -130,15 +145,23 @@ checkpoints are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
   ([`tx39-cpu.md`](docs/tx39-cpu.md), [`memory-map.md`](docs/memory-map.md)).
 
 The machine stays `MACHINE_NOT_WORKING` while these hardware gaps remain.
-Power/wake, sound, the built-in modem's ROM/DSP boundary, Magic Bus, IrDA
-beaming, and the other implemented paths have focused acceptance checks; the
-list above is the current uncovered hardware work rather than old bring-up
-failures.
+Power/wake, sound output, the built-in modem's ROM/DSP boundary, one Magic Bus
+keyboard, IrDA beaming, and the other implemented paths have focused acceptance
+checks. The product-level coverage matrix and smaller UI acceptance backlog
+derived from Icras's guide are in
+[`user-guide.md`](docs/user-guide.md).
 
 ## Resources
 
 - **Toshiba TX39 core documentation.** The primary CPU reference is the *TX39 Family Core Architecture User's Manual* (Jul 1995, 246 pp) — it documents the R3900 core in emulation-grade depth: five-stage pipeline, complete instruction set with per-instruction detail, MMU direct segment mapping, CP0/exception processing, I/D caches with lock functions, and debug registers. The [Bitsavers PDF](https://www.bitsavers.org/components/toshiba/_dataSheet/TMPR39xx-um_199507.pdf) is pinned by checksum in [`docs/tx39-cpu.md`](docs/tx39-cpu.md); the same document is [scanned on archive.org](https://archive.org/details/manualzilla-id-7260633). Supplement with the [Bitsavers TMPR39xx family overview](http://www.bitsavers.org/components/toshiba/_dataSheet/TMPR39xx-family.pdf) and the TMPR3904/3912/3922 sibling manuals. None of these mention the TMPR3902 by name — the SoC-specific peripherals (Dino, Betty) remain undocumented anywhere public, so those come from ROM reverse engineering.
-- **General Magic primary docs** on Bitsavers' [`/pdf/generalMagic/`](https://bitsavers.org/pdf/generalMagic/) — `Using_Magic_Cap.pdf`, the [*Telescript Language Reference*](https://bitsavers.org/pdf/generalMagic/Telescript_Language_Reference_Oct95.pdf) (Oct 1995, 263 pp; TDE 1.0 Alpha), and the Sony Magic Link Press Kit. Telescript is the agent language behind Magic Cap's messaging/comms stack — useful context for the parts of the ROM that aren't UI.
+- **The DataRover 840 product specification.** Icras's 234-page
+  [*Using Magic Cap*](https://bitsavers.trailing-edge.com/pdf/generalMagic/Using_Magic_Cap.pdf)
+  guide is specifically for Magic Cap 3.1 on this machine. Its checksum,
+  reproducible mirror and workflow-by-workflow emulator coverage are recorded
+  in [`user-guide.md`](docs/user-guide.md). The same Bitsavers collection also
+  holds the [*Telescript Language Reference*](https://bitsavers.org/pdf/generalMagic/Telescript_Language_Reference_Oct95.pdf)
+  and Sony Magic Link material; those are broader historical/context sources,
+  not substitutes for the DataRover guide.
 - **Community knowledge**: [Old VCR blog](http://oldvcr.blogspot.com/2022/12/magic-cap-from-magic-link-to-datarover.html), [Josh Carter's FAQs](https://joshcarter.com/magic_cap/) (incl. developer docs and the 840F flasher, useful for understanding ROM layout), [comp.os.magic-cap archives](https://groups.google.com/g/comp.os.magic-cap), [archive.org DataRover 840 software](https://archive.org/details/DataRover840).
 - **Ghidra** — free RE suite with solid big-endian MIPS-I support for static analysis of the ROM.
 - **Prior art & preservation.** The only documented prior preservation effort is [Cooper Hewitt / Small Data Industries (2019)](https://www.cooperhewitt.org/2019/05/13/a-predecessor-of-todays-smartphones/), who concluded there was no non-destructive way to dump the Motorola Envoy's TSOP-56 ROMs and fell back to running the Mac simulator under Basilisk II — application-level simulation, not device emulation. No Magic Link or Envoy (68K-generation) ROM dump is known to exist, so those machines can't be device-emulated today; the DataRover, with its freely downloadable 3.1.2j image, is the one Magic Cap machine that can.
@@ -172,7 +195,7 @@ We don't own a DataRover 840, so correctness is judged by external signals only:
 ## Repo layout
 
 ```
-docs/       RE notes: memory map, Betty registers, ROM layout, bring-up, PCLink, PC Card and built-in modems, TX39 CPU, power/wake, development ROMs
+docs/       RE notes and acceptance maps: user guide, memory map, Betty registers, ROM layout, bring-up, PCLink, PC Card and built-in modems, TX39 CPU, power/wake, development ROMs
 tools/      automated regression harnesses and analysis scripts (ROM info, ROM diff, serial, desk, touch/menu, sound, telecom, TX39, PC Card, PCLink, IrDA Beam, both modem paths, development-ROM Command-T/self-tests), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play
 tests/      unit tests for the tools, with captured serial fixtures
 roms/       optional git-ignored compatibility path; persistent assets live outside the repo in ~/fun/magic-cap-assets/

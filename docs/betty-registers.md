@@ -236,6 +236,14 @@ sound-receive DMA/ready events, and has no host microphone source. Audio
 recording is therefore a remaining hardware path, not something covered by
 the playback regression.
 
+*Using Magic Cap*, pp. 67–68, supplies the acceptance workflow rather than
+leaving “microphone support” abstract: create an email, add the general-drawer
+sound stamp, open its recording controls, record from the DataRover microphone,
+stop early or at the configured duration, and play the same stamp back. A
+deterministic host sample fed through sound-RX DMA and recovered through the
+already-working speaker path would prove the entire boundary. The broader
+product coverage map is in [`user-guide.md`](user-guide.md).
+
 The complete ROM diagnostic now runs as a regression:
 
 ```sh

@@ -257,6 +257,16 @@ change the battery readings over time. Nothing in the ROM's behavior so far
 depends on it, and guessing at it would risk the display and sleep paths that
 already work.
 
+The product guide turns two of these from speculative fidelity into observable
+acceptance requirements. *Using Magic Cap*, pp. 209–211, says AC power
+recharges the main cell while the communicator remains in use. It also defines
+a five-minute automatic-shutoff default, adjustable from 1–60 minutes, with a
+separate choice for shutting off while plugged in. A complete power regression
+should therefore drive the Power controls, verify those policy values, observe
+idle power-down, and make a charger-enabled AC run advance a modelled battery
+level. The same window displays storage-card battery state, which belongs to
+the storage-card lifecycle tracked in [`user-guide.md`](user-guide.md).
+
 ## Still unmodelled around the power supply
 
 Where to look, all in the release build unless noted:

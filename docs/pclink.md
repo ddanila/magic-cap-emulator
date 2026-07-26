@@ -6,6 +6,14 @@ exposes that connection as MAME RS-232 port 1. `tools/pclink_regression.py`
 acts as the host, starts with clean NVRAM, navigates to the computer, and
 installs a real archived package.
 
+*Using Magic Cap*, p. 217, calls the physical accessory jack the **MAGIC BUS
+connector** and lists a personal computer among the devices it can connect.
+That product label must not be confused with Dino's packet-oriented Magic Bus
+controller: the ROM's PCLink service demonstrably uses UART A, while the
+`ATKB` accessory uses the separate Magic Bus registers. The board-level
+pin/multiplexer relationship at that jack is not yet proven, so the product
+name alone is not evidence that PCLink bytes belong in the packet controller.
+
 No package, ROM, or Windows executable is committed. Keep all of them in the
 persistent `~/fun/magic-cap-assets/` tree.
 
