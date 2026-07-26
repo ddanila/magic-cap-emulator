@@ -216,8 +216,16 @@ python3 tools/sound_regression.py --checkpoint dma
 ```
 
 That runs long enough for the chime and requires two audible segments — the
-70 ms unbuffered startup beep and a buffered segment of 120-300 ms. Measured
-result: 200 ms at `t=14.36s`, about 820 Hz, peak 5593. With the DMA dispatch
+70 ms unbuffered startup beep and a buffered segment lasting between one and
+four seconds. Measured result: 2140 ms at `t=14.36s`, peak 6457, repeatably.
+
+The buffer itself is only 1024 words — about 190 ms — because the normal mode
+is a **continuously serviced two-half ring**: the ROM refills each half from
+its half and full interrupt handlers without ever setting
+`kSibSoundDmaLoopMask`, and only an explicitly requested `kSibSoundDmaOnceMask`
+transfer stops at the end. An earlier version of this driver stopped any
+transfer that lacked the loop bit, which cut the chime off after a single pass;
+the regression's lower bound now rejects that failure directly. With the DMA dispatch
 disabled the same capture contains only the beep, which is how the feature was
 confirmed rather than assumed. Note that the DAC output lands on the capture's
 second channel; the analysis picks the most occupied channel for that reason.

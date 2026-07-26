@@ -35,10 +35,14 @@ DEFAULT_WORKDIR = (
 )
 
 
-# The buffered chime the OS plays during boot: 1024 words of two 16-bit
-# samples at roughly 11 kHz, so a little under 200 ms of audio.
-DMA_MIN_DURATION = 0.12
-DMA_MAX_DURATION = 0.30
+# The buffered chime the OS plays during boot. The buffer is 1024 words of two
+# 16-bit samples at roughly 11 kHz - about 190 ms - but it is a continuously
+# serviced two-half ring, not a one-shot: the ROM refills each half from its
+# half and full interrupt handlers, so the chime runs far longer than one pass.
+# Measured at 2140 ms, repeatably. The bounds are wide enough to tolerate a
+# different chime without accepting a single unrefilled pass.
+DMA_MIN_DURATION = 1.0
+DMA_MAX_DURATION = 4.0
 DMA_MIN_PEAK = 1_000
 DMA_SEGMENT_THRESHOLD = 150
 

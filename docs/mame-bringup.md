@@ -124,6 +124,12 @@ fitted (see [`power-wake.md`](power-wake.md#battery-levels)). Removing the cover
 before power-on leaves the machine unable to bring the display up, which is why
 the regression toggles it mid-session.
 
+Keep the fork checkout in step with this repository. Harnesses that reference
+driver devices by tag — `magicbus_probe.py` names the Magic Bus keyboard's
+ioport, for instance — fail against a stale build with an unhelpful "no counts
+reported", because the Lua lookup throws before anything is measured. Rebuild
+after pulling the fork.
+
 Machine configuration changes made interactively — or from a Lua script —
 persist into the cfg directory, so a stray setting can silently affect later
 runs. Every headless harness here passes its own `-cfg_directory` for that

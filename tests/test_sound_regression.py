@@ -52,10 +52,11 @@ class SegmentTests(unittest.TestCase):
         self.rate = 48_000
 
     def build(self) -> list[int]:
-        # 70 ms beep, one second of silence, then a 190 ms buffered chime.
+        # 70 ms beep, one second of silence, then the buffered chime, which
+        # is a continuously refilled ring rather than one 190 ms pass.
         samples = burst(self.rate, 768, 0.07, 16_000)
         samples.extend([0] * self.rate)
-        samples.extend(burst(self.rate, 820, 0.19, 5_500))
+        samples.extend(burst(self.rate, 820, 2.1, 5_500))
         return samples
 
     def test_finds_both_bursts(self) -> None:
@@ -63,7 +64,7 @@ class SegmentTests(unittest.TestCase):
 
         self.assertEqual(len(segments), 2)
         self.assertAlmostEqual(segments[0].duration, 0.07, delta=0.02)
-        self.assertAlmostEqual(segments[1].start, 1.07, delta=0.02)
+        self.assertAlmostEqual(segments[1].start, 1.07, delta=0.05)
         self.assertAlmostEqual(segments[1].frequency, 820, delta=25)
 
     def test_accepts_a_real_shaped_capture(self) -> None:
@@ -80,10 +81,11 @@ class SegmentTests(unittest.TestCase):
         self.assertFalse(passed)
         self.assertIn("found 1 audible segment", message)
 
-    def test_rejects_a_chime_that_is_too_short(self) -> None:
+    def test_rejects_a_single_unrefilled_pass(self) -> None:
+        # One 190 ms pass means the ring stopped instead of being refilled.
         samples = burst(self.rate, 768, 0.07, 16_000)
         samples.extend([0] * self.rate)
-        samples.extend(burst(self.rate, 820, 0.03, 5_500))
+        samples.extend(burst(self.rate, 820, 0.19, 5_500))
 
         passed, message = verify_dma(find_segments(samples, self.rate))
 
@@ -93,7 +95,7 @@ class SegmentTests(unittest.TestCase):
     def test_rejects_a_chime_that_is_too_quiet(self) -> None:
         samples = burst(self.rate, 768, 0.07, 16_000)
         samples.extend([0] * self.rate)
-        samples.extend(burst(self.rate, 820, 0.19, DMA_MIN_PEAK // 2))
+        samples.extend(burst(self.rate, 820, 2.1, DMA_MIN_PEAK // 2))
 
         passed, message = verify_dma(find_segments(samples, self.rate))
 
