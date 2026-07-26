@@ -108,16 +108,19 @@ The retained clean evidence is under:
    454K Storeroom object, and finishes with zero ROM Magic Bus failures and no
    attached-device alert. The harness treats a missing or nonzero failure
    count as a regression.
-2. **PC Card Ethernet — card initialization covered, frame acceptance in
-   progress.** The original 1998 Magic Cap `EtherLinkIII.pkg` driver accepts
+2. **PC Card Ethernet — card initialization and bidirectional frames
+   covered.** The original 1998 Magic Cap `EtherLinkIII.pkg` driver accepts
    manufacturer `0x0101` and the complete `0x?589` revision family. The MAME
    fork now provides a reusable 3C589 PC Card with the 3Com-published CIS,
    attribute/configuration registers, windowed I/O, EEPROM MAC, PIO FIFOs,
-   IREQ and network backend. WCPack performs the demand-loaded reset and
-   register-window setup and the browser reaches `Communicating / Contacting
-   1`. Next require the ROM's real ARP exchange and a local HTTP fetch through
-   a deterministic host peer. See [`etherlink.md`](etherlink.md) for
-   provenance and the trace gates.
+   TX-status stack, IREQ and a loopback-only UDP network backend. WCPack
+   performs the demand-loaded reset and register-window setup. A deterministic
+   rootless peer now observes the ROM's real ARP and TCP SYN and returns ARP
+   replies and checksummed SYN-ACKs that the Magic Cap driver reads and
+   discards normally. The browser reaches `Contacted ... / Sending request`
+   but still retries SYN; completing that TCP session and rendering local HTTP
+   is the next gate. See [`etherlink.md`](etherlink.md) for provenance and the
+   trace boundary.
 3. **Deterministic HTTPS through a host proxy.** Install the modified browser
    into a copied provider-configured NVRAM tree, keep the same MAME process
    alive, serve a small local HTTPS page, and expose a pinned

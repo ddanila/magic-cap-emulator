@@ -85,7 +85,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | Built-in software modem | Continuous 48-word SIB telecom DMA ring drives the ROM's V.32 pump/control/FIR through a TX39 `MADD` | [`builtin-modem.md`](docs/builtin-modem.md) |
 | Magic Bus | Address assignment, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
-| PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver identifies, configures and starts the reusable 3Com 3C589 Ethernet core | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md) |
+| PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core and exchanges real ARP/TCP frames through a rootless loopback UDP backend | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md) |
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap, including the 452K Apollo browser from the Old VCR field report | [`pclink.md`](docs/pclink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
 | IrDA / Beam | Two fresh communicators discover each other by name over SIR, the sender selects the receiver, and a name card arrives in the receiver's Inbox | [`irda.md`](docs/irda.md) |
 | Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 fetches and renders deterministic local HTTP | [`modem.md`](docs/modem.md) |
@@ -122,10 +122,11 @@ checkpoints are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
   report loads Web pages through a 3Com EtherLink III. The archived Magic Cap
   driver identifies the supported hardware as 3Com `0x0101` / `0x?589`, and a
   reusable MAME 3C589 PC Card core now supplies the published CIS, windowed
-  I/O, EEPROM, FIFO, IREQ and network interface. The real driver completes
-  demand-loaded initialization and the browser reaches its communicating
-  state. A privilege-free deterministic Ethernet peer, ARP and a local HTTP
-  fetch remain
+  I/O, EEPROM, FIFO, TX-status stack, IREQ and network interface. The real
+  driver completes demand-loaded initialization, and the rootless UDP peer
+  proves guest-originated ARP and TCP SYN plus guest-consumed ARP replies and
+  SYN-ACKs. The remaining gate is TCP-session interoperability and a rendered
+  local HTTP response, followed by the documented TLS proxy
   ([`oldvcr-tls.md`](docs/oldvcr-tls.md#acceptance-targets-derived-from-the-article)).
 
 - **Model the built-in modem's external line side.** The SIB telecom DMA ring

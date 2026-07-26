@@ -136,6 +136,72 @@ The preserved provider setup, save states, screenshots and trace are under:
 ~/fun/magic-cap-assets/runtime/etherlink-provider-wizard/20260726T201000/
 ```
 
+## Rootless frame transport
+
+The MAME fork also has a `udp` network provider for deterministic tests that
+cannot create a TAP interface. It binds only to loopback and carries exactly
+one raw Ethernet frame per UDP datagram:
+
+```text
+MAME receive: 127.0.0.1:58100
+peer receive: 127.0.0.1:58101
+```
+
+`MAME_UDP_NET_LOCAL_PORT` and `MAME_UDP_NET_REMOTE_PORT` override the two
+ports. `-networkprovider udp -listnetwork` exposes interface 0; select that
+interface for `:pccard1:3c589` in MAME's Network Devices configuration and
+launch the card with `-pccard1 3c589`.
+
+The matching `tools/etherlink_peer.py` is a privilege-free isolated LAN
+endpoint. It answers ARP for `10.0.2.2` and `10.0.2.3`, maps DNS A queries to
+`10.0.2.2`, and contains a small checksummed TCP/HTTP endpoint on ports 80 and
+8080:
+
+```sh
+python3 tools/etherlink_peer.py \
+  --trace "$HOME/fun/magic-cap-assets/runtime/etherlink/peer-trace.txt" \
+  --http-requests \
+    "$HOME/fun/magic-cap-assets/runtime/etherlink/http-requests.txt"
+```
+
+The fixed response delay prevents an impossible zero-latency reply from
+racing the initiating guest stack. Neither this provider nor the peer opens a
+host network interface or grants the guest Internet access.
+
+Two 3C589 details were required before frames became real:
+
+- the first transmit-preamble word is length plus control bits; bit 15 requests
+  a successful-transmit interrupt, while only bits 10–0 are the frame length;
+- successful requested completions enter the byte-wide TX-status stack.
+  Magic Cap reads and pops that entry before acknowledging the interrupt.
+  Treating every send as an unpoppable TX Complete left IREQ asserted and
+  prevented a later RX Complete edge.
+
+Interrupt Requested is also a distinct software-generated status source, not
+an indication that the physical IREQ line is active. The emulation now keeps
+it separate from Interrupt Latch and implements the published acknowledgement
+rules for TX Available, RX Early and RX Complete.
+
+With those corrections, a cold NVRAM run produces and consumes:
+
+```text
+ARP: 10.0.2.15 asks for 10.0.2.2
+ARP: 10.0.2.2 replies with 02:00:00:00:02:02
+TCP: 10.0.2.15:1024 sends SYN to 10.0.2.2:8080
+TCP: the peer returns a checksummed SYN-ACK
+```
+
+The Magic Cap driver reads each returned frame and issues RX Discard, and the
+browser advances to **Contacted 10.0.2.2:8080 / Sending request**. It currently
+retries the SYN rather than sending the HTTP request. That is the exact
+remaining protocol boundary; ARP and card receive interrupts are no longer
+the blocker.
+
+Do not use a save-state restore as the live-network test setup. MAME currently
+rejects loading a state after a network backend creates its anonymous polling
+timer. Boot a copied, provider-configured NVRAM tree and keep the same MAME
+process alive through the request instead.
+
 ## Acceptance sequence
 
 The gates, in order, are:
@@ -147,11 +213,13 @@ The gates, in order, are:
 2. **Covered:** request a page so WCPack claims the card. The retained trace
    contains the reset/COR sequence, Window 0 setup, station-address
    programming and transitions through operating Windows 1, 2 and 4.
-3. **Next:** attach a deterministic, privilege-free Ethernet peer and require
-   the ROM's real ARP request and reply, followed by a small local HTTP
-   response.
-4. Connect that proved frame path to a loopback-only HTTP/TLS proxy acceptance
+3. **Covered through frames:** the loopback-only UDP provider and deterministic
+   peer carry the ROM's real ARP and TCP SYN. Magic Cap consumes the ARP reply
+   and SYN-ACK through the 3C589 receive FIFO.
+4. **Next:** complete the TCP handshake and require a small local HTTP
+   response to render.
+5. Connect that proved frame path to a loopback-only HTTP/TLS proxy acceptance
    described in [`oldvcr-tls.md`](oldvcr-tls.md).
 
-Until the ARP and HTTP gates pass, the device is a guest-initialized hardware
-core, not yet a claimed working DataRover Ethernet path.
+Until the HTTP gate passes, the device is a guest-driven frame path, not yet a
+claimed working DataRover Web path.
