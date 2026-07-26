@@ -83,13 +83,10 @@ export SDL_VIDEO_HIGHDPI_DISABLED=1
 # -nokeepaspect: SDL maps the pointer over the whole window, so the pen
 #   mapping is only exact when the screen fills the window; keep the
 #   window near 3:2 to avoid distortion (docs/mame-bringup.md).
-# -lightgun + -lightgun_device lightgun: bind the pen axes to SDL's
-#   absolute "System pointer gun" (window coordinates). The previous
-#   `-lightgun_device mouse` bound them to the RELATIVE mouse axes, so
-#   MAME integrated deltas — causing cursor/crosshair desync, wrong-size
-#   mapping, and pen freezes after MAME menu interactions.
-# -mouse: keeps MOUSECODE_BUTTON1 (the touch button) alive alongside the
-#   gun device.
+# -lightgun + -lightgun_device lightgun: keep the pen axes and pen-down
+#   button on SDL's single absolute "System pointer gun". Mixing those
+#   axes with the relative mouse device leaves stale coordinates after
+#   entering and leaving MAME's Tab menu.
 set -x
 exec "$BIN" datarover840 \
   -rompath "$ROMPATH" \
@@ -99,5 +96,5 @@ exec "$BIN" datarover840 \
   -ui_active \
   -nokeepaspect \
   -view "$view" \
-  -lightgun -mouse -lightgun_device lightgun \
+  -lightgun -lightgun_device lightgun \
   ${extra[@]+"${extra[@]}"}

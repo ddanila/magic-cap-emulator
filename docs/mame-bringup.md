@@ -8,10 +8,11 @@ binary is committed to either repository.
 
 ## Host prerequisites
 
-The build and every regression except the live Slirp PPP bridge run on both
-Linux and macOS. The bridge's dependencies (classic `slirp` and `bubblewrap`,
-see [`modem.md`](modem.md)) are Linux-only; `tools/modem_bridge.py --probe`
-still works everywhere.
+The build and every headless regression except the live Slirp PPP bridge run
+on both Linux and macOS. The host-UI touch regression is Linux/X11-only
+because it drives a real MAME Tab menu under Xvfb. The bridge's dependencies
+(classic `slirp` and `bubblewrap`, see [`modem.md`](modem.md)) are Linux-only;
+`tools/modem_bridge.py --probe` still works everywhere.
 
 ### macOS
 
@@ -43,7 +44,7 @@ sudo apt-get install \
   git build-essential python3 \
   libsdl2-dev libsdl2-ttf-dev libfontconfig-dev libpulse-dev \
   qt6-base-dev qt6-base-dev-tools qtchooser \
-  ccache binutils-mips-linux-gnu gdb-multiarch unshield \
+  ccache binutils-mips-linux-gnu gdb-multiarch unshield xvfb xdotool \
   curl unzip gzip slirp bubblewrap
 ```
 
@@ -108,8 +109,8 @@ LCD:
 cd "$HOME/fun/mame"
 ./datarover datarover840 \
   -rompath "$HOME/fun/magic-cap-assets/roms" \
-  -window -skip_gameinfo -view LCD \
-  -lightgun_device mouse
+  -window -skip_gameinfo -nokeepaspect -view LCD \
+  -lightgun -lightgun_device lightgun
 ```
 
 Boot first shows a small bare top hat. That is only the early splash. The
@@ -146,15 +147,15 @@ likely reason the modem needs re-enumerating after a state load. Anything added
 to the driver should be registered at the same time; two DMA flags were missed
 that way and fixed afterwards.
 
-`-lightgun_device mouse` maps the host pointer to the resistive pen axes.
-Add `-nokeepaspect` for interactive use: SDL normalizes the pointer over the
-whole window while `-keepaspect` letterboxes the 3:2 screen, so with
-letterboxing the crosshair and the host cursor only agree at the window
-center. With `-nokeepaspect` the screen fills the window and the pen mapping
-is exact at any window size (keep the window near 3:2 to avoid distortion).
-Press **End** for the DataRover power button; a normal press enters
-suspend-to-RAM rather than destroying the battery-backed heap, and another
-press wakes the CPU.
+`-lightgun -lightgun_device lightgun` maps the host pointer to one absolute
+SDL lightgun device. The driver binds X, Y, and pen-down to that same device;
+do not add `-mouse` or use `-lightgun_device mouse`, because that mixes
+absolute and relative input state and can leave the pen position stale after
+closing MAME's Tab menu. `-nokeepaspect` makes the screen fill the window so
+the crosshair and host cursor agree at any window size (keep the window near
+3:2 to avoid distortion). Press **End** for the DataRover power button; a
+normal press enters suspend-to-RAM rather than destroying the battery-backed
+heap, and another press wakes the CPU.
 
 The driver exposes three video views under **Tab → Video Options**:
 
@@ -208,6 +209,7 @@ python3 -m unittest discover -s tests -v
 python3 tools/serial_regression.py
 python3 tools/serial_regression.py --checkpoint betty
 python3 tools/desk_regression.py
+python3 tools/menu_touch_regression.py
 python3 tools/power_regression.py
 python3 tools/sound_regression.py
 python3 tools/sound_regression.py --checkpoint dma
@@ -249,6 +251,14 @@ native LCD PNG. Every run keeps its Lua script, MAME output, NVRAM, and
 snapshot under a timestamped directory in
 `~/fun/magic-cap-assets/runtime/desk-regression/`; no binary artifact is
 written to this Git checkout.
+
+The Linux-only menu-touch harness opens a real 720×480 MAME window under
+Xvfb, presses and releases the pen, opens and closes the Tab menu with
+separate key-down/key-up events, moves to a second point, and presses again.
+It requires the effective X/Y/button bindings to all name lightgun 1 and
+requires both coordinates plus pen-down to change after `menu_active` returns
+to zero. Generated Lua, isolated NVRAM, and host logs remain under
+`~/fun/magic-cap-assets/runtime/menu-touch-regression/`.
 
 The power harness is deliberately two processes, not a same-process shortcut.
 It calibrates a fresh heap, enters normal VCC-off power-down, exits so only
