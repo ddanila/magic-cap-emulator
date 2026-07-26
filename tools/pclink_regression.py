@@ -615,6 +615,7 @@ def lua_warm_provider_navigation(
     package_ready_path: Path | None = None,
     package_snapshotted_path: Path | None = None,
     internet_center_start: bool = False,
+    storeroom_start: bool = False,
     browser_acceptance: bool = False,
     http_port: int = 8080,
     owner_first_name: str | None = None,
@@ -754,6 +755,14 @@ def lua_warm_provider_navigation(
             owner_first_name,
             owner_last_name,
         )
+    elif storeroom_start:
+        navigation_steps = f"""    if frames == 1300 then
+        machine.screens[":screen"]:snapshot("navigation-storeroom.png")
+    elseif frames == 1400 then press(48, 155)
+    elseif frames == 1420 then touch_button:set_value(0)
+    elseif frames == {snapshot_frame} and not package_snapshotted then
+        machine.screens[":screen"]:snapshot("package-installed.png")
+"""
     elif internet_center_start:
         navigation_steps = f"""    if frames == 1300 then press(413, 61)
     elseif frames == 1320 then touch_button:set_value(0)
@@ -955,6 +964,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="treat --nvram-source as starting on Internet Center's provider screen",
     )
     parser.add_argument(
+        "--storeroom-source",
+        action="store_true",
+        help="treat --nvram-source as already starting in the Storeroom",
+    )
+    parser.add_argument(
         "--owner-first-name",
         help="letters-only first name for provider first-run setup",
     )
@@ -1030,6 +1044,21 @@ def run_regression(args: argparse.Namespace) -> int:
     if probe_package and not provider_source:
         print(
             "error: package probing requires a provider source",
+            file=sys.stderr,
+        )
+        return 2
+    if args.storeroom_source and nvram_source is None:
+        print(
+            "error: --storeroom-source requires --nvram-source",
+            file=sys.stderr,
+        )
+        return 2
+    if args.storeroom_source and (
+        args.internet_center_source or args.owner_first_name is not None
+    ):
+        print(
+            "error: --storeroom-source cannot be combined with another "
+            "source-scene mode",
             file=sys.stderr,
         )
         return 2
@@ -1125,6 +1154,7 @@ def run_regression(args: argparse.Namespace) -> int:
             args.owner_last_name or "",
         )
         if args.owner_first_name is not None
+        else 1500 if args.storeroom_source
         else 5100 if args.internet_center_source
         else 3500 if provider_source else 2750
     )
@@ -1155,6 +1185,7 @@ def run_regression(args: argparse.Namespace) -> int:
                 package_ready_path=package_ready_path,
                 package_snapshotted_path=package_snapshotted_path,
                 internet_center_start=args.internet_center_source,
+                storeroom_start=args.storeroom_source,
                 browser_acceptance=combined_browser,
                 http_port=args.http_port,
                 owner_first_name=args.owner_first_name,

@@ -182,6 +182,18 @@ class PCLinkProtocolTests(unittest.TestCase):
         self.assertIn("press(170, 132)", script)
         self.assertIn("press(48, 155)", script)
 
+    def test_storeroom_source_opens_pclink_directly(self) -> None:
+        script = pclink_regression.lua_warm_provider_navigation(
+            3200,
+            4800,
+            storeroom_start=True,
+        )
+
+        self.assertIn("navigation-storeroom.png", script)
+        self.assertIn("frames == 1400 then press(48, 155)", script)
+        self.assertNotIn("press(413, 61)", script)
+        self.assertNotIn("press(440, 10)", script)
+
     def test_provider_first_run_completes_owner_card_then_reaches_pclink(
         self,
     ) -> None:
