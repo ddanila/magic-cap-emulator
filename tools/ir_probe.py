@@ -15,9 +15,9 @@ This counts entries into the stack so the boundary is measurable:
     irlapOpen / BeamDiscover        (only once the user beams something)
 
 On a plain boot the stack initialises but never opens the link, because
-beaming is user-initiated. Pass `--require-link` to demand an opened link,
-which is the acceptance check for a future implementation that routes pulsed
-UART traffic to an IR peer.
+beaming is user-initiated. Pass `--require-link` only when another harness or
+debugger action is driving the Beam UI; `tools/beam_regression.py` is the
+end-to-end acceptance check for the implemented peer transport.
 
 The addresses are from the release build; the development ROM shifts them, so
 this refuses to run against anything else. See docs/irda.md.

@@ -1,8 +1,9 @@
 # IrDA and beaming
 
-Magic Cap can beam objects between communicators. This note records how that
-is wired on the DataRover, because the obvious answer is the wrong one, and how
-far the stack gets on the emulated machine today.
+Magic Cap can beam objects between communicators. The emulated DataRover now
+provides the complete path used by the ROM: Dino pulsed UART bytes, carrier
+detect and wake interrupts, a host PTY, peer discovery, recipient selection,
+and object transfer through the real Beam UI.
 
 ## It does not use Dino's IR module
 
@@ -22,68 +23,100 @@ there:
     ((DinoModule*)DINOMODULE)->irControl1 &= ~kIOResetBettyOffMask;
 ```
 
-No function in the `irlap`, `irlmp` or `irda` families touches Dino registers
-at all.
+No function in the `irlap`, `irlmp` or `irda` families touches that IR block.
 
 ## It rides a UART in pulsed mode
 
 IrDA SIR encodes each bit as a short pulse, and Dino's UARTs implement that
-directly: `kUartPulseLow3ClockMask` (bit 9) and `kUartPulseLow6CLockMask`
-(bit 8) in `uartA.control1` / `uartB.control1`.
-`SerialServerDino_PulsedMode` (`0x13c540ac`) asks the serial server which port
-it owns and returns bit 8 of that port's control register, so either UART can
-be the infrared one and the byte stream above it is ordinary serial.
+directly: `kUartPulseLow3ClockMask` (bit 9) and
+`kUartPulseLow6CLockMask` (bit 8) in `uartA.control1` /
+`uartB.control1`. `SerialServerDino_PulsedMode` (`0x13c540ac`) asks the
+serial server which port it owns and tests that port's control register, so
+the routing cannot be hard-coded from the register address alone.
+
+The release ROM selects **UART B** for its IrDA serial server. During a Beam
+run its control register reads `0xc0000141`: enabled and empty status, the
+writable UART configuration, and pulsed mode. UART A remains the wired IDT /
+PCLink port.
 
 Above that sits the OS's own IrDA implementation — `irdaInit` → `irlapInit`,
-with `IRDaemonActor` running the link and `Beam*` / `BeamWindow_*` on top.
+with `IRDaemonActor` running IrLAP/IrLMP and `Beam*` / `BeamWindow_*` on top.
+The MAME driver transports SIR-framed bytes; it does not replace or emulate
+that protocol stack.
 
-The practical consequence for the emulator is that **no new Dino module is
-needed**. The driver already stores and returns the UART control registers, so
-the pulsed-mode bit round-trips and `SerialServerDino_PulsedMode` reads it
-correctly. What is missing is somewhere for the light to go.
+## Driver transport
 
-## How far it gets today
+The driver exposes a dedicated `:irda` PTY and prints its path at startup:
 
-`tools/ir_probe.py` counts entries into the stack over a boot:
-
-```sh
-python3 tools/ir_probe.py                # report how far the stack gets
-python3 tools/ir_probe.py --require-link # demand an opened link
+```text
+:irda PTY: /dev/pts/7
 ```
 
-Measured on the release build:
+UART writes go to this PTY only while the owning UART has either pulsed-mode
+bit set. Otherwise they continue to the normal RS-232/terminal path. Bytes
+read from the PTY return to whichever UART is currently pulsed, including its
+receive-holding status and interrupt behavior.
 
-| Routine | Entries |
-|---|---:|
-| `irdaInit` | 1 |
-| `irlapInit` | 1 |
-| `IRDaemonActor_Main` | 1 |
-| `IRDaemonActor_InitializeBeam` | 2 |
-| `irlapOpen` | 0 |
-| `BeamDiscover` | 0 |
-| `SerialServerDino_PulsedMode` | 0 |
+The physical transceiver's carrier-detect line is represented by the
+**IrDA carrier** input. Its live level appears as Dino interrupt-bank-5 bit 16
+(`kIntCarDetPinMask`); changes latch positive- and negative-edge bits 15 and
+14. `SerialServerDinoIrDA_SetWakeUpOnIREvents` enables the positive edge, so a
+peer or bridge must assert carrier just before delivering its first frame.
+The automated harness does this through the MAME input field.
 
-Both UARTs read `0x05014000` — bit 8 clear, so neither is in pulsed mode.
+A PTY is intentionally a byte-stream boundary, not a virtual room: two MAME
+processes are not connected merely because both expose one. A bridge must
+copy each PTY's output to the other and drive carrier. This makes raw wire
+capture and a future physical/host IrDA bridge possible without embedding
+peer policy in the device.
 
-So the IrDA stack **initialises itself on every boot** and then waits: nothing
-opens the link, no discovery runs, and no port is switched to infrared until
-the user beams something from the Beam window. That is correct behavior for an
-idle communicator, and it is why beaming cannot be exercised by booting alone.
+## Idle-stack probe
 
-## What a working implementation needs
+`tools/ir_probe.py` measures the release ROM's idle initialization:
 
-Two pieces, in this order:
+```sh
+python3 tools/ir_probe.py
+```
 
-1. **Somewhere for the data to go.** When a UART has bit 8 set, its traffic is
-   infrared rather than wire, so the driver should route it to an IR endpoint
-   instead of the RS-232 port. The cheapest useful endpoint is a loopback for
-   bring-up; the useful one is a peer, either a second emulated DataRover or a
-   host-side IrLAP responder on a PTY, in the shape `tools/modem_bridge.py`
-   already uses for PPP.
-2. **A way to trigger a beam.** `BeamWindow_Beam` is reached through the UI, so
-   an acceptance run has to drive the Beam window the way the PCLink harness
-   drives the Storeroom, or force the call once the transport exists.
+On a plain boot `irdaInit`, `irlapInit`, `IRDaemonActor_Main`, and
+`IRDaemonActor_InitializeBeam` run, while `irlapOpen` and `BeamDiscover` do
+not. Neither UART selects pulsed mode. That is expected: discovery is a user
+action, not a boot action. `--require-link` is useful only if the Beam UI is
+being driven separately; use the paired harness below for acceptance.
 
-`--require-link` is the acceptance check for step one: it demands `irlapOpen`
-and a UART actually in pulsed mode, and fails today for exactly the reasons
-above.
+## End-to-end Beam regression
+
+Run:
+
+```sh
+python3 tools/beam_regression.py
+```
+
+The headless harness:
+
+1. starts two release-ROM machines with independent fresh NVRAM;
+2. calibrates both and creates `alice Sender` and `bob Receiver` owner cards;
+3. opens both IrDA PTYs and bridges their bytes in both directions;
+4. drives the sender through Name cards → Magic Lamp → Beam;
+5. pulses carrier, requires discovery of `bob Receiver`, selects and accepts
+   that peer, then touches **send**; and
+6. decodes the captured SIR frames and requires the peer names and serialized
+   name-card payload.
+
+A representative passing transfer sent 22 complete frames / 1,491 bytes from
+Alice and 15 frames / 323 bytes from Bob. The sender stream contains
+`alice Sender`, `Dear bob,` and the ROM-generated
+`The following item was received via beam:` notification; the reverse stream
+contains `bob Receiver`. The final receiver capture shows its Desk Inbox
+counter advance from 1 to 2.
+
+Every run keeps raw `irda-transmit.bin` streams, generated Lua, MAME output,
+isolated NVRAM, and snapshots of discovery, selected recipient, sender result,
+and receiver result under:
+
+```text
+~/fun/magic-cap-assets/runtime/beam-regression/<timestamp>-<pid>/
+```
+
+Those artifacts stay outside Git; the ROM and generated NVRAM are not
+redistributable project binaries.

@@ -222,7 +222,8 @@ python3 tools/builtin_modem_regression.py \
   --nvram-source /path/to/a/passing/combined-browser/run/nvram
 python3 tools/battery_regression.py
 python3 tools/magicbus_probe.py
-python3 tools/ir_probe.py --require-clean
+python3 tools/ir_probe.py
+python3 tools/beam_regression.py
 python3 tools/tx39_regression.py
 python3 tools/pccard_regression.py
 python3 tools/pclink_regression.py
@@ -274,6 +275,16 @@ path with VCC restored. Generated Lua, both process logs, NVRAM, and three LCD
 snapshots stay under
 `~/fun/magic-cap-assets/runtime/power-regression/`.
 
+The Beam harness starts two fresh communicators with isolated configuration
+and NVRAM, calibrates and creates owner name cards for Alice and Bob, then
+bridges their dedicated IrDA PTYs. It drives the real Magic Lamp → Beam UI,
+pulses Dino's IrDA carrier input, requires the sender to discover and select
+`bob Receiver`, and transfers `alice Sender`'s name card. The check decodes
+complete SIR frames, requires traffic and peer names in both directions, and
+requires the serialized name-card payload. Raw wire captures, both MAME logs,
+generated Lua, NVRAM, and UI snapshots remain under
+`~/fun/magic-cap-assets/runtime/beam-regression/`.
+
 The sound harness boots with SDL's dummy audio backend and asks MAME to write
 the mixed output to a persistent WAV capture. Its default `beep` checkpoint
 verifies that the ROM's hardware-generated startup tone is present near 750 Hz
@@ -304,8 +315,11 @@ install an archived package through the Storeroom computer. It fails on a
 Dino receive overrun, uses a final `Ping`/`Pong` as the completed-stream
 barrier, immediately closes the connection from the host with `GBye`, and
 verifies that the installed object appears in post-transfer native LCD
-captures. Package and reference-tool download commands, checksums, protocol
-notes, and alternate inputs are in [`pclink.md`](pclink.md).
+captures. Its isolated machine configuration disables the unrelated Magic Bus
+accessory so that accessory discovery cannot change the deterministic
+Storeroom navigation path; Magic Bus has its own focused probe. Package and
+reference-tool download commands, checksums, protocol notes, and alternate
+inputs are in [`pclink.md`](pclink.md).
 
 The modem probe inserts the I/O card, accepts the ROM's Hayes initialization
 and dial string, sends `CONNECT`, and requires Magic Cap to emit a valid PPP
@@ -415,13 +429,14 @@ the separate serial-terminal view.
 | Magic Bus | ROM assigns address zero, validates the checksummed `ATKB` descriptor, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures |
 | PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback, insertion, and live-OS checks |
 | PCLink | The Storeroom computer accepts the handshake and installs archived `DvorakKeyboard.pkg` into built-in storage |
+| IrDA / Beam | Two fresh peers exchange SIR discovery frames, select `bob Receiver`, and transfer `alice Sender`'s name card into the receiver's Inbox |
 | PC Card modem | Magic Cap detects the card, completes its Hayes sequence, and emits an async-HDLC PPP LCP frame |
 | Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
 
 The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
 still incomplete. The current gaps are the board-level effect of power-supply
-outputs, an IrDA transport/beam path, complete PC Card modem save state, the
-built-in modem's external line side, microphone/sound-receive DMA, and
-hardware fidelity beyond the register behavior exercised by the ROM; see
+outputs, complete PC Card modem save state, the built-in modem's external line
+side, microphone/sound-receive DMA, and hardware fidelity beyond the register
+behavior exercised by the ROM; see
 [`README.md`](../README.md#remaining-work). Magic Bus discovery and its
 AT-keyboard traffic are functional and covered by the headless probe.

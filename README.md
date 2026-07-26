@@ -2,7 +2,7 @@
 
 The first emulator for the [General Magic DataRover 840](https://pdamuseum.eu/pda/datarover840/) — the last and best Magic Cap communicator (1998), running Magic Cap 3.1 on a MIPS CPU. It is built as a MAME driver (fork: [ddanila/mame](https://github.com/ddanila/mame), `custom` branch); this repository holds the reverse-engineering notes, analysis tooling, and regression harnesses.
 
-**Current state:** the emulated machine boots ROM build 3.1.2j to the interactive Magic Cap workbench — touchscreen, persistent storage and suspend/wake (including a retained-RAM relaunch), speaker output, both PC Card slots, package installation over serial PCLink, and Web Browser 4.0 fetching a local HTTP page over live PC Card PPP all work. See [Status](#status).
+**Current state:** the emulated machine boots ROM build 3.1.2j to the interactive Magic Cap workbench — touchscreen, persistent storage and suspend/wake (including a retained-RAM relaunch), speaker output, both PC Card slots, package installation over serial PCLink, IrDA beaming between two emulated communicators, and Web Browser 4.0 fetching a local HTTP page over live PC Card PPP all work. See [Status](#status).
 
 Before this project (survey, July 2026) no emulator for any Magic Cap device existed — nothing in MAME, on GitHub, or in QEMU. The only way people ran Magic Cap was the Mac-hosted *Magic Cap Simulator*, a native recompile of the OS rather than a hardware emulator ([details below](#the-magic-cap-simulators)).
 
@@ -86,6 +86,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling | [`mame-bringup.md`](docs/mame-bringup.md) |
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap | [`pclink.md`](docs/pclink.md) |
+| IrDA / Beam | Two fresh communicators discover each other by name over SIR, the sender selects the receiver, and a name card arrives in the receiver's Inbox | [`irda.md`](docs/irda.md) |
 | Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 fetches and renders deterministic local HTTP | [`modem.md`](docs/modem.md) |
 | Variants | `datarover840` / `840f` (writable flash) / `840j` / `840d` (1998-04-07 development ROM) all build and verify; `840d` also boots to the workbench | [`rom-layout.md`](docs/rom-layout.md), [`dev-rom.md`](docs/dev-rom.md) |
 | OS self-tests | The development ROM's real Command-T runs through the OS scheduler: all 16 basic suites complete and return with no complaint. Fourteen individually driven unit tests — including `CheckROMPristineTable`, the OS verifying its own ROM — remain useful focused checks | [`dev-rom.md`](docs/dev-rom.md) |
@@ -102,14 +103,6 @@ checkpoints are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
   blank the display and the charger does not recharge the modelled cells. No
   ROM behavior observed so far depends on it
   ([`power-wake.md`](docs/power-wake.md#outputs-the-os-writes)).
-
-- **Route IrDA traffic to a peer.** Beaming does not use Dino's IR module —
-  that block is consumer-IR timing plus the Betty reset GPIO. IrDA rides a
-  Dino UART in pulsed mode (`kUartPulseLow6CLockMask`), which the driver
-  already round-trips, and the OS's IrLAP stack initialises on every boot but
-  never opens the link without a user beaming. What is missing is an IR
-  endpoint for pulsed-mode traffic and a way to drive the Beam window
-  ([`irda.md`](docs/irda.md)).
 
 - **Complete PC Card modem save states.** The main driver state is registered,
   but the optional modem card's 16550 registers and receive queue are not.
@@ -137,9 +130,10 @@ checkpoints are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
   ([`tx39-cpu.md`](docs/tx39-cpu.md), [`memory-map.md`](docs/memory-map.md)).
 
 The machine stays `MACHINE_NOT_WORKING` while these hardware gaps remain.
-Power/wake, sound, the built-in modem's ROM/DSP boundary, Magic Bus, and the
-other implemented paths have focused acceptance checks; the list above is the
-current uncovered hardware work rather than old bring-up failures.
+Power/wake, sound, the built-in modem's ROM/DSP boundary, Magic Bus, IrDA
+beaming, and the other implemented paths have focused acceptance checks; the
+list above is the current uncovered hardware work rather than old bring-up
+failures.
 
 ## Resources
 
@@ -179,7 +173,7 @@ We don't own a DataRover 840, so correctness is judged by external signals only:
 
 ```
 docs/       RE notes: memory map, Betty registers, ROM layout, bring-up, PCLink, PC Card and built-in modems, TX39 CPU, power/wake, development ROMs
-tools/      automated regression harnesses and analysis scripts (ROM info, ROM diff, serial, desk, touch/menu, sound, telecom, TX39, PC Card, PCLink, both modem paths, development-ROM Command-T/self-tests), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play
+tools/      automated regression harnesses and analysis scripts (ROM info, ROM diff, serial, desk, touch/menu, sound, telecom, TX39, PC Card, PCLink, IrDA Beam, both modem paths, development-ROM Command-T/self-tests), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play
 tests/      unit tests for the tools, with captured serial fixtures
 roms/       optional git-ignored compatibility path; persistent assets live outside the repo in ~/fun/magic-cap-assets/
 ```

@@ -440,6 +440,20 @@ end)
 """
 
 
+def isolated_machine_config() -> str:
+    """Keep unrelated Magic Bus UI changes out of the PCLink workflow."""
+    return """<?xml version="1.0"?>
+<mameconfig version="10">
+    <system name="datarover840">
+        <input>
+            <port tag=":MAGICBUS_ACCESSORY" type="CONFIG"
+                  mask="1" defvalue="1" value="0" />
+        </input>
+    </system>
+</mameconfig>
+"""
+
+
 def lua_provider_first_run_navigation(
     snapshot_frame: int,
     owner_first_name: str,
@@ -1052,6 +1066,10 @@ def run_regression(args: argparse.Namespace) -> int:
     workdir = artifact_root / stamp
     workdir.mkdir(parents=True)
     (workdir / "cfg").mkdir()
+    (workdir / "cfg" / "datarover840.cfg").write_text(
+        isolated_machine_config(),
+        encoding="utf-8",
+    )
     if nvram_source is not None:
         shutil.copytree(nvram_source, workdir / "nvram")
 

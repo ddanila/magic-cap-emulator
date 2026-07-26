@@ -96,6 +96,12 @@ class PCLinkProtocolTests(unittest.TestCase):
         self.assertNotIn("power_button", script)
         self.assertIn("frames == 4900", script)
 
+    def test_isolates_magicbus_from_pclink_navigation(self) -> None:
+        config = pclink_regression.isolated_machine_config()
+
+        self.assertIn('tag=":MAGICBUS_ACCESSORY"', config)
+        self.assertIn('defvalue="1" value="0"', config)
+
     def test_warm_provider_navigation_opens_pclink(
         self,
     ) -> None:

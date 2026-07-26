@@ -137,9 +137,13 @@ Dino's SIB subframe registers; see [`betty-registers.md`](betty-registers.md).
 The current behavioral model implements the subset exercised by the verified
 boot, OS, and peripheral regressions:
 
-- Buffered UART A/B transmit and receive paths, status/interrupt behavior, and
-  MAME RS-232 endpoints; UART A is also wired to the generic terminal for the
-  IDT monitor.
+- Buffered UART A/B transmit and receive paths, synthesized status bits,
+  preserved writable control bits, interrupt behavior, and MAME RS-232
+  endpoints; UART A is also wired to the generic terminal for the IDT monitor.
+- A dedicated IrDA SIR PTY. Bytes use that endpoint instead of RS-232 whenever
+  the owning UART selects either pulsed-mode bit. Incoming bytes return to the
+  pulsed UART, and the IrDA carrier input drives Dino interrupt-bank-5 carrier
+  pin and positive/negative-edge bits.
 - Write-to-clear Dino interrupt status banks.
 - Magic Bus command/status handling, PIO and DMA completion, peripheral
   request-line edges, checksummed discovery records, and the bidirectional
@@ -167,8 +171,8 @@ boot, OS, and peripheral regressions:
 
 These are deliberately ROM-observed behaviors, not a claim that all Dino
 timing and interrupt semantics are complete. Sound-receive DMA/microphone
-input, IrDA routing, and board-level effects of the power-rail outputs remain
-outside this implemented subset.
+input and board-level effects of the power-rail outputs remain outside this
+implemented subset.
 
 ## Magic Bus
 
