@@ -2,6 +2,10 @@
 
 The first emulator for the [General Magic DataRover 840](https://pdamuseum.eu/pda/datarover840/) — the last and best Magic Cap communicator (1998), running Magic Cap 3.1 on a MIPS CPU. It is built as a MAME driver (fork: [ddanila/mame](https://github.com/ddanila/mame), `custom` branch); this repository holds the reverse-engineering notes, analysis tooling, and regression harnesses.
 
+![The emulated DataRover 840 booting Magic Cap 3.1 and touring the desk, Stamps drawer, Hallway, Downtown and the Internet Center](docs/media/datarover-tour.gif)
+
+*A real recording of the emulated machine at its native 480×320, driven by a deterministic touchscreen script: boot → desk → Stamps → Hallway → the painting → Downtown → the Internet Center → Internet Mail rules. Static scenes are shortened; the animations play at their recorded speed. How it is made: [`docs/demo.md`](docs/demo.md).*
+
 **Current state:** the emulated machine boots ROM build 3.1.2j to the interactive Magic Cap workbench — touchscreen, persistent storage and suspend/wake (including a retained-RAM relaunch), speaker output, both PC Card slots, package installation over serial PCLink, IrDA beaming between two emulated communicators, and Web Browser 4.0 fetching local HTTP over both live PC Card PPP and the original EtherLink III driver all work. See [Status](#status).
 
 Before this project (survey, July 2026) no emulator for any Magic Cap device existed — nothing in MAME, on GitHub, or in QEMU. The only way people ran Magic Cap was the Mac-hosted *Magic Cap Simulator*, a native recompile of the OS rather than a hardware emulator ([details below](#the-magic-cap-simulators)).
@@ -224,8 +228,9 @@ We don't own a DataRover 840, so correctness is judged by external signals only:
 ## Repo layout
 
 ```
-docs/       RE notes and acceptance maps: product guide and field reports, memory map, Betty registers, ROM layout, bring-up, PCLink, PC Card and built-in modems, TX39 CPU, power/wake, development ROMs
-tools/      automated regression harnesses and analysis scripts (ROM info, ROM diff, serial, desk, touch/menu, sound, telecom, TX39, PC Card, PCLink, EtherLink HTTP, IrDA Beam, both modem paths, development-ROM Command-T/self-tests), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play
+docs/       RE notes and acceptance maps: product guide and field reports, memory map, Betty registers, ROM layout, bring-up, PCLink, PC Card and built-in modems, TX39 CPU, power/wake, development ROMs, demo recording
+docs/media/ the README animation (the only committed recording; the rest live in ~/fun/magic-cap-assets/demo/)
+tools/      automated regression harnesses and analysis scripts (ROM info, ROM diff, serial, desk, touch/menu, sound, telecom, TX39, PC Card, PCLink, EtherLink HTTP, IrDA Beam, both modem paths, development-ROM Command-T/self-tests), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play, demo_prep/demo_tour.lua + make_demo_gif.py to record the tour
 tests/      unit tests for the tools, with captured serial fixtures
 roms/       optional git-ignored compatibility path; persistent assets live outside the repo in ~/fun/magic-cap-assets/
 ```
