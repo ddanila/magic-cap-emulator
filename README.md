@@ -200,7 +200,14 @@ A simulator is a native Mac recompile of the same portable Magic Cap source tree
 - **Runtime object-model ground truth.** The simulator's Inspector and `Dump Package` / `Dump Inspector Target Deep` commands write full text descriptions (ObjectMaker syntax) of any live object — object IDs, fields, flags, class names. The same object structures live in our ROM's persistent store; dumps from the simulator are a labeled map for interpreting them. SDK headers (`Indexicals.h`, class definition files) give the complete class hierarchy and indexical numbering. This complements the unstripped Apollo ELF: the ELF names the code, the simulator dumps describe the *data*.
 - **A specification of the hardware abstraction boundary.** The simulator's Hardware menu is effectively the list of what the portable OS expects from the platform layer: power on/off, warm reset, two card slots, phone-line connect/incoming-call events, hardware keyboard attach, memory sizing. Anything *not* simulated there is device-specific — a useful razor for deciding whether a Betty behavior is OS-visible or board plumbing.
 - **Acceptance-test material.** The debug runtime carries a hidden Testing Scene, an "Execute Standard System" self-test, and action journaling/replay. If the device ROM retains any of these, triggering them inside the emulated DataRover is a strong internal-consistency signal (same philosophy as the `BettyTest` checkpoint).
-- **An end-to-end package loop.** The SDK builds packages; the simulator runs them natively; PCLink (already working in this driver) installs them onto the emulated DataRover. Building a trivial package and comparing its behavior side by side closes the loop from source to emulated device. The Floodgap archive also hosts a ready-made MIPS-native device package — Kaiser's 2023 TLS-capable `WebBrowser-MIPS-USA.pkg` (built with the same Rosemary gcc 2.7.1 toolchain). Its checksum-pinned 452K transfer now completes in the emulator, although it exposes an attached-device alert that remains a sustained-transfer regression target; see [`oldvcr-tls.md`](docs/oldvcr-tls.md).
+- **An end-to-end package loop.** The SDK builds packages; the simulator runs
+  them natively; PCLink installs them onto the emulated DataRover. Building a
+  trivial package and comparing its behavior side by side closes the loop from
+  source to emulated device. The Floodgap archive also hosts Kaiser's
+  MIPS-native TLS-capable `WebBrowser-MIPS-USA.pkg`, built with the Rosemary
+  GCC 2.7.1 toolchain. Its checksum-pinned 452K transfer now completes cleanly,
+  with a final protocol barrier, graceful disconnect, and zero ROM Magic Bus
+  failures; see [`oldvcr-tls.md`](docs/oldvcr-tls.md).
 - **Debug-build details**: `Assert` / `Whisper` / `Log` / `DebugMessage` macros are compiled in only in the simulator ("ignored on communicators"), and "Simulate Device Contrast" confirms the 16-gray LCD rendering expectations.
 
 ## Verification (no real hardware)

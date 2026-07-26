@@ -55,6 +55,9 @@ PONG_TAG = b"Pong"
 PACKAGE_SETTLE_FRAMES = 1800
 NAME_KEY_INTERVAL = 100
 PROVIDER_POST_OWNER_TO_PCLINK_FRAMES = 9700
+MAGICBUS_FAILURE_ADDRESS = 0x13C2_AFB8
+MAGICBUS_FAILURE_COUNTER = 0x0030_1000
+COUNTS_PATTERN = re.compile(rb"PCLINK COUNTS magicbus_failures=(\d+)")
 
 
 class CombinedModemSession:
@@ -392,6 +395,8 @@ def provider_first_run_pclink_frame(
 def lua_navigation(snapshot_frame: int, exit_frame: int) -> str:
     """Return deterministic first-boot calibration and PCLink navigation."""
     return f"""local machine = manager.machine
+local cpu = machine.devices[":maincpu"]
+local program = cpu.spaces["program"]
 local ports = machine.ioport.ports
 local touch_x = ports[":TOUCH_X"]:field(0xffff)
 local touch_y = ports[":TOUCH_Y"]:field(0xffff)
@@ -406,7 +411,12 @@ end
 
 emu.register_frame_done(function()
     frames = frames + 1
-    if frames == 1220 then press(240, 160)
+    if frames == 60 then
+        program:write_u32({MAGICBUS_FAILURE_COUNTER}, 0)
+        cpu.debug:bpset({MAGICBUS_FAILURE_ADDRESS}, "1",
+            "do d@0x{MAGICBUS_FAILURE_COUNTER:08x}="
+            .. "d@0x{MAGICBUS_FAILURE_COUNTER:08x}+1; g")
+    elseif frames == 1220 then press(240, 160)
     elseif frames == 1240 then touch_button:set_value(0)
     elseif frames == 1420 then press(23, 23)
     elseif frames == 1440 then touch_button:set_value(0)
@@ -416,14 +426,16 @@ emu.register_frame_done(function()
     elseif frames == 1840 then touch_button:set_value(0)
     elseif frames == 2180 then
         machine.screens[":screen"]:snapshot("navigation-workbench.png")
-    elseif frames == 2200 then press(420, 70)
+    elseif frames == 2200 then press(440, 10)
     elseif frames == 2220 then touch_button:set_value(0)
-    elseif frames == 2260 then press(396, 24)
-    elseif frames == 2280 then touch_button:set_value(0)
-    elseif frames == 2320 then press(440, 10)
-    elseif frames == 2340 then touch_button:set_value(0)
+    elseif frames == 2260 then
+        machine.screens[":screen"]:snapshot("navigation-startup-dismissed.png")
+    elseif frames == 2380 then
+        machine.screens[":screen"]:snapshot("navigation-hallway.png")
     elseif frames == 2400 then press(452, 255)
     elseif frames == 2420 then touch_button:set_value(0)
+    elseif frames == 2460 then
+        machine.screens[":screen"]:snapshot("navigation-hallway-next.png")
     elseif frames == 2500 then press(60, 130)
     elseif frames == 2520 then touch_button:set_value(0)
     elseif frames == 2580 then
@@ -434,20 +446,24 @@ emu.register_frame_done(function()
         machine.screens[":screen"]:snapshot("package-installed.png")
     elseif frames == {snapshot_frame + 1400} then
         machine.screens[":screen"]:snapshot("pclink-disconnected.png")
-    elseif frames == {exit_frame} then machine:exit()
+    elseif frames == {exit_frame} then
+        print(string.format(
+            "PCLINK COUNTS magicbus_failures=%d",
+            program:read_u32({MAGICBUS_FAILURE_COUNTER})))
+        machine:exit()
     end
 end)
 """
 
 
-def isolated_machine_config() -> str:
-    """Keep unrelated Magic Bus UI changes out of the PCLink workflow."""
+def deterministic_machine_config() -> str:
+    """Keep the working Magic Bus keyboard present throughout PCLink."""
     return """<?xml version="1.0"?>
 <mameconfig version="10">
     <system name="datarover840">
         <input>
             <port tag=":MAGICBUS_ACCESSORY" type="CONFIG"
-                  mask="1" defvalue="1" value="0" />
+                  mask="1" defvalue="1" value="1" />
         </input>
     </system>
 </mameconfig>
@@ -573,7 +589,7 @@ def lua_provider_first_run_navigation(
     elseif frames == {navigation_start + 1100} then press(430, 10)
     elseif frames == {navigation_start + 1120} then touch_button:set_value(0)
     elseif frames == {navigation_start + 1400} then
-        machine.screens[":screen"]:snapshot("navigation-downtown.png")
+        machine.screens[":screen"]:snapshot("navigation-hallway-next.png")
     elseif frames == {navigation_start + 1500} then press(301, 110)
     elseif frames == {navigation_start + 1520} then touch_button:set_value(0)
     elseif frames == {navigation_start + 1800} then press(440, 10)
@@ -756,7 +772,7 @@ def lua_warm_provider_navigation(
     elseif frames == 3300 then press(430, 10)
     elseif frames == 3320 then touch_button:set_value(0)
     elseif frames == 3600 then
-        machine.screens[":screen"]:snapshot("navigation-downtown.png")
+        machine.screens[":screen"]:snapshot("navigation-hallway-next.png")
     elseif frames == 3700 then press(301, 110)
     elseif frames == 3720 then touch_button:set_value(0)
     elseif frames == 4000 then press(440, 10)
@@ -796,7 +812,14 @@ def lua_warm_provider_navigation(
     elseif frames == {snapshot_frame} and not package_snapshotted then
         machine.screens[":screen"]:snapshot("package-installed.png")
 """
+    navigation_steps = navigation_steps.replace(
+        "    if frames ==",
+        "    elseif frames ==",
+        1,
+    )
     return f"""local machine = manager.machine
+local cpu = machine.devices[":maincpu"]
+local program = cpu.spaces["program"]
 local ports = machine.ioport.ports
 local touch_x = ports[":TOUCH_X"]:field(0xffff)
 local touch_y = ports[":TOUCH_Y"]:field(0xffff)
@@ -814,9 +837,18 @@ end
 emu.register_frame_done(function()
     frames = frames + 1
 {signal_clause.rstrip()}
+    if frames == 60 then
+        program:write_u32({MAGICBUS_FAILURE_COUNTER}, 0)
+        cpu.debug:bpset({MAGICBUS_FAILURE_ADDRESS}, "1",
+            "do d@0x{MAGICBUS_FAILURE_COUNTER:08x}="
+            .. "d@0x{MAGICBUS_FAILURE_COUNTER:08x}+1; g")
 {navigation_steps.rstrip()}
 {post_install.rstrip()}
-    elseif frames == {exit_frame} then machine:exit()
+    elseif frames == {exit_frame} then
+        print(string.format(
+            "PCLINK COUNTS magicbus_failures=%d",
+            program:read_u32({MAGICBUS_FAILURE_COUNTER})))
+        machine:exit()
     end
 end)
 """
@@ -1067,7 +1099,7 @@ def run_regression(args: argparse.Namespace) -> int:
     workdir.mkdir(parents=True)
     (workdir / "cfg").mkdir()
     (workdir / "cfg" / "datarover840.cfg").write_text(
-        isolated_machine_config(),
+        deterministic_machine_config(),
         encoding="utf-8",
     )
     if nvram_source is not None:
@@ -1159,6 +1191,9 @@ def run_regression(args: argparse.Namespace) -> int:
         "dummy",
         "-audiodriver",
         "dummy",
+        "-debug",
+        "-debugger",
+        "none",
         # Keep host-side PTY scheduling gaps short in emulated time.  With
         # unlimited speed, a full PTY buffer can drain while this process is
         # descheduled and PCLink's serial watchdog expires before the next
@@ -1171,8 +1206,6 @@ def run_regression(args: argparse.Namespace) -> int:
     ]
     if combined_browser or args.owner_first_name is not None:
         command.extend(["-pccard1", "modem"])
-    if probe_package or args.owner_first_name is not None:
-        command.extend(["-debug", "-debugger", "none"])
     try:
         process = subprocess.Popen(
             command,
@@ -1380,6 +1413,21 @@ def run_regression(args: argparse.Namespace) -> int:
         return 2
     if b"RX overrun" in output:
         print(f"error: Dino UART receive overrun; see {log_path}", file=sys.stderr)
+        return 1
+    counts_match = COUNTS_PATTERN.search(output)
+    if counts_match is None:
+        print(
+            f"error: Magic Bus failure count not produced; see {log_path}",
+            file=sys.stderr,
+        )
+        return 1
+    magicbus_failures = int(counts_match.group(1))
+    if magicbus_failures:
+        print(
+            f"error: Magic Bus recorded {magicbus_failures} failure(s); "
+            f"see {log_path}",
+            file=sys.stderr,
+        )
         return 1
 
     assert connect_wire_length is not None

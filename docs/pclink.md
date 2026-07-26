@@ -105,14 +105,18 @@ A passing run prints the persistent artifact directory. It contains the
 generated Lua automation, isolated NVRAM, MAME output, both raw serial
 directions, and `snapshots/package-installed.png`. The acceptance image shows
 `DvorakKeyboard` as a 21K object in built-in storage. An RX overrun, missing
-final `Pong`, or incomplete disconnect fails the run.
+final `Pong`, incomplete disconnect, missing ROM-side Magic Bus counter, or
+any entry into `MagicBus_HandleMagicBusFailure` fails the run.
 
 The earlier default-package probe had to patch
 `TotalFailuresExceedLimit` and blindly dismiss two possible attached-device
 alerts. Those workarounds are gone: the modeled Magic Bus keyboard now
 completes discovery and background polling without adding failures, so the
 small `DvorakKeyboard.pkg` acceptance no longer changes ROM control flow or
-risks tapping an unrelated control where an alert used to be.
+risks tapping an unrelated control where an alert used to be. The PCLink
+configuration keeps that keyboard present; selecting an empty Magic Bus is a
+real negative test, not isolation, because this ROM treats unanswered address
+assignment as a peripheral failure.
 
 Use another archived input without copying it into Git:
 
@@ -131,12 +135,13 @@ python3 tools/pclink_regression.py \
     "$HOME/fun/magic-cap-assets/runtime/pclink-tls-browser"
 ```
 
-The 2026-07-26 run accepted the package, returned the final `Pong`, sent
-`GBye`, and showed a 454K Web Browser object. Unlike the default small-package
-run, its final screen also carried the “too many errors ... attached device”
-alert. This is therefore a **partial** sustained-transfer pass: future
-automation must recognize and fail on that alert. Provenance, download
-checksum, retained artifacts and the real-hardware comparison are in
+The clean 2026-07-26 run accepted the package, returned the final `Pong`, sent
+`GBye`, showed a 454K Web Browser object without an alert, and recorded zero
+entries into `MagicBus_HandleMagicBusFailure`. The earlier alert was caused by
+the harness explicitly selecting an empty Magic Bus during a long transfer,
+not by PCLink corruption. The retained clean evidence is under
+`~/fun/magic-cap-assets/runtime/pclink-tls-browser-clean/20260726T183612/`.
+Provenance, download checksum and the real-hardware comparison are in
 [`oldvcr-tls.md`](oldvcr-tls.md).
 
 The full Web Browser 4.0 acceptance uses the same transfer path and then

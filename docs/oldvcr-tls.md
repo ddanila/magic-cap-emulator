@@ -88,21 +88,26 @@ python3 tools/pclink_regression.py \
 
 On 2026-07-26 the emulator accepted the full package stream, returned the
 final `Pong`, disconnected, and displayed a 454K **Web Browser** object in the
-Storeroom. However, that screen also displayed Magic Cap's “too many errors
-have occurred while using an attached device” alert. The wire-level harness
-therefore passed, but the large-package workflow is only **partially covered**.
-A complete sustained-transfer acceptance must additionally reject that alert.
-The retained evidence is under:
+Storeroom without an alert. The regression also counted calls to the ROM's
+`MagicBus_HandleMagicBusFailure` and observed zero. The earlier alert was
+traced to the harness selecting **None** for the Magic Bus accessory: this ROM
+counts unanswered address assignment as a peripheral failure, and the long
+transfer merely gave it enough time to cross the alert threshold. Keeping the
+modeled `ATKB` keyboard present makes both the small and sustained PCLink
+acceptances clean without patching ROM control flow or dismissing alerts.
+The retained clean evidence is under:
 
 ```text
-~/fun/magic-cap-assets/runtime/pclink-tls-browser/20260726T172602/
+~/fun/magic-cap-assets/runtime/pclink-tls-browser-clean/20260726T183612/
 ```
 
 ## Acceptance targets derived from the article
 
-1. **Clean sustained PCLink transfer.** Install the checksum-pinned 461,876-byte
-   browser, require the final `Pong` and `GBye`, verify the Storeroom object,
-   and fail if any attached-device or communications-error alert is visible.
+1. **Clean sustained PCLink transfer — covered.** The checksum-pinned
+   461,876-byte browser installs with final `Pong` and `GBye`, appears as a
+   454K Storeroom object, and finishes with zero ROM Magic Bus failures and no
+   attached-device alert. The harness treats a missing or nonzero failure
+   count as a regression.
 2. **PC Card Ethernet.** Identify the exact EtherLink III revision/CIS from
    stronger evidence before choosing a device. Model the likely 3C589-family
    attribute and I/O spaces, configuration option and IREQ; then require the

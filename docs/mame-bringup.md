@@ -320,11 +320,13 @@ install an archived package through the Storeroom computer. It fails on a
 Dino receive overrun, uses a final `Ping`/`Pong` as the completed-stream
 barrier, immediately closes the connection from the host with `GBye`, and
 verifies that the installed object appears in post-transfer native LCD
-captures. Its isolated machine configuration disables the unrelated Magic Bus
-accessory so that accessory discovery cannot change the deterministic
-Storeroom navigation path; Magic Bus has its own focused probe. Package and
-reference-tool download commands, checksums, protocol notes, and alternate
-inputs are in [`pclink.md`](pclink.md).
+captures. Its deterministic machine configuration keeps the modeled Magic Bus
+keyboard present: an empty bus makes this ROM count unanswered address
+assignment as a peripheral failure. The harness directly counts entries into
+that ROM failure handler and requires zero, including during the sustained
+461,876-byte browser-package transfer. Package and reference-tool download
+commands, checksums, protocol notes, and alternate inputs are in
+[`pclink.md`](pclink.md).
 
 The modem probe inserts the I/O card, accepts the ROM's Hayes initialization
 and dial string, sends `CONNECT`, and requires Magic Cap to emit a valid PPP
@@ -433,7 +435,7 @@ the separate serial-terminal view.
 | Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 FIR code through a TX39 `MADD` |
 | Magic Bus | ROM assigns address zero, validates the checksummed `ATKB` descriptor, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures |
 | PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback, insertion, and live-OS checks |
-| PCLink | The Storeroom computer accepts the handshake and installs archived `DvorakKeyboard.pkg`; the optional 452K TLS-browser package also transfers, while exposing a remaining attached-device alert |
+| PCLink | The Storeroom computer installs archived `DvorakKeyboard.pkg`; the optional 452K TLS-browser package also transfers, disconnects cleanly, and records zero ROM Magic Bus failures |
 | IrDA / Beam | Two fresh peers exchange SIR discovery frames, select `bob Receiver`, and transfer `alice Sender`'s name card into the receiver's Inbox |
 | PC Card modem | Magic Cap detects the card, completes its Hayes sequence, and emits an async-HDLC PPP LCP frame |
 | Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
@@ -442,8 +444,8 @@ The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
 still incomplete. The current gaps are the board-level effect of power-supply
 outputs, the product-level storage-card lifecycle, complete PC Card modem save
 state, PC Card Ethernet, the built-in modem's external line side,
-microphone/sound-receive DMA, clean sustained PCLink transfer, multi-device
-Magic Bus topology, and hardware fidelity beyond the register behavior
+microphone/sound-receive DMA, multi-device Magic Bus topology, and hardware
+fidelity beyond the register behavior
 exercised by the ROM; see
 [`README.md`](../README.md#remaining-work). Magic Bus discovery and its
 AT-keyboard traffic are functional and covered by the headless probe.

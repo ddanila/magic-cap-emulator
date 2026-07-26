@@ -239,11 +239,11 @@ and sends the full URL; the host-side Crypto Ancienne `carl -p` process
 performs TLS. This is compatible with the existing PC Card PPP path and does
 not require emulated crypto hardware.
 
-The checksum-pinned MIPS package now installs through the emulator's PCLink
-path, but the complete proxy flow is not automated. Its eventual acceptance
-must use a local HTTPS endpoint and an isolated, pinned proxy rather than a
-public Web site. Crypto Ancienne does not bind its own socket, has no proxy
-authentication or access control, and currently does not validate
+The checksum-pinned MIPS package now installs cleanly through the emulator's
+PCLink path, but the complete proxy flow is not automated. Its eventual
+acceptance must use a local HTTPS endpoint and an isolated, pinned proxy rather
+than a public Web site. Crypto Ancienne does not bind its own socket, has no
+proxy authentication or access control, and currently does not validate
 certificates, so the test must be loopback-only and must claim protocol
-interoperability rather than secure browsing. The staged workflow and current
-large-transfer limitation are in [`oldvcr-tls.md`](oldvcr-tls.md).
+interoperability rather than secure browsing. The staged workflow is in
+[`oldvcr-tls.md`](oldvcr-tls.md).

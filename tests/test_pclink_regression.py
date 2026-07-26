@@ -96,11 +96,24 @@ class PCLinkProtocolTests(unittest.TestCase):
         self.assertNotIn("power_button", script)
         self.assertIn("frames == 4900", script)
 
-    def test_isolates_magicbus_from_pclink_navigation(self) -> None:
-        config = pclink_regression.isolated_machine_config()
+    def test_keeps_magicbus_keyboard_present_during_pclink(self) -> None:
+        config = pclink_regression.deterministic_machine_config()
 
         self.assertIn('tag=":MAGICBUS_ACCESSORY"', config)
-        self.assertIn('defvalue="1" value="0"', config)
+        self.assertIn('defvalue="1" value="1"', config)
+
+    def test_navigation_counts_magicbus_failures(self) -> None:
+        script = pclink_regression.lua_navigation(4700, 4900)
+
+        self.assertIn("PCLINK COUNTS magicbus_failures=%d", script)
+        self.assertIn(
+            str(pclink_regression.MAGICBUS_FAILURE_ADDRESS),
+            script,
+        )
+        self.assertIn(
+            f"0x{pclink_regression.MAGICBUS_FAILURE_COUNTER:08x}",
+            script,
+        )
 
     def test_warm_provider_navigation_opens_pclink(
         self,
@@ -117,6 +130,7 @@ class PCLinkProtocolTests(unittest.TestCase):
         self.assertIn("frames == 5200", script)
         self.assertNotIn("power_button", script)
         self.assertIn("frames == 5400", script)
+        self.assertIn("PCLINK COUNTS magicbus_failures=%d", script)
 
     def test_package_probe_opens_received_package(
         self,
@@ -163,7 +177,7 @@ class PCLinkProtocolTests(unittest.TestCase):
         )
 
         self.assertIn("press(430, 10)", script)
-        self.assertIn("navigation-downtown.png", script)
+        self.assertIn("navigation-hallway-next.png", script)
         self.assertIn("press(60, 130)", script)
         self.assertIn("press(170, 132)", script)
         self.assertIn("press(48, 155)", script)
@@ -201,7 +215,7 @@ class PCLinkProtocolTests(unittest.TestCase):
         self.assertIn("provider-pccard-assigned.png", script)
         self.assertIn("press(440, 10)", script)
         self.assertIn("navigation-internet-center.png", script)
-        self.assertIn("navigation-downtown.png", script)
+        self.assertIn("navigation-hallway-next.png", script)
         self.assertIn("navigation-storeroom.png", script)
         self.assertIn("press(48, 155)", script)
         self.assertIn(f"frames == {pclink_frame}", script)
