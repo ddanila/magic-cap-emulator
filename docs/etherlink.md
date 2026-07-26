@@ -43,7 +43,7 @@ echo '7f05d1245f58aaae575a32b7df63c8f3f978a396ac74bbed1cbb8b1270758681  3c5x9b-t
 
 The package is 65,624 bytes. The second file is 3Com's 1994 *EtherLink III
 Parallel Tasking ISA, EISA, Micro Channel and PCMCIA Adapter Drivers Technical
-Reference*, 11 scanned pages. It publishes the 3C589/3C589B CIS byte layouts,
+Reference*, 142 pages. It publishes the 3C589/3C589B CIS byte layouts,
 configuration registers, eight 16-byte register windows, EEPROM format,
 command/status bits, FIFO protocol and PCMCIA interrupt behavior.
 
@@ -136,7 +136,7 @@ The preserved provider setup, save states, screenshots and trace are under:
 ~/fun/magic-cap-assets/runtime/etherlink-provider-wizard/20260726T201000/
 ```
 
-## Rootless frame transport
+## Rootless frame transports
 
 The MAME fork also has a `udp` network provider for deterministic tests that
 cannot create a TAP interface. It binds only to loopback and carries exactly
@@ -168,6 +168,23 @@ The fixed response delay prevents an impossible zero-latency reply from
 racing the initiating guest stack. Neither this provider nor the peer opens a
 host network interface or grants the guest Internet access.
 
+For the complete host TCP path, Linux builds auto-detect `libslirp` through
+`pkg-config` and include a second rootless provider:
+
+```sh
+sudo apt-get install pkg-config libslirp-dev
+cd "$HOME/fun/mame"
+make SUBTARGET=datarover SOURCES=src/mame/skeleton/datarover.cpp \
+  NO_USE_PORTAUDIO=1 -j"$(nproc)"
+./datarover -networkprovider slirp -listnetwork
+```
+
+Interface zero is `libslirp user network (10.0.2.0/24, host 10.0.2.2)`.
+It gives the static guest `10.0.2.15` a conventional user-mode IPv4 network,
+maps host loopback to `10.0.2.2`, and requires neither root nor TAP.
+`USE_SLIRP=0` explicitly omits the optional module; `USE_SLIRP=1` requires
+the development package.
+
 Two 3C589 details were required before frames became real:
 
 - the first transmit-preamble word is length plus control bits; bit 15 requests
@@ -182,20 +199,52 @@ an indication that the physical IREQ line is active. The emulation now keeps
 it separate from Interrupt Latch and implements the published acknowledgement
 rules for TX Available, RX Early and RX Complete.
 
-With those corrections, a cold NVRAM run produces and consumes:
+The final receive bug was access width, not TCP. Disassembly of the archived
+driver's native MIPS routine at package offset `0x1904` shows this exact loop:
+
+1. select Window 1 and read the 11-bit length from RX Status;
+2. call the WCPack 8-bit Card I/O accessor once per byte;
+3. store that returned byte and repeat exactly `length` times;
+4. issue RX Discard.
+
+The emulation previously discarded the caller's byte-lane mask at the
+window-register layer and always called the FIFO as a full 16-bit read.
+Consequently each driver iteration popped two bytes: the interrupt and final
+discard looked correct, but the protocol stack saw every other byte followed
+by zeros. Passing the real mask into PIO Data Read makes byte reads pop one
+byte and word reads pop two, as the 3Com reference specifies. RX Complete is
+also raised after MAME's simulated wire transfer, and RX Bytes now decreases
+as data is read.
+
+With those corrections, a cold NVRAM run completes:
 
 ```text
 ARP: 10.0.2.15 asks for 10.0.2.2
-ARP: 10.0.2.2 replies with 02:00:00:00:02:02
+ARP: 10.0.2.2 replies
 TCP: 10.0.2.15:1024 sends SYN to 10.0.2.2:8080
-TCP: the peer returns a checksummed SYN-ACK
+TCP: libslirp returns a checksummed SYN-ACK
+TCP: Magic Cap acknowledges it and sends an HTTP/1.0 GET
+HTTP: the browser renders "EtherLink III works"
 ```
 
-The Magic Cap driver reads each returned frame and issues RX Discard, and the
-browser advances to **Contacted 10.0.2.2:8080 / Sending request**. It currently
-retries the SYN rather than sending the HTTP request. That is the exact
-remaining protocol boundary; ARP and card receive interrupts are no longer
-the blocker.
+The deterministic regression owns the host server, copied NVRAM, exact-request
+marker, browser automation, screenshot and teardown in one process:
+
+```sh
+python3 tools/etherlink_regression.py \
+  --nvram-source \
+    "$HOME/fun/magic-cap-assets/runtime/etherlink-provider-wizard/20260726T201000/nvram"
+```
+
+It requires a provider-configured tree containing the installed browser and
+EtherLink driver. A pass requires the canonical absolute request
+`GET http://10.0.2.2:8080/ HTTP/1.0` and
+`snapshots/etherlink-http-result.png`; generated state and captures remain
+under `~/fun/magic-cap-assets/runtime/etherlink-regression/`. The clean
+2026-07-26 pass is retained under
+`20260726T193221.829181Z-2890929/`; it rendered the heading
+**EtherLink III works** and the text **Magic Cap reached deterministic local
+HTTP.**
 
 Do not use a save-state restore as the live-network test setup. MAME currently
 rejects loading a state after a network backend creates its anonymous polling
@@ -213,13 +262,14 @@ The gates, in order, are:
 2. **Covered:** request a page so WCPack claims the card. The retained trace
    contains the reset/COR sequence, Window 0 setup, station-address
    programming and transitions through operating Windows 1, 2 and 4.
-3. **Covered through frames:** the loopback-only UDP provider and deterministic
-   peer carry the ROM's real ARP and TCP SYN. Magic Cap consumes the ARP reply
-   and SYN-ACK through the 3C589 receive FIFO.
-4. **Next:** complete the TCP handshake and require a small local HTTP
-   response to render.
-5. Connect that proved frame path to a loopback-only HTTP/TLS proxy acceptance
-   described in [`oldvcr-tls.md`](oldvcr-tls.md).
+3. **Covered:** the loopback-only UDP provider and deterministic peer carry
+   isolated raw frames; libslirp supplies a mature host TCP stack without
+   privileges.
+4. **Covered:** Magic Cap completes ARP and TCP, emits the canonical absolute
+   HTTP request, consumes the response through the byte-accurate 3C589 FIFO,
+   and renders the deterministic page.
+5. **Next:** connect that proved frame path to the loopback-only HTTP/TLS
+   proxy acceptance described in [`oldvcr-tls.md`](oldvcr-tls.md).
 
-Until the HTTP gate passes, the device is a guest-driven frame path, not yet a
-claimed working DataRover Web path.
+The plain EtherLink Web path is therefore covered. The remaining browser
+network target is proxy-assisted HTTPS, not basic Ethernet interoperability.

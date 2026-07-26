@@ -46,7 +46,7 @@ The following observations are relevant to emulation:
 | The article reports only about 768 KiB of application working memory; the ROM monitor independently reports 4 MiB of physical RAM. | Keep the hardware at 4 MiB. Browser out-of-memory behavior is an OS/application constraint, not evidence that the emulator needs more RAM. |
 | Rosemary builds PowerPC packages for its Mac simulator and MIPS packages for the Apollo device; the device build uses the SDK's GCC 2.7.1 cross-compiler. | This corroborates the PowerPC-simulator/MIPS-device distinction and makes the article's MIPS browser a real Apollo package input. |
 | `WinPCLink` installs a 452K package through the Storeroom computer in roughly five to six minutes on physical hardware. | Use the same 461,876-byte package as a sustained PCLink regression, while treating the reported timing as a rough field benchmark rather than a cycle-accuracy requirement. |
-| A 3Com EtherLink III PC Card loads Web pages on the physical DataRover. | The archived Magic Cap driver proves it accepts 3Com `0x0101` / `0x?589`. A reusable MAME 3C589 core now supplies the published CIS, register windows, EEPROM, FIFO, IREQ and network interface; the real driver initializes it and reaches the browser's communicating state. |
+| A 3Com EtherLink III PC Card loads Web pages on the physical DataRover. | The archived Magic Cap driver accepts 3Com `0x0101` / `0x?589`. A reusable MAME 3C589 core plus rootless libslirp now completes ARP/TCP and renders deterministic local HTTP through the real driver. |
 | The browser uses Magic Internet Kit TCP streams. A modified browser sends absolute HTTP or HTTPS URLs to a host proxy, which performs TLS. | Extend the existing PPP/HTTP acceptance with an optional proxy test. TLS belongs on the host; it does not imply new DataRover crypto hardware. |
 | Under a large page, the physical browser can exhaust memory. A warm start and garbage collection preserve the page canvas well enough to continue. | Preserve physical memory limits and add an eventual memory-pressure/warm-start check; do not “fix” the workload by enlarging default RAM. |
 | The original Rosemary simulator can bypass its simulated modem and tunnel TCP through Mac Open Transport after a dummy provider is configured. It forgets state at exit unless the user backs up to a virtual memory card. | Treat this as simulator behavior, not DataRover hardware behavior. It reinforces the value of our separate NVRAM and storage-card acceptance tests. |
@@ -108,19 +108,18 @@ The retained clean evidence is under:
    454K Storeroom object, and finishes with zero ROM Magic Bus failures and no
    attached-device alert. The harness treats a missing or nonzero failure
    count as a regression.
-2. **PC Card Ethernet — card initialization and bidirectional frames
-   covered.** The original 1998 Magic Cap `EtherLinkIII.pkg` driver accepts
+2. **PC Card Ethernet and local HTTP — covered.** The original 1998 Magic Cap
+   `EtherLinkIII.pkg` driver accepts
    manufacturer `0x0101` and the complete `0x?589` revision family. The MAME
    fork now provides a reusable 3C589 PC Card with the 3Com-published CIS,
    attribute/configuration registers, windowed I/O, EEPROM MAC, PIO FIFOs,
-   TX-status stack, IREQ and a loopback-only UDP network backend. WCPack
-   performs the demand-loaded reset and register-window setup. A deterministic
-   rootless peer now observes the ROM's real ARP and TCP SYN and returns ARP
-   replies and checksummed SYN-ACKs that the Magic Cap driver reads and
-   discards normally. The browser reaches `Contacted ... / Sending request`
-   but still retries SYN; completing that TCP session and rendering local HTTP
-   is the next gate. See [`etherlink.md`](etherlink.md) for provenance and the
-   trace boundary.
+   TX-status stack, IREQ, a loopback-only UDP frame backend and an optional
+   libslirp backend. WCPack performs the demand-loaded reset and
+   register-window setup. With byte-lane masks preserved through PIO Data
+   Read, the native driver completes ARP and TCP, sends the canonical absolute
+   HTTP/1.0 request, and renders the deterministic local page. See
+   [`etherlink.md`](etherlink.md) for provenance, disassembly evidence and the
+   repeatable harness.
 3. **Deterministic HTTPS through a host proxy.** Install the modified browser
    into a copied provider-configured NVRAM tree, keep the same MAME process
    alive, serve a small local HTTPS page, and expose a pinned

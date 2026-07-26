@@ -2,7 +2,7 @@
 
 The first emulator for the [General Magic DataRover 840](https://pdamuseum.eu/pda/datarover840/) — the last and best Magic Cap communicator (1998), running Magic Cap 3.1 on a MIPS CPU. It is built as a MAME driver (fork: [ddanila/mame](https://github.com/ddanila/mame), `custom` branch); this repository holds the reverse-engineering notes, analysis tooling, and regression harnesses.
 
-**Current state:** the emulated machine boots ROM build 3.1.2j to the interactive Magic Cap workbench — touchscreen, persistent storage and suspend/wake (including a retained-RAM relaunch), speaker output, both PC Card slots, package installation over serial PCLink, IrDA beaming between two emulated communicators, and Web Browser 4.0 fetching a local HTTP page over live PC Card PPP all work. See [Status](#status).
+**Current state:** the emulated machine boots ROM build 3.1.2j to the interactive Magic Cap workbench — touchscreen, persistent storage and suspend/wake (including a retained-RAM relaunch), speaker output, both PC Card slots, package installation over serial PCLink, IrDA beaming between two emulated communicators, and Web Browser 4.0 fetching local HTTP over both live PC Card PPP and the original EtherLink III driver all work. See [Status](#status).
 
 Before this project (survey, July 2026) no emulator for any Magic Cap device existed — nothing in MAME, on GitHub, or in QEMU. The only way people ran Magic Cap was the Mac-hosted *Magic Cap Simulator*, a native recompile of the OS rather than a hardware emulator ([details below](#the-magic-cap-simulators)).
 
@@ -85,7 +85,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | Built-in software modem | Continuous 48-word SIB telecom DMA ring drives the ROM's V.32 pump/control/FIR through a TX39 `MADD` | [`builtin-modem.md`](docs/builtin-modem.md) |
 | Magic Bus | Address assignment, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
-| PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core and exchanges real ARP/TCP frames through a rootless loopback UDP backend | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md) |
+| PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core, completes TCP through rootless libslirp, and renders deterministic local HTTP | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md) |
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap, including the 452K Apollo browser from the Old VCR field report | [`pclink.md`](docs/pclink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
 | IrDA / Beam | Two fresh communicators discover each other by name over SIR, the sender selects the receiver, and a name card arrives in the receiver's Inbox | [`irda.md`](docs/irda.md) |
 | Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 fetches and renders deterministic local HTTP | [`modem.md`](docs/modem.md) |
@@ -118,15 +118,13 @@ checkpoints are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
   re-enumerate the card instead of resuming an in-flight modem session
   ([`mame-bringup.md`](docs/mame-bringup.md#known-gap-save-state-coverage)).
 
-- **Finish the documented PC Card Ethernet path.** Kaiser's real-hardware
-  report loads Web pages through a 3Com EtherLink III. The archived Magic Cap
-  driver identifies the supported hardware as 3Com `0x0101` / `0x?589`, and a
-  reusable MAME 3C589 PC Card core now supplies the published CIS, windowed
-  I/O, EEPROM, FIFO, TX-status stack, IREQ and network interface. The real
-  driver completes demand-loaded initialization, and the rootless UDP peer
-  proves guest-originated ARP and TCP SYN plus guest-consumed ARP replies and
-  SYN-ACKs. The remaining gate is TCP-session interoperability and a rendered
-  local HTTP response, followed by the documented TLS proxy
+- **Complete deterministic proxy-assisted HTTPS.** The original EtherLink III
+  driver now completes ARP/TCP through the rootless libslirp backend, and the
+  modified MIPS browser renders a deterministic local HTTP page. Kaiser's
+  real-device workflow sends absolute HTTPS URLs through an ordinary Magic
+  Internet Kit TCP stream to a host-side Crypto Ancienne proxy. The remaining
+  gate is to configure that browser Rule and require a pinned local HTTPS
+  request plus rendered result without depending on a public site
   ([`oldvcr-tls.md`](docs/oldvcr-tls.md#acceptance-targets-derived-from-the-article)).
 
 - **Model the built-in modem's external line side.** The SIB telecom DMA ring
@@ -227,7 +225,7 @@ We don't own a DataRover 840, so correctness is judged by external signals only:
 
 ```
 docs/       RE notes and acceptance maps: product guide and field reports, memory map, Betty registers, ROM layout, bring-up, PCLink, PC Card and built-in modems, TX39 CPU, power/wake, development ROMs
-tools/      automated regression harnesses and analysis scripts (ROM info, ROM diff, serial, desk, touch/menu, sound, telecom, TX39, PC Card, PCLink, IrDA Beam, both modem paths, development-ROM Command-T/self-tests), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play
+tools/      automated regression harnesses and analysis scripts (ROM info, ROM diff, serial, desk, touch/menu, sound, telecom, TX39, PC Card, PCLink, EtherLink HTTP, IrDA Beam, both modem paths, development-ROM Command-T/self-tests), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play
 tests/      unit tests for the tools, with captured serial fixtures
 roms/       optional git-ignored compatibility path; persistent assets live outside the repo in ~/fun/magic-cap-assets/
 ```
