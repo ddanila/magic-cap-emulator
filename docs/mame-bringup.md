@@ -433,7 +433,7 @@ the separate serial-terminal view.
 | Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 FIR code through a TX39 `MADD` |
 | Magic Bus | ROM assigns address zero, validates the checksummed `ATKB` descriptor, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures |
 | PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback, insertion, and live-OS checks |
-| PCLink | The Storeroom computer accepts the handshake and installs archived `DvorakKeyboard.pkg` into built-in storage |
+| PCLink | The Storeroom computer accepts the handshake and installs archived `DvorakKeyboard.pkg`; the optional 452K TLS-browser package also transfers, while exposing a remaining attached-device alert |
 | IrDA / Beam | Two fresh peers exchange SIR discovery frames, select `bob Receiver`, and transfer `alice Sender`'s name card into the receiver's Inbox |
 | PC Card modem | Magic Cap detects the card, completes its Hayes sequence, and emits an async-HDLC PPP LCP frame |
 | Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
@@ -441,8 +441,9 @@ the separate serial-terminal view.
 The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
 still incomplete. The current gaps are the board-level effect of power-supply
 outputs, the product-level storage-card lifecycle, complete PC Card modem save
-state, the built-in modem's external line side, microphone/sound-receive DMA,
-multi-device Magic Bus topology, and hardware fidelity beyond the register
-behavior exercised by the ROM; see
+state, PC Card Ethernet, the built-in modem's external line side,
+microphone/sound-receive DMA, clean sustained PCLink transfer, multi-device
+Magic Bus topology, and hardware fidelity beyond the register behavior
+exercised by the ROM; see
 [`README.md`](../README.md#remaining-work). Magic Bus discovery and its
 AT-keyboard traffic are functional and covered by the headless probe.

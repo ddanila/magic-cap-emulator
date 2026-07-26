@@ -107,12 +107,12 @@ directions, and `snapshots/package-installed.png`. The acceptance image shows
 `DvorakKeyboard` as a 21K object in built-in storage. An RX overrun, missing
 final `Pong`, or incomplete disconnect fails the run.
 
-The earlier package probe had to patch
+The earlier default-package probe had to patch
 `TotalFailuresExceedLimit` and blindly dismiss two possible attached-device
 alerts. Those workarounds are gone: the modeled Magic Bus keyboard now
 completes discovery and background polling without adding failures, so the
-PCLink acceptance run no longer changes ROM control flow or risks tapping an
-unrelated control where an alert used to be.
+small `DvorakKeyboard.pkg` acceptance no longer changes ROM control flow or
+risks tapping an unrelated control where an alert used to be.
 
 Use another archived input without copying it into Git:
 
@@ -120,6 +120,24 @@ Use another archived input without copying it into Git:
 python3 tools/pclink_regression.py \
   --package "$HOME/fun/magic-cap-assets/packages/Betteris.pkg"
 ```
+
+Kaiser's checksum-pinned 461,876-byte modified browser is a more demanding
+input:
+
+```sh
+python3 tools/pclink_regression.py \
+  --package "$HOME/fun/magic-cap-assets/packages/WebBrowser-MIPS-USA.pkg" \
+  --workdir \
+    "$HOME/fun/magic-cap-assets/runtime/pclink-tls-browser"
+```
+
+The 2026-07-26 run accepted the package, returned the final `Pong`, sent
+`GBye`, and showed a 454K Web Browser object. Unlike the default small-package
+run, its final screen also carried the “too many errors ... attached device”
+alert. This is therefore a **partial** sustained-transfer pass: future
+automation must recognize and fail on that alert. Provenance, download
+checksum, retained artifacts and the real-hardware comparison are in
+[`oldvcr-tls.md`](oldvcr-tls.md).
 
 The full Web Browser 4.0 acceptance uses the same transfer path and then
 continues through PPP and local HTTP without restarting MAME:

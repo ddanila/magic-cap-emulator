@@ -226,6 +226,24 @@ online** and its text identifying Web Browser 4.0 and Slirp PPP. The harness
 printed `PASS: installed Web Browser through PCLink and fetched the local
 HTTP page over PPP`.
 
-The browser predates modern TLS, so plain HTTP is intentional. Slirp's
+The stock browser predates modern TLS, so plain HTTP is intentional. Slirp's
 `10.0.2.2` host alias avoids an external site and proves PPP, TCP, HTTP, and
 browser rendering together.
+
+## Optional proxy-assisted HTTPS
+
+Kaiser's [2023 DataRover field report](oldvcr-tls.md) modifies Web Browser
+3.5.1 to add separate HTTP and HTTPS proxy Rules. For an HTTPS URL the package
+still opens an ordinary Magic Internet Kit TCP stream to the configured proxy
+and sends the full URL; the host-side Crypto Ancienne `carl -p` process
+performs TLS. This is compatible with the existing PC Card PPP path and does
+not require emulated crypto hardware.
+
+The checksum-pinned MIPS package now installs through the emulator's PCLink
+path, but the complete proxy flow is not automated. Its eventual acceptance
+must use a local HTTPS endpoint and an isolated, pinned proxy rather than a
+public Web site. Crypto Ancienne does not bind its own socket, has no proxy
+authentication or access control, and currently does not validate
+certificates, so the test must be loopback-only and must claim protocol
+interoperability rather than secure browsing. The staged workflow and current
+large-transfer limitation are in [`oldvcr-tls.md`](oldvcr-tls.md).

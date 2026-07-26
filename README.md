@@ -86,7 +86,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | Magic Bus | Address assignment, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling | [`mame-bringup.md`](docs/mame-bringup.md) |
-| PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap | [`pclink.md`](docs/pclink.md) |
+| PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap, including the 452K Apollo browser from the Old VCR field report | [`pclink.md`](docs/pclink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
 | IrDA / Beam | Two fresh communicators discover each other by name over SIR, the sender selects the receiver, and a name card arrives in the receiver's Inbox | [`irda.md`](docs/irda.md) |
 | Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 fetches and renders deterministic local HTTP | [`modem.md`](docs/modem.md) |
 | Variants | `datarover840` / `840f` (writable flash) / `840j` / `840d` (1998-04-07 development ROM) all build and verify; `840d` also boots to the workbench | [`rom-layout.md`](docs/rom-layout.md), [`dev-rom.md`](docs/dev-rom.md) |
@@ -117,6 +117,14 @@ checkpoints are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
   A restore therefore deliberately pulses card detect and makes Magic Cap
   re-enumerate the card instead of resuming an in-flight modem session
   ([`mame-bringup.md`](docs/mame-bringup.md#known-gap-save-state-coverage)).
+
+- **Add the documented PC Card Ethernet path.** Kaiser's real-hardware report
+  loads Web pages through a 3Com EtherLink III. The Apollo ELF independently
+  contains `WCPack_EtherServer`, Ethernet and ARP code, but the driver offers
+  only linear storage and serial-modem PC Cards, and MAME has no reusable
+  3C589 PC Card device. Exact card-revision evidence, I/O-space/IREQ emulation,
+  ARP and a local HTTP fetch remain
+  ([`oldvcr-tls.md`](docs/oldvcr-tls.md#acceptance-targets-derived-from-the-article)).
 
 - **Model the built-in modem's external line side.** The SIB telecom DMA ring
   and ROM V.32 DSP execute, but the external DAA, carrier acquisition, and a
@@ -149,7 +157,10 @@ Power/wake, sound output, the built-in modem's ROM/DSP boundary, one Magic Bus
 keyboard, IrDA beaming, and the other implemented paths have focused acceptance
 checks. The product-level coverage matrix and smaller UI acceptance backlog
 derived from Icras's guide are in
-[`user-guide.md`](docs/user-guide.md).
+  [`user-guide.md`](docs/user-guide.md). The independent real-device,
+  SDK, PCLink, Ethernet and proxy-browser evidence from Kaiser's 2023 field
+  report is mapped separately in
+  [`oldvcr-tls.md`](docs/oldvcr-tls.md).
 
 ## Resources
 
@@ -162,7 +173,17 @@ derived from Icras's guide are in
   holds the [*Telescript Language Reference*](https://bitsavers.org/pdf/generalMagic/Telescript_Language_Reference_Oct95.pdf)
   and Sony Magic Link material; those are broader historical/context sources,
   not substitutes for the DataRover guide.
-- **Community knowledge**: [Old VCR blog](http://oldvcr.blogspot.com/2022/12/magic-cap-from-magic-link-to-datarover.html), [Josh Carter's FAQs](https://joshcarter.com/magic_cap/) (incl. developer docs and the 840F flasher, useful for understanding ROM layout), [comp.os.magic-cap archives](https://groups.google.com/g/comp.os.magic-cap), [archive.org DataRover 840 software](https://archive.org/details/DataRover840).
+- **Community field evidence.** Cameron Kaiser's
+  [DataRover teardown and history](https://oldvcr.blogspot.com/2022/12/magic-cap-from-magic-link-to-datarover.html)
+  supplies board photographs and chip identification. His
+  [TLS/browser field report](https://oldvcr.blogspot.com/2023/01/bringing-tls-to-magic-cap-datarover.html)
+  documents Rosemary development plus real-device PCLink, EtherLink III and
+  memory-pressure behavior; its preserved snapshot, optional package
+  checksums and emulator acceptance map are in
+  [`oldvcr-tls.md`](docs/oldvcr-tls.md). Also useful are
+  [Josh Carter's FAQs](https://joshcarter.com/magic_cap/),
+  [comp.os.magic-cap archives](https://groups.google.com/g/comp.os.magic-cap),
+  and [archive.org DataRover 840 software](https://archive.org/details/DataRover840).
 - **Ghidra** — free RE suite with solid big-endian MIPS-I support for static analysis of the ROM.
 - **Prior art & preservation.** The only documented prior preservation effort is [Cooper Hewitt / Small Data Industries (2019)](https://www.cooperhewitt.org/2019/05/13/a-predecessor-of-todays-smartphones/), who concluded there was no non-destructive way to dump the Motorola Envoy's TSOP-56 ROMs and fell back to running the Mac simulator under Basilisk II — application-level simulation, not device emulation. No Magic Link or Envoy (68K-generation) ROM dump is known to exist, so those machines can't be device-emulated today; the DataRover, with its freely downloadable 3.1.2j image, is the one Magic Cap machine that can.
 
@@ -179,7 +200,7 @@ A simulator is a native Mac recompile of the same portable Magic Cap source tree
 - **Runtime object-model ground truth.** The simulator's Inspector and `Dump Package` / `Dump Inspector Target Deep` commands write full text descriptions (ObjectMaker syntax) of any live object — object IDs, fields, flags, class names. The same object structures live in our ROM's persistent store; dumps from the simulator are a labeled map for interpreting them. SDK headers (`Indexicals.h`, class definition files) give the complete class hierarchy and indexical numbering. This complements the unstripped Apollo ELF: the ELF names the code, the simulator dumps describe the *data*.
 - **A specification of the hardware abstraction boundary.** The simulator's Hardware menu is effectively the list of what the portable OS expects from the platform layer: power on/off, warm reset, two card slots, phone-line connect/incoming-call events, hardware keyboard attach, memory sizing. Anything *not* simulated there is device-specific — a useful razor for deciding whether a Betty behavior is OS-visible or board plumbing.
 - **Acceptance-test material.** The debug runtime carries a hidden Testing Scene, an "Execute Standard System" self-test, and action journaling/replay. If the device ROM retains any of these, triggering them inside the emulated DataRover is a strong internal-consistency signal (same philosophy as the `BettyTest` checkpoint).
-- **An end-to-end package loop.** The SDK builds packages; the simulator runs them natively; PCLink (already working in this driver) installs them onto the emulated DataRover. Building a trivial package and comparing its behavior side by side closes the loop from source to emulated device. The Floodgap archive also hosts a ready-made MIPS-native device package — Kaiser's 2023 TLS-capable `WebBrowser-MIPS-USA.pkg` (built with the same Rosemary gcc 2.7.1 toolchain) — a real payload to install and run without building anything first.
+- **An end-to-end package loop.** The SDK builds packages; the simulator runs them natively; PCLink (already working in this driver) installs them onto the emulated DataRover. Building a trivial package and comparing its behavior side by side closes the loop from source to emulated device. The Floodgap archive also hosts a ready-made MIPS-native device package — Kaiser's 2023 TLS-capable `WebBrowser-MIPS-USA.pkg` (built with the same Rosemary gcc 2.7.1 toolchain). Its checksum-pinned 452K transfer now completes in the emulator, although it exposes an attached-device alert that remains a sustained-transfer regression target; see [`oldvcr-tls.md`](docs/oldvcr-tls.md).
 - **Debug-build details**: `Assert` / `Whisper` / `Log` / `DebugMessage` macros are compiled in only in the simulator ("ignored on communicators"), and "Simulate Device Contrast" confirms the 16-gray LCD rendering expectations.
 
 ## Verification (no real hardware)
@@ -195,7 +216,7 @@ We don't own a DataRover 840, so correctness is judged by external signals only:
 ## Repo layout
 
 ```
-docs/       RE notes and acceptance maps: user guide, memory map, Betty registers, ROM layout, bring-up, PCLink, PC Card and built-in modems, TX39 CPU, power/wake, development ROMs
+docs/       RE notes and acceptance maps: product guide and field reports, memory map, Betty registers, ROM layout, bring-up, PCLink, PC Card and built-in modems, TX39 CPU, power/wake, development ROMs
 tools/      automated regression harnesses and analysis scripts (ROM info, ROM diff, serial, desk, touch/menu, sound, telecom, TX39, PC Card, PCLink, IrDA Beam, both modem paths, development-ROM Command-T/self-tests), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play
 tests/      unit tests for the tools, with captured serial fixtures
 roms/       optional git-ignored compatibility path; persistent assets live outside the repo in ~/fun/magic-cap-assets/

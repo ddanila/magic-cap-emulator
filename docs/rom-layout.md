@@ -39,6 +39,13 @@ build carries an on-device test framework the release ROM does not — see
 [`dev-rom.md`](dev-rom.md) for the comparison and
 `tools/fetch_assets.sh macsdk` for acquisition.
 
+Kaiser's independently reproduced Rosemary workflow further distinguishes the
+PowerPC simulator target from the physical-device **Apollo** target: the
+former uses CodeWarrior, while the latter uses the SDK's ported GCC 2.7.1
+cross-compiler and package tools. His MIPS browser installs into the current
+emulator and is recorded as an optional checksum-pinned input in
+[`oldvcr-tls.md`](oldvcr-tls.md).
+
 The product-level behavioral reference is Icras's 234-page
 [*Using Magic Cap*][user-guide-pdf], written specifically for Magic Cap 3.1 on
 the DataRover 840. The mirrored file is

@@ -43,6 +43,12 @@ Magic Cap is portable OS code and already runs if the required hardware
 boundary exists. The table distinguishes proven emulator behavior from
 product behavior that still needs an end-to-end check.
 
+Kaiser's later real-device and SDK
+[*Bringing TLS to the Magic Cap DataRover*](oldvcr-tls.md) report complements
+this source. In particular, it turns PC Card Ethernet, a sustained PCLink
+transfer and proxy-assisted HTTPS into concrete field-derived checks. Those
+claims remain separate from Icras's product contract.
+
 ## Requirements and coverage
 
 | Area | User-guide contract | Current evidence | Coverage |
