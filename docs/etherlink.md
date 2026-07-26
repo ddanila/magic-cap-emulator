@@ -251,6 +251,33 @@ rejects loading a state after a network backend creates its anonymous polling
 timer. Boot a copied, provider-configured NVRAM tree and keep the same MAME
 process alive through the request instead.
 
+## Proxy-assisted local HTTPS
+
+The same native EtherLink path now carries a deterministic host-proxied TLS
+request. The modified Web Browser 3.5 connects its HTTP proxy Rule 13 to
+Slirp's `10.0.2.2:8765`; a loopback-only superserver invokes pinned Crypto
+Ancienne `carl -Nptu`, which upgrades the request and negotiates TLS with a
+run-local HTTPS endpoint. Run it with:
+
+```sh
+python3 tools/https_proxy_regression.py \
+  --nvram-source \
+    "$HOME/fun/magic-cap-assets/runtime/https-rule-config/20260727T050000-http-upgrade/nvram"
+```
+
+The 2026-07-26 pass is retained under
+`~/fun/magic-cap-assets/runtime/etherlink-https-regression/20260726T213340.799847Z-2926968/`.
+It requires the independently decrypted `GET / HTTP/1.0` and a final screen
+showing **Crypto Ancienne works**. This proves the frame, ARP, TCP, proxy and
+TLS path without adding crypto hardware to the DataRover.
+
+Browser 3.5's native HTTPS Rule 14 remains a narrower known gap: it can be
+enabled and configured, but an `https://` URL still connects directly rather
+than reaching the proxy. `tools/https_proxy_regression.py --https-rule`
+reproduces that behavior. Build instructions, security boundaries and the
+browser's explicit-port input quirk are in
+[`oldvcr-tls.md`](oldvcr-tls.md#deterministic-https-regression).
+
 ## Acceptance sequence
 
 The gates, in order, are:
@@ -268,8 +295,10 @@ The gates, in order, are:
 4. **Covered:** Magic Cap completes ARP and TCP, emits the canonical absolute
    HTTP request, consumes the response through the byte-accurate 3C589 FIFO,
    and renders the deterministic page.
-5. **Next:** connect that proved frame path to the loopback-only HTTP/TLS
-   proxy acceptance described in [`oldvcr-tls.md`](oldvcr-tls.md).
+5. **Covered:** the loopback-only Crypto Ancienne superserver negotiates TLS
+   with a deterministic local endpoint, which observes the exact request, and
+   Magic Cap renders the response.
 
-The plain EtherLink Web path is therefore covered. The remaining browser
-network target is proxy-assisted HTTPS, not basic Ethernet interoperability.
+Both plain HTTP and proxy-assisted local TLS are therefore covered over the
+original EtherLink driver. The remaining browser network target is native
+HTTPS Rule 14 dispatch, not basic Ethernet, TCP or TLS interoperability.

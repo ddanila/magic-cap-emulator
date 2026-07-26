@@ -41,12 +41,13 @@ analysis and test utilities used here:
 ```sh
 sudo apt-get update
 sudo apt-get install \
-  git build-essential python3 \
+  git build-essential python3 python3-pil \
   libsdl2-dev libsdl2-ttf-dev libfontconfig-dev libpulse-dev \
   pkg-config libslirp-dev \
   qt6-base-dev qt6-base-dev-tools qtchooser \
   ccache binutils-mips-linux-gnu gdb-multiarch unshield xvfb xdotool \
-  curl unzip gzip slirp bubblewrap
+  curl unzip gzip openssl slirp bubblewrap \
+  imagemagick ffmpeg gifsicle
 ```
 
 The cross-GCC packages are not required. In particular,
@@ -228,6 +229,10 @@ python3 tools/beam_regression.py
 python3 tools/tx39_regression.py
 python3 tools/pccard_regression.py
 python3 tools/pclink_regression.py
+python3 tools/etherlink_regression.py \
+  --nvram-source /path/to/provider-and-browser/nvram
+python3 tools/https_proxy_regression.py \
+  --nvram-source /path/to/proxy-rule-configured/nvram
 python3 tools/modem_bridge.py --probe
 python3 tools/modem_bridge.py --acceptance
 python3 tools/devrom_tests.py
@@ -436,7 +441,7 @@ the separate serial-terminal view.
 | Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 FIR code through a TX39 `MADD` |
 | Magic Bus | ROM assigns address zero, validates the checksummed `ATKB` descriptor, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures |
 | PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback, insertion, and live-OS checks |
-| PC Card Ethernet | The archived EtherLink driver initializes the 3C589, completes ARP/TCP through rootless libslirp, and renders deterministic local HTTP |
+| PC Card Ethernet | The archived EtherLink driver initializes the 3C589, completes ARP/TCP through rootless libslirp, renders deterministic local HTTP, and carries a loopback-proxied Crypto Ancienne TLS request whose decrypted request and rendered result are checked |
 | PCLink | The Storeroom computer installs archived `DvorakKeyboard.pkg`; the optional 452K TLS-browser package also transfers, disconnects cleanly, and records zero ROM Magic Bus failures |
 | IrDA / Beam | Two fresh peers exchange SIR discovery frames, select `bob Receiver`, and transfer `alice Sender`'s name card into the receiver's Inbox |
 | PC Card modem | Magic Cap detects the card, completes its Hayes sequence, and emits an async-HDLC PPP LCP frame |
@@ -445,7 +450,8 @@ the separate serial-terminal view.
 The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
 still incomplete. The current gaps are the board-level effect of power-supply
 outputs, the product-level storage-card lifecycle, complete PC Card modem save
-state, the built-in modem's external line side,
+state, the modified browser's native HTTPS Rule 14 dispatch, the built-in
+modem's external line side,
 microphone/sound-receive DMA, multi-device Magic Bus topology, and hardware
 fidelity beyond the register behavior
 exercised by the ROM; see

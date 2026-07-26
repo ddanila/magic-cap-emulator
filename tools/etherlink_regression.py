@@ -28,7 +28,14 @@ def _lua_quote(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def automation_script(marker: Path, url: str, max_frames: int = 9000) -> str:
+def automation_script(
+    marker: Path,
+    url: str,
+    max_frames: int = 9000,
+    *,
+    startup_close: tuple[int, int] = (413, 60),
+    result_wait_frames: int = 600,
+) -> str:
     """Return cold-boot browser automation with an event-driven exit."""
     return f"""local machine = manager.machine
 local ports = machine.ioport.ports
@@ -61,8 +68,8 @@ end
 emu.register_frame_done(function()
     frames = frames + 1
     if frames == 1800 then
-        -- Close the retained browser's previous communication alert.
-        press(413, 60)
+        -- Close the retained browser's startup slip or alert.
+        press({startup_close[0]}, {startup_close[1]})
     elseif frames == 1820 then
         release()
     elseif frames == 2100 then
@@ -82,7 +89,7 @@ emu.register_frame_done(function()
     if frames > 3420 and not request_frame and marker_exists() then
         request_frame = frames
     end
-    if request_frame and frames == request_frame + 600 then
+    if request_frame and frames == request_frame + {result_wait_frames} then
         machine.screens[":screen"]:snapshot("etherlink-http-result.png")
         machine:exit()
     elseif frames == {max_frames} then
@@ -134,10 +141,12 @@ class _RequestServer(ThreadingHTTPServer):
         marker: Path,
         request_log: Path,
         expected_target: str | None = None,
+        body: bytes = DEFAULT_BODY,
     ) -> None:
         self.marker = marker
         self.request_log = request_log
         self.expected_target = expected_target
+        self.body = body
         self.request_seen = threading.Event()
         super().__init__(address, _RequestHandler)
 
@@ -158,10 +167,10 @@ class _RequestHandler(BaseHTTPRequestHandler):
             self.server.request_seen.set()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=us-ascii")
-        self.send_header("Content-Length", str(len(DEFAULT_BODY)))
+        self.send_header("Content-Length", str(len(self.server.body)))
         self.send_header("Connection", "close")
         self.end_headers()
-        self.wfile.write(DEFAULT_BODY)
+        self.wfile.write(self.server.body)
 
     def log_message(self, format: str, *args: object) -> None:
         return

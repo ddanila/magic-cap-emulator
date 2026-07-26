@@ -6,7 +6,7 @@ The first emulator for the [General Magic DataRover 840](https://pdamuseum.eu/pd
 
 *A real recording of the emulated machine at its native 480×320, driven by a deterministic touchscreen script: boot → desk → Stamps → Hallway → the painting → Downtown → the Internet Center → Internet Mail rules. Static scenes are shortened; the animations play at their recorded speed. How it is made: [`docs/demo.md`](docs/demo.md).*
 
-**Current state:** the emulated machine boots ROM build 3.1.2j to the interactive Magic Cap workbench — touchscreen, persistent storage and suspend/wake (including a retained-RAM relaunch), speaker output, both PC Card slots, package installation over serial PCLink, IrDA beaming between two emulated communicators, and Web Browser 4.0 fetching local HTTP over both live PC Card PPP and the original EtherLink III driver all work. See [Status](#status).
+**Current state:** the emulated machine boots ROM build 3.1.2j to the interactive Magic Cap workbench — touchscreen, persistent storage and suspend/wake (including a retained-RAM relaunch), speaker output, both PC Card slots, package installation over serial PCLink, IrDA beaming between two emulated communicators, Web Browser 4.0 fetching local HTTP over both live PC Card PPP and the original EtherLink III driver, and deterministic proxy-assisted TLS through the modified Web Browser 3.5 and Crypto Ancienne all work. See [Status](#status).
 
 Before this project (survey, July 2026) no emulator for any Magic Cap device existed — nothing in MAME, on GitHub, or in QEMU. The only way people ran Magic Cap was the Mac-hosted *Magic Cap Simulator*, a native recompile of the OS rather than a hardware emulator ([details below](#the-magic-cap-simulators)).
 
@@ -89,7 +89,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | Built-in software modem | Continuous 48-word SIB telecom DMA ring drives the ROM's V.32 pump/control/FIR through a TX39 `MADD` | [`builtin-modem.md`](docs/builtin-modem.md) |
 | Magic Bus | Address assignment, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
-| PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core, completes TCP through rootless libslirp, and renders deterministic local HTTP | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md) |
+| PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core, completes TCP through rootless libslirp, renders deterministic local HTTP, and carries a host-proxied local TLS request | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap, including the 452K Apollo browser from the Old VCR field report | [`pclink.md`](docs/pclink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
 | IrDA / Beam | Two fresh communicators discover each other by name over SIR, the sender selects the receiver, and a name card arrives in the receiver's Inbox | [`irda.md`](docs/irda.md) |
 | Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 fetches and renders deterministic local HTTP | [`modem.md`](docs/modem.md) |
@@ -122,14 +122,14 @@ checkpoints are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
   re-enumerate the card instead of resuming an in-flight modem session
   ([`mame-bringup.md`](docs/mame-bringup.md#known-gap-save-state-coverage)).
 
-- **Complete deterministic proxy-assisted HTTPS.** The original EtherLink III
-  driver now completes ARP/TCP through the rootless libslirp backend, and the
-  modified MIPS browser renders a deterministic local HTTP page. Kaiser's
-  real-device workflow sends absolute HTTPS URLs through an ordinary Magic
-  Internet Kit TCP stream to a host-side Crypto Ancienne proxy. The remaining
-  gate is to configure that browser Rule and require a pinned local HTTPS
-  request plus rendered result without depending on a public site
-  ([`oldvcr-tls.md`](docs/oldvcr-tls.md#acceptance-targets-derived-from-the-article)).
+- **Resolve the modified browser's native HTTPS Rule.** Deterministic
+  proxy-assisted TLS is covered through Browser 3.5's HTTP proxy Rule 13 and
+  Crypto Ancienne's documented `-u` HTTP-to-TLS upgrade: the exact decrypted
+  local request and rendered page are both required. Rule 14 can be configured
+  visibly, but an `https://` URL still opens the destination directly instead
+  of the configured proxy. That browser-level dispatch gap is now isolated
+  from EtherLink, TCP, proxy and TLS interoperability
+  ([`oldvcr-tls.md`](docs/oldvcr-tls.md#deterministic-https-regression)).
 
 - **Model the built-in modem's external line side.** The SIB telecom DMA ring
   and ROM V.32 DSP execute, but the external DAA, carrier acquisition, and a

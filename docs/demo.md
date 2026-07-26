@@ -6,6 +6,18 @@ and the tour is driven by a deterministic Lua input script rather than by hand.
 This is the reproducible pipeline, including the parts that are easy to get
 wrong.
 
+The GIF pipeline additionally needs ImageMagick, FFmpeg and the Python Pillow
+module; `gifsicle` is optional but makes the final GIF smaller. On
+Debian/Ubuntu with the system Python:
+
+```sh
+sudo apt-get install imagemagick ffmpeg python3-pil gifsicle
+```
+
+If `python3` names a different Python installation, install Pillow into that
+interpreter's environment or invoke the tool and test suite with
+`/usr/bin/python3`.
+
 The scenario is boot → Magic Cap desk → Stamps drawer → Hallway → the painting
 → pan around → Downtown → the Internet Center → Internet Mail rules → close.
 
