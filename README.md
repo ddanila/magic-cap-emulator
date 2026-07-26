@@ -2,7 +2,7 @@
 
 The first emulator for the [General Magic DataRover 840](https://pdamuseum.eu/pda/datarover840/) — the last and best Magic Cap communicator (1998), running Magic Cap 3.1 on a MIPS CPU. It is built as a MAME driver (fork: [ddanila/mame](https://github.com/ddanila/mame), `custom` branch); this repository holds the reverse-engineering notes, analysis tooling, and regression harnesses.
 
-**Current state:** the emulated machine boots ROM build 3.1.2j to the interactive Magic Cap workbench — touchscreen, persistent storage and suspend/wake (including a retained-RAM relaunch), sound, both PC Card slots, package installation over serial PCLink, and Web Browser 4.0 fetching a local HTTP page over live PC Card PPP all work. See [Status](#status).
+**Current state:** the emulated machine boots ROM build 3.1.2j to the interactive Magic Cap workbench — touchscreen, persistent storage and suspend/wake (including a retained-RAM relaunch), speaker output, both PC Card slots, package installation over serial PCLink, and Web Browser 4.0 fetching a local HTTP page over live PC Card PPP all work. See [Status](#status).
 
 Before this project (survey, July 2026) no emulator for any Magic Cap device existed — nothing in MAME, on GitHub, or in QEMU. The only way people ran Magic Cap was the Mac-hosted *Magic Cap Simulator*, a native recompile of the OS rather than a hardware emulator ([details below](#the-magic-cap-simulators)).
 
@@ -80,7 +80,7 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | Touch | One absolute pointer device drives X/Y/pen-down through calibration and remains live across MAME Tab-menu round trips | [`mame-bringup.md`](docs/mame-bringup.md) |
 | Persistence & power | Battery-backed DRAM + RTC as NVRAM; power-button suspend/wake across a retained-RAM relaunch | [`power-wake.md`](docs/power-wake.md) |
 | Battery & supply inputs | Both ADC channels answer within the ROM's own calibration thresholds, so the spurious backup-battery warning is gone; battery levels, AC adapter and battery cover are selectable, and removing the cover raises the IO interrupt the OS services | [`power-wake.md`](docs/power-wake.md#battery-levels) |
-| Sound | ROM's startup tone (unbuffered hold register) plus the buffered SIB sound DMA ring: half/end handlers continuously refill DRAM buffers and complete the OS speaker lifecycle | [`betty-registers.md`](docs/betty-registers.md) |
+| Sound output | ROM's startup tone (unbuffered hold register) plus the buffered SIB sound DMA ring: half/end handlers continuously refill DRAM buffers and complete the OS speaker lifecycle | [`betty-registers.md`](docs/betty-registers.md) |
 | Built-in software modem | Continuous 48-word SIB telecom DMA ring drives the ROM's V.32 pump/control/FIR through a TX39 `MADD` | [`builtin-modem.md`](docs/builtin-modem.md) |
 | Magic Bus | Address assignment, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
@@ -90,23 +90,18 @@ Bring-up followed scoped `SUBTARGET` builds and MAME's unmapped-access logging; 
 | Variants | `datarover840` / `840f` (writable flash) / `840j` / `840d` (1998-04-07 development ROM) all build and verify; `840d` also boots to the workbench | [`rom-layout.md`](docs/rom-layout.md), [`dev-rom.md`](docs/dev-rom.md) |
 | OS self-tests | The development ROM's real Command-T runs through the OS scheduler: all 16 basic suites complete and return with no complaint. Fourteen individually driven unit tests — including `CheckROMPristineTable`, the OS verifying its own ROM — remain useful focused checks | [`dev-rom.md`](docs/dev-rom.md) |
 
-Each subsystem has a headless regression under [`tools/`](tools/); the full list and expected checkpoints are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
+Each subsystem has an automated regression under [`tools/`](tools/); all but
+the Linux/X11 Tab-menu touch check are headless. The full list and expected
+checkpoints are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
 
 ### Remaining work
 
 - **Act on the power-supply outputs.** The charger and the LCD, IR, sound,
   MagicBus and modem Vcc rails round-trip through `mfioDataOutput`, so the OS
   reads back what it wrote, but nothing acts on them: LCD power off does not
-  blank the display and the charger does not recharge the modelled cells. No ROM
-  behavior observed so far depends on it
+  blank the display and the charger does not recharge the modelled cells. No
+  ROM behavior observed so far depends on it
   ([`power-wake.md`](docs/power-wake.md#outputs-the-os-writes)).
-The machine stays `MACHINE_NOT_WORKING` while unmodeled hardware remains,
-notably the power-supply outputs above. Power/wake has a two-process headless acceptance test in
-[`tools/power_regression.py`](tools/power_regression.py); sound covers both
-unbuffered and buffered paths, and the built-in modem now covers its ROM DSP
-path as well as the underlying DMA registers. Magic Bus discovery and
-bidirectional keyboard traffic are covered by
-[`tools/magicbus_probe.py`](tools/magicbus_probe.py).
 
 - **Route IrDA traffic to a peer.** Beaming does not use Dino's IR module —
   that block is consumer-IR timing plus the Betty reset GPIO. IrDA rides a
@@ -115,6 +110,36 @@ bidirectional keyboard traffic are covered by
   never opens the link without a user beaming. What is missing is an IR
   endpoint for pulsed-mode traffic and a way to drive the Beam window
   ([`irda.md`](docs/irda.md)).
+
+- **Complete PC Card modem save states.** The main driver state is registered,
+  but the optional modem card's 16550 registers and receive queue are not.
+  A restore therefore deliberately pulses card detect and makes Magic Cap
+  re-enumerate the card instead of resuming an in-flight modem session
+  ([`mame-bringup.md`](docs/mame-bringup.md#known-gap-save-state-coverage)).
+
+- **Model the built-in modem's external line side.** The SIB telecom DMA ring
+  and ROM V.32 DSP execute, but the external DAA, carrier acquisition, and a
+  remote modem are not represented. This is separate from the working PC Card
+  PPP path ([`builtin-modem.md`](docs/builtin-modem.md)).
+
+- **Implement microphone/audio input.** Speaker playback covers the
+  unbuffered hold register and continuously serviced sound-TX DMA ring, but
+  `sibSoundRxStart`, the sound-RX DMA enable/interrupt path, and a host
+  microphone source are not implemented. Recording applications are therefore
+  unverified
+  ([`betty-registers.md`](docs/betty-registers.md#buffered-sib-sound-dma)).
+
+- **Improve hardware fidelity beyond observed ROM needs.** TX39 configuration
+  and cache-lock registers and many Dino registers are behavioral shadows.
+  The verified boot, power, sound, telecom, and peripheral paths act on the
+  bits the ROM uses, but cycle-exact cache locking, clock division, and a
+  complete functional Dino are not claimed
+  ([`tx39-cpu.md`](docs/tx39-cpu.md), [`memory-map.md`](docs/memory-map.md)).
+
+The machine stays `MACHINE_NOT_WORKING` while these hardware gaps remain.
+Power/wake, sound, the built-in modem's ROM/DSP boundary, Magic Bus, and the
+other implemented paths have focused acceptance checks; the list above is the
+current uncovered hardware work rather than old bring-up failures.
 
 ## Resources
 
@@ -154,7 +179,7 @@ We don't own a DataRover 840, so correctness is judged by external signals only:
 
 ```
 docs/       RE notes: memory map, Betty registers, ROM layout, bring-up, PCLink, PC Card and built-in modems, TX39 CPU, power/wake, development ROMs
-tools/      headless regression harnesses and analysis scripts (ROM info, ROM diff, serial, desk, sound, telecom, TX39, PC Card, PCLink, both modem paths, development-ROM Command-T/self-tests), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play
+tools/      automated regression harnesses and analysis scripts (ROM info, ROM diff, serial, desk, touch/menu, sound, telecom, TX39, PC Card, PCLink, both modem paths, development-ROM Command-T/self-tests), fetch_assets.sh to mirror research inputs, start_manual.sh for interactive play
 tests/      unit tests for the tools, with captured serial fixtures
 roms/       optional git-ignored compatibility path; persistent assets live outside the repo in ~/fun/magic-cap-assets/
 ```

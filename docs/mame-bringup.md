@@ -140,12 +140,14 @@ reason.
 
 The machine is `MACHINE_SUPPORTS_SAVE`, but not every driver member is
 registered with `save_item`. The PC Card modem's 16550 state is the notable
-group — `m_fcr`, `m_ier`, `m_lcr`, `m_mcr`, `m_divisor`, `m_rx_data`,
-`m_rx_head`, `m_rx_count`, `m_tx_irq_pending` and `m_pccard_ready` — so a
-restored session brings the card back with those fields zeroed, which is the
-likely reason the modem needs re-enumerating after a state load. Anything added
-to the driver should be registered at the same time; two DMA flags were missed
-that way and fixed afterwards.
+group — `m_config_option`, `m_fcr`, `m_ier`, `m_lcr`, `m_mcr`, `m_divisor`,
+`m_scratch`, `m_rx_data`, `m_rx_head`, `m_rx_count`, and
+`m_tx_irq_pending` — and the slot's `m_pccard_ready` state is also omitted.
+A restored session therefore cannot resume an in-flight modem exchange. The
+driver deliberately pulses card detect after loading so Magic Cap
+re-enumerates the selected modem and its new host PTY. Anything added to the
+driver should be registered at the same time; two DMA flags were missed that
+way and fixed afterwards.
 
 `-lightgun -lightgun_device lightgun` maps the host pointer to one absolute
 SDL lightgun device. The driver binds X, Y, and pen-down to that same device;
@@ -231,9 +233,11 @@ python3 tools/devrom_suites.py
 python3 tools/devrom_command_t.py
 ```
 
-These automated launchers select MAME's SDL `dummy` video and audio drivers as
-well as disabling emulated video/audio output.  They therefore run without
-creating a host GUI window; `tools/start_manual.sh` remains interactive.
+All checks above except `menu_touch_regression.py` select MAME's SDL `dummy`
+video and audio drivers as well as disabling emulated video/audio output.
+They therefore run without creating a host GUI window. The touch check
+intentionally creates a real MAME window inside Xvfb to exercise the Tab menu;
+`tools/start_manual.sh` remains the normal interactive launcher.
 
 The serial harness writes generated configuration and logs under
 `~/fun/magic-cap-assets/runtime/serial-regression/`. Override its defaults with
@@ -274,10 +278,12 @@ The sound harness boots with SDL's dummy audio backend and asks MAME to write
 the mixed output to a persistent WAV capture. Its default `beep` checkpoint
 verifies that the ROM's hardware-generated startup tone is present near 750 Hz
 for roughly 60 ms. `--checkpoint dma` runs far enough into the boot for the OS
-to play its chime through buffered SIB sound DMA and requires a second audible
-segment of 120-300 ms; see [`betty-registers.md`](betty-registers.md). The
-emulated DAC lands on the capture's second channel, so the analysis always
-picks the most occupied channel.
+to play its chime through a continuously serviced SIB sound DMA ring and
+requires a second audible segment lasting one to four seconds. The measured
+segment is about 2.14 seconds; a single unrefilled 190 ms buffer pass now fails
+the check. See [`betty-registers.md`](betty-registers.md). The emulated DAC
+lands on the capture's second channel, so the analysis always picks the most
+occupied channel.
 The WAV, generated Lua, NVRAM, and log remain under
 `~/fun/magic-cap-assets/runtime/sound-regression/`.
 
@@ -402,9 +408,9 @@ the separate serial-terminal view.
 | Early splash | The bare top hat renders before the interactive UI |
 | Welcome | Circled hat, `Magic Cap™`, and `Touch the screen to begin` render and accept a pen tap |
 | Calibration | Upper-left, lower-right, and center targets accept synthesized Betty ADC samples |
-| Workbench | Live Dino buffer `0x003f6a00` reaches deterministic checksum `0x62d64ba4` |
+| Workbench | Live Dino buffer `0x003f6a00` reaches stable lower-workbench signature `0x9dab458b`; the clock-dependent full-screen checksum is informational |
 | Persistence | 4 MiB DRAM and Dino RTC use external NVRAM files; a two-process regression proves retained-RAM power-down and on-button wake |
-| Sound | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
+| Sound output | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
 | Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 FIR code through a TX39 `MADD` |
 | Magic Bus | ROM assigns address zero, validates the checksummed `ATKB` descriptor, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures |
 | PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback, insertion, and live-OS checks |
@@ -413,6 +419,9 @@ the separate serial-terminal view.
 | Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
 
 The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
-still incomplete. Power-supply output rails still round-trip without acting on
-their attached devices; Magic Bus discovery and its AT-keyboard traffic are now
-functional and covered by the headless probe.
+still incomplete. The current gaps are the board-level effect of power-supply
+outputs, an IrDA transport/beam path, complete PC Card modem save state, the
+built-in modem's external line side, microphone/sound-receive DMA, and
+hardware fidelity beyond the register behavior exercised by the ROM; see
+[`README.md`](../README.md#remaining-work). Magic Bus discovery and its
+AT-keyboard traffic are functional and covered by the headless probe.

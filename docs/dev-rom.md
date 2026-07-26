@@ -133,7 +133,8 @@ tools/fetch_assets.sh macsdk        # also places the image in the rompath
 cd "$HOME/fun/mame"
 ./datarover -rompath "$HOME/fun/magic-cap-assets/roms" -verifyroms datarover840d
 ./datarover datarover840d -rompath "$HOME/fun/magic-cap-assets/roms" \
-  -window -skip_gameinfo -view LCD -lightgun -mouse -lightgun_device lightgun
+  -window -skip_gameinfo -nokeepaspect -view LCD \
+  -lightgun -lightgun_device lightgun
 ```
 
 Both headless harnesses take `--system`, so the existing checkpoints run

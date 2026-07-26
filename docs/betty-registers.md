@@ -229,6 +229,13 @@ the regression's lower bound now rejects that failure directly. With the DMA dis
 disabled the same capture contains only the beep, which is how the feature was
 confirmed rather than assumed. Note that the DAC output lands on the capture's
 second channel; the analysis picks the most occupied channel for that reason.
+
+Only the speaker/transmit side is implemented today. The driver does not act
+on `sibSoundRxStart` or `kSibEnSoundRxDmaMask`, does not raise the corresponding
+sound-receive DMA/ready events, and has no host microphone source. Audio
+recording is therefore a remaining hardware path, not something covered by
+the playback regression.
+
 The complete ROM diagnostic now runs as a regression:
 
 ```sh

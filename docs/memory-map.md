@@ -132,19 +132,25 @@ and an encoded end address to `+0x034`.
 Betty is **not** this register block. It is an external device reached through
 Dino's SIB subframe registers; see [`betty-registers.md`](betty-registers.md).
 
-### Implemented bring-up semantics
+### Implemented semantics
 
-The current behavioral model implements the subset observed on the verified
-boot path:
+The current behavioral model implements the subset exercised by the verified
+boot, OS, and peripheral regressions:
 
-- UART A/B transmitter-ready and transmitter-empty status; UART A is wired to
-  the generic terminal for the IDT monitor.
+- Buffered UART A/B transmit and receive paths, status/interrupt behavior, and
+  MAME RS-232 endpoints; UART A is also wired to the generic terminal for the
+  IDT monitor.
 - Write-to-clear Dino interrupt status banks.
-- Synchronous Magic Bus completion.
+- Magic Bus command/status handling, PIO and DMA completion, peripheral
+  request-line edges, checksummed discovery records, and the bidirectional
+  Set-2 AT keyboard accessory.
 - SIB SF0/SF1 command completion and continuous frame flags while SIB is
   enabled.
 - The sound-hold FIFO's two signed 16-bit mono samples, its service interrupt,
-  and sample timing derived from Dino's 9.216 MHz SIB clock/divisor.
+  and sample timing derived from Dino's 9.216 MHz SIB clock/divisor, plus the
+  continuously serviced sound-transmit DMA ring used by the boot chime.
+- Telecom RX/TX DMA, one-shot and continuous rings, loopback/silence receive,
+  and independent telecom sample timing for the built-in software modem.
 - A battery-backed 32,768 Hz RTC counter, alarm and rollover interrupts,
   freeze/clear controls, and a separate persistent clock record.
 - Read-only power-good/on-button inputs plus cold-start/VCC power state.
@@ -159,8 +165,10 @@ boot path:
 - Main DRAM backed by MAME NVRAM, kept in the external runtime directory
   selected with `-nvram_directory`.
 
-These are deliberately boot-oriented behaviors, not a claim that all Dino
-timing and interrupt semantics are complete.
+These are deliberately ROM-observed behaviors, not a claim that all Dino
+timing and interrupt semantics are complete. Sound-receive DMA/microphone
+input, IrDA routing, and board-level effects of the power-rail outputs remain
+outside this implemented subset.
 
 ## Magic Bus
 
