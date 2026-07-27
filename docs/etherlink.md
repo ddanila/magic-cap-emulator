@@ -199,7 +199,7 @@ an indication that the physical IREQ line is active. The emulation now keeps
 it separate from Interrupt Latch and implements the published acknowledgement
 rules for TX Available, RX Early and RX Complete.
 
-The final receive bug was access width, not TCP. Disassembly of the archived
+Receive access width is the third subtle contract. Disassembly of the archived
 driver's native MIPS routine at package offset `0x1904` shows this exact loop:
 
 1. select Window 1 and read the 11-bit length from RX Status;
@@ -207,14 +207,13 @@ driver's native MIPS routine at package offset `0x1904` shows this exact loop:
 3. store that returned byte and repeat exactly `length` times;
 4. issue RX Discard.
 
-The emulation previously discarded the caller's byte-lane mask at the
-window-register layer and always called the FIFO as a full 16-bit read.
-Consequently each driver iteration popped two bytes: the interrupt and final
-discard looked correct, but the protocol stack saw every other byte followed
-by zeros. Passing the real mask into PIO Data Read makes byte reads pop one
-byte and word reads pop two, as the 3Com reference specifies. RX Complete is
-also raised after MAME's simulated wire transfer, and RX Bytes now decreases
-as data is read.
+An emulation that discards the caller's byte-lane mask at the window-register
+layer and reads the FIFO as a full 16 bits pops two bytes per driver
+iteration: the interrupt and final discard look correct, but the protocol
+stack sees every other byte followed by zeros. Passing the real mask into PIO
+Data Read makes byte reads pop one byte and word reads pop two, as the 3Com
+reference specifies. RX Complete is raised after MAME's simulated wire
+transfer, and RX Bytes decreases as data is read.
 
 With those corrections, a cold NVRAM run completes:
 

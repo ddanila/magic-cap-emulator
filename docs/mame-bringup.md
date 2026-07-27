@@ -455,5 +455,5 @@ modem's external line side,
 microphone/sound-receive DMA, multi-device Magic Bus topology, and hardware
 fidelity beyond the register behavior
 exercised by the ROM; see
-[`README.md`](../README.md#remaining-work). Magic Bus discovery and its
+[`PLAN.md`](../PLAN.md#remaining-work). Magic Bus discovery and its
 AT-keyboard traffic are functional and covered by the headless probe.

@@ -2,10 +2,7 @@
 
 This note records the Dino power/wake hardware interface and the OS logic
 around it, recovered from the unstripped Icras SDK ELF, the SDK's `Dino.h` /
-`Dino.asm.h` platform headers, and the release ROM image. It also records the
-driver fix for the former wake-path blocker: a warm boot of a heap saved while
-suspended could enter the retained shutdown path but could not complete a
-power-button wake.
+`Dino.asm.h` platform headers, and the release ROM image.
 
 Every address below was checked against the emulated ROM, not only the ELF —
 see [Reproducing this analysis](#reproducing-this-analysis).
@@ -95,17 +92,12 @@ if (shutdownReason == 'EMER') {
 DINO->interrupt6Enable = 0x00040000;
 ```
 
-This matched one observed heap exactly — bank 1 masked to zero — and
-identified that capture as a **software branch, not a missing register**: the
-machine took the `EMER` path. On that path bank 5 enables only bit 18
-(`kIntSpiEmptyMask`), so the on-button bits 22/23 are deliberately *not* wake
-sources. A power-button press after an emergency shutdown is designed to be
-ignored, which is why the subsequent wake is rejected rather than mishandled.
-
-That observation was state-specific, not the general retained-RAM failure.
-The clean automated reproduction described below retains `POFF`, restores the
-normal wake masks, and still failed in the old driver. Reading one word remains
-the way to distinguish the two cases:
+On the `EMER` path bank 5 enables only bit 18 (`kIntSpiEmptyMask`), so the
+on-button bits 22/23 are deliberately *not* wake sources: a power-button press
+after an emergency shutdown is designed to be ignored. A restored heap that
+wakes with bank 1 masked to zero is therefore showing a **software branch, not
+a missing register**. When investigating a rejected wake, reading one word —
+`shutdownReason` — distinguishes two cases:
 
 1. `shutdownReason` genuinely holds `EMER` in the restored heap — the ROM is
    behaving correctly and the emulator is reproducing a state the OS treats as
@@ -155,10 +147,10 @@ gives the thresholds the model has to satisfy:
 | Main, 24 | `0x13e96dc0` | 80 | 320 | 800 |
 | Backup, 28 | `0x13e96e20` | 400 | 816 | 1600 |
 
-**The bug this explains.** The driver answered 340 on the backup channel —
-*below* that channel's empty point — so the OS computed 0% and posted a
-backup-battery warning over the desk on every development-ROM boot. The healthy
-default is now 1000, which clears the 816 warning point with margin. The backup
+**Why the defaults matter.** A backup reading below that channel's empty
+point makes the OS compute 0% and post a backup-battery warning over the desk
+on every boot. The healthy
+default is 1000, which clears the 816 warning point with margin. The backup
 channel's full point sits above the 10-bit value the ADC returns, so a healthy
 cell reads mid-scale rather than 100%; the main channel's full point is 800, so
 a full main cell does report 100%.
@@ -190,9 +182,8 @@ screen checksums:
 python3 tools/battery_regression.py
 ```
 
-The control matters here more than usual. A model that always reported a
-healthy cell would pass a one-sided check, which is exactly how the wrong
-backup value survived until now.
+The control matters here more than usual: a model that always reported a
+healthy cell would pass a one-sided check.
 
 Why this is worth more than cosmetic cleanup: `MainBatteryIsLow` is broadcast to
 roughly a dozen servers, including `Modem_MainBatteryIsLow`,
@@ -328,14 +319,13 @@ Requirements pinned down by the analysis and now implemented by the driver:
 - **Model `kPowerStopCpuMask` writes as the stop**, including the
   clear-then-set sequence `Doze` uses.
 
-The runtime trace exposed one more required link. `interrupt6` is Dino's
-read-only priority summary: bits 31/30 report high/low-priority enabled
-pending interrupts from banks 1–5. `DeepDoze` masks CPU interrupts and polls
-those two bits directly. The old driver asserted the R3900 IRQ line but never
-populated bank 6, so the ROM could latch a correct on-button edge and still
-spin in `RefreshMemory`.
+One more link is required. `interrupt6` is Dino's read-only priority summary:
+bits 31/30 report high/low-priority enabled pending interrupts from banks 1–5.
+`DeepDoze` masks CPU interrupts and polls those two bits directly, so a driver
+that asserts the R3900 IRQ line without populating bank 6 lets the ROM latch a
+correct on-button edge and still spin in `RefreshMemory`.
 
-The fix therefore:
+The driver therefore:
 
 - computes the low-priority bank-6 summary from enabled bank 1–5 status;
 - makes bank 6 read-only rather than write-to-clear;

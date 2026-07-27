@@ -91,6 +91,6 @@ hardware gaps:
    realignment, volume changes, password-on-wake and beaming a notebook page.
 
 This backlog complements the hardware-oriented list in
-[`README.md`](../README.md#remaining-work). It should not expand the driver
+[`PLAN.md`](../PLAN.md#remaining-work). It should not expand the driver
 with guessed behavior: each item still starts by tracing the relevant ROM path
 and SDK symbols.

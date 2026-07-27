@@ -94,8 +94,8 @@ the list below is a test suite…"*, *"About Test Suites"*, *"About TestSite"*,
 communication test since no phone line plugged in."*, and
 *"Timing Tests"*.
 
-This settles a question the [README](../README.md#the-magic-cap-simulators)
-raised from the simulator documentation — whether a device ROM retains the
+This settles a question [`background.md`](background.md#the-magic-cap-simulators)
+raises from the simulator documentation — whether a device ROM retains the
 hidden Testing Scene and self-tests. The **release** ROM does not; this
 development ROM does.
 
@@ -265,59 +265,29 @@ executing against the emulated hardware and finding nothing to complain about
 is particularly direct: it is the OS verifying the ROM image it is running
 from.
 
-### Why the apparent 66 complaints were not emulator failures
+### Why direct calls to the formatter bodies are invalid
 
-Calling the two formatter bodies directly produced stable totals of 29 and 37
-complaints. `--trace-complaints` identified every caller:
-
-| Directly called body | Complaint site | Count | Check |
-|---|---:|---:|---|
-| `TestFormattingInteger` | `0x13e8c540` | 29 | `CheckExpectedText` text mismatch |
-| `TestScanningFloatingPoint` | `0x13e8cd94` | 13 | scanner result/reference mismatch |
-| `TestScanningFloatingPoint` | `0x13e8cdb8` | 24 | parsed/expected double mismatch |
-
-The integer expectations make the missing context visible: they include
-locale-specific forms such as `(1)`, `1.000`, `eins`, and values suffixed with
-`DM`. The direct call was using the machine's ordinary number formatter
-instead of the test fixture's formatter, so simple values happened to match
-while locale-sensitive cases did not.
-
-The ROM's real entry point proves the required setup. At `0x13e8d07c`,
-`FormatterTestSuite_RunTest`:
-
-1. saves the current system number formatter;
-2. reads the `FormatterTestSuite.formatter` reference field at offset 8;
-3. installs that formatter;
-4. dispatches test 1 (`TestFormattingInteger`) or test 6
-   (`TestScanningFloatingPoint`);
-5. restores the saved formatter.
-
-The `.dx` database identifies `FormatterTestSuite` as class `0x05f9`.
-At runtime it is item nine of `System_iBasicSystemTestList`; the harness
-resolves that item dynamically rather than pinning a heap address. Through
-this wrapper, the same 34 integer text comparisons and 28 floating-point scan
-cases return with **zero complaints**. The 66 reports therefore came entirely
-from bypassing the ROM's fixture setup; they are neither an FPU gap nor a
-hardware-emulation defect.
-
-One debugger trap is worth retaining: a breakpoint action chaining two `do`
-commands silently stops the machine instead of continuing, which looks exactly
-like a hung test. The operand trace uses `logerror` plus one counter update and
-routes it through MAME's `-oslog` output.
+Called naked, `TestFormattingInteger` and `TestScanningFloatingPoint` report
+dozens of locale-sensitive mismatches (expected forms like `(1)`, `1.000`,
+`eins`, `DM` suffixes) because the bodies then run against the machine's
+ordinary number formatter. The ROM's real entry point,
+`FormatterTestSuite_RunTest` (`0x13e8d07c`), saves the system formatter,
+installs the fixture formatter from the `FormatterTestSuite` object (class
+`0x05f9`, item nine of `System_iBasicSystemTestList`), dispatches the test,
+and restores the saved formatter. Through that wrapper the same 34 integer
+comparisons and 28 floating-point scan cases return with **zero complaints**,
+so the harness resolves the suite dynamically and enters there — its verdict
+measures the emulator, not a bypassed fixture.
 
 Fourteen more do not return from a forced call (`announcement`, `contact`,
 `datebook`, `fmtfixed`, `fmtfloat`, `numeraldouble`, `padprecision`,
 `lossofaccuracy`, `scaninteger`, `scanfixed`, `scantime`, `buggbm15189`,
-`bugrwt12821`, `textstyle`). The PC keeps moving through OS code, so they wait
-on task or scene context rather than crashing — the same limitation that stops
-Command-T being driven this way.
-
-For the ones that do not return, the PC keeps moving through OS code rather
-than sitting in a tight loop, so they are waiting on something — task or scene
-context — rather than crashing. `announcement`'s dependence on session state
-points the same way. The suites themselves are compiled into the ROM — the Mac
-SDK ships no test packages — so no extra input is needed, only the right
-context. That context is the test machine.
+`bugrwt12821`, `textstyle`). The PC keeps moving through OS code rather than
+sitting in a tight loop, so they wait on task or scene context rather than
+crashing — the same limitation that stops Command-T being driven this way.
+The suites themselves are compiled into the ROM — the Mac SDK ships no test
+packages — so no extra input is needed, only the right context. That context
+is the test machine.
 
 ## Running whole suites: `RunTests`
 
@@ -541,8 +511,8 @@ needs `unar` (`brew install unar`); `7z` and `bsdtar` do not handle StuffIt 5.
 `tools/fetch_assets.sh macsdk` does the download, extraction, and checksum
 verification.
 
-Note that this is the same SDK whose simulator the
-[README](../README.md#the-magic-cap-simulators) describes as the
+Note that this is the same SDK whose simulator
+[`background.md`](background.md#the-magic-cap-simulators) describes as the
 version-matched behavioral reference, so the archive is also the route to the
 Rosemary Simulator, its documentation, and the Apollo/Sputnik interface
 headers.

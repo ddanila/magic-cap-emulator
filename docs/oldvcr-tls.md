@@ -89,12 +89,10 @@ python3 tools/pclink_regression.py \
 On 2026-07-26 the emulator accepted the full package stream, returned the
 final `Pong`, disconnected, and displayed a 454K **Web Browser** object in the
 Storeroom without an alert. The regression also counted calls to the ROM's
-`MagicBus_HandleMagicBusFailure` and observed zero. The earlier alert was
-traced to the harness selecting **None** for the Magic Bus accessory: this ROM
-counts unanswered address assignment as a peripheral failure, and the long
-transfer merely gave it enough time to cross the alert threshold. Keeping the
-modeled `ATKB` keyboard present makes both the small and sustained PCLink
-acceptances clean without patching ROM control flow or dismissing alerts.
+`MagicBus_HandleMagicBusFailure` and observed zero. The modeled `ATKB`
+keyboard must stay present for this: the ROM counts unanswered Magic Bus
+address assignment as a peripheral failure, and a transfer this long gives an
+empty bus enough time to cross the attached-device alert threshold.
 The retained clean evidence is under:
 
 ```text

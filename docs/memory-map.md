@@ -247,8 +247,7 @@ length and checksum validate. “Magic Bus accessory” in MAME's machine
 configuration defaults to **AT keyboard** and can be changed to **None**. A
 reset applies a changed selection. **None** deliberately leaves address
 assignment unanswered; this ROM counts that silence as a peripheral failure
-and can eventually show the attached-device alert, matching the previously
-unmodeled empty-bus behavior.
+and can eventually show the attached-device alert.
 
 ### Keyboard request and control traffic
 
@@ -269,12 +268,9 @@ self-test/acknowledgement bytes rather than exposing them as key transitions.
 Magic Bus state, the scan FIFO, and all in-flight transaction state participate
 in save states.
 
-The old driver had no endpoint. Its scheduled address-assignment broadcast
-therefore entered `MagicBus_HandleMagicBusFailure` about every 30 seconds and
-eventually posted the attached-device alert. No alert suppression remains in
-the PCLink tooling. The acceptance probe now exercises discovery plus both
-directions of keyboard traffic: it injects Caps Lock, observes Set-2 dispatch,
-and requires the ROM to send the corresponding LED update back to the device.
+The acceptance probe exercises discovery plus both directions of keyboard
+traffic: it injects Caps Lock, observes Set-2 dispatch, and requires the ROM
+to send the corresponding LED update back to the device.
 
 ```sh
 python3 tools/magicbus_probe.py

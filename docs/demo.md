@@ -65,8 +65,8 @@ snapshots at the LCD's own 480×320 rather than the window size.
 - The scenario is verified by its snapshots. `g-center.png` and
   `i-closed.png` are the same scene, so their hashes must match; if a tap lands
   early the beats diverge and it shows up there. Watch for modal
-  confirmations — the Getting Started card's STOP button opens one, and missing
-  that tap desynchronised the whole first recording.
+  confirmations — the Getting Started card's STOP button opens one, and a
+  missed tap desynchronises every later beat.
 
 ## 3. Extract frames
 
