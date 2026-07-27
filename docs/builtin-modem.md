@@ -37,11 +37,10 @@ First fetch the ROM and the SDK's unstripped Apollo ELF. They are research
 inputs, not repository contents:
 
 ```sh
-cd "$HOME/fun/magic-cap-emulator"
 tools/fetch_assets.sh all
 ```
 
-They remain under `~/fun/magic-cap-assets/`; no ROM, ELF, NVRAM, generated Lua,
+They remain under `$MAGIC_CAP_ASSETS/`; no ROM, ELF, NVRAM, generated Lua,
 or MAME binary is committed.
 
 The regression needs a live provider-configured Magic Cap heap. A successful
@@ -50,16 +49,15 @@ leaves one in its printed run directory. Point `--nvram-source` at that run's
 `nvram` directory:
 
 ```sh
-cd "$HOME/fun/magic-cap-emulator"
 python3 tools/builtin_modem_regression.py \
-  --mame "$HOME/fun/mame/datarover" \
+  --mame ../mame/datarover \
   --nvram-source \
-    "$HOME/fun/magic-cap-assets/runtime/combined-browser/<passing-run>/nvram"
+    "$MAGIC_CAP_ASSETS/runtime/combined-browser/<passing-run>/nvram"
 ```
 
 The harness validates `datarover840/ram`, copies the entire NVRAM tree into a
 new timestamped directory, and never modifies the source. Results remain under
-`~/fun/magic-cap-assets/runtime/builtin-modem-regression/`.
+`$MAGIC_CAP_ASSETS/runtime/builtin-modem-regression/`.
 
 The injected test frame calls the real ROM entry points. It opens the
 `System_iSoftwareModem` object, starts the data modem, selects modulation

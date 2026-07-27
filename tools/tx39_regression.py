@@ -13,15 +13,12 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+ASSETS_ROOT = Path(
+    os.environ.get("MAGIC_CAP_ASSETS", REPO_ROOT.parent / "magic-cap-assets")
+).expanduser()
 DEFAULT_MAME = REPO_ROOT.parent / "mame" / "datarover"
-DEFAULT_ROMPATH = Path.home() / "fun" / "magic-cap-assets" / "roms"
-DEFAULT_WORKDIR = (
-    Path.home()
-    / "fun"
-    / "magic-cap-assets"
-    / "runtime"
-    / "tx39-regression"
-)
+DEFAULT_ROMPATH = ASSETS_ROOT / "roms"
+DEFAULT_WORKDIR = ASSETS_ROOT / "runtime" / "tx39-regression"
 RESULT_PATTERN = re.compile(
     rb"MADD R10=([0-9A-F]{8}) HI=([0-9A-F]{8}) LO=([0-9A-F]{8}) "
     rb"PC=([0-9A-F]{8}).*"

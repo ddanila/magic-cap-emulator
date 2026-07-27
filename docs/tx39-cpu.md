@@ -11,7 +11,7 @@ ELF and ROM behavior.
 Keep the manual with the other persistent, uncommitted research inputs:
 
 ```sh
-assets="$HOME/fun/magic-cap-assets"
+assets="${MAGIC_CAP_ASSETS:-$PWD/../magic-cap-assets}"
 mkdir -p "$assets/docs"
 curl -fL \
   https://www.bitsavers.org/components/toshiba/_dataSheet/TMPR39xx-um_199507.pdf \
@@ -69,7 +69,6 @@ debug traces name them.
 Run the isolated arithmetic regression with:
 
 ```sh
-cd "$HOME/fun/magic-cap-emulator"
 python3 tools/tx39_regression.py
 ```
 
@@ -77,4 +76,4 @@ It writes two tiny uncached-RAM programs into the running DataRover machine.
 The signed case proves `5 + (-2 × 3) = -1`; the unsigned case proves
 `1 + (0xffffffff × 2) = 0x1ffffffff`. Both verify `rd`, `HI`, and `LO`.
 Generated Lua, NVRAM, and logs stay under
-`~/fun/magic-cap-assets/runtime/tx39-regression/`.
+`$MAGIC_CAP_ASSETS/runtime/tx39-regression/`.

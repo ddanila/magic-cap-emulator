@@ -2,9 +2,18 @@
 
 The DataRover driver lives on the `custom` branch of the
 [`ddanila/mame`](https://github.com/ddanila/mame) fork. Keep the fork as a
-sibling of this repository and keep all ROMs, SDK files, captures, and logs in
-the persistent `~/fun/magic-cap-assets/` tree. No copyrighted or generated
-binary is committed to either repository.
+sibling of this repository, and keep all ROMs, SDK files, captures, and logs
+in the persistent asset tree — the sibling `../magic-cap-assets` by default,
+or wherever the `MAGIC_CAP_ASSETS` environment variable points. No
+copyrighted or generated binary is committed to either repository.
+
+Command examples here and in the other docs assume the repository root as the
+working directory and write the asset tree as `$MAGIC_CAP_ASSETS`. To follow
+them literally, export it once per shell:
+
+```sh
+export MAGIC_CAP_ASSETS="${MAGIC_CAP_ASSETS:-$PWD/../magic-cap-assets}"
+```
 
 ## Host prerequisites
 
@@ -60,22 +69,20 @@ manual) with one checksum-verified command; add `all` to include the 176 MiB
 SDK bundle, and see [`rom-layout.md`](rom-layout.md) for what each file is:
 
 ```sh
-cd "$HOME/fun/magic-cap-emulator"
 tools/fetch_assets.sh all
 ```
 
 The resulting MAME ROM must be:
 
 ```text
-~/fun/magic-cap-assets/roms/datarover840/magiccap-usa.image
+$MAGIC_CAP_ASSETS/roms/datarover840/magiccap-usa.image
 ```
 
 ## Clone and build
 
-From `~/fun`, clone both repositories if they are not already present:
+Clone both repositories side by side, in any parent directory:
 
 ```sh
-cd "$HOME/fun"
 git clone https://github.com/ddanila/magic-cap-emulator.git
 git clone --branch custom https://github.com/ddanila/mame.git
 ```
@@ -83,7 +90,7 @@ git clone --branch custom https://github.com/ddanila/mame.git
 Build only the DataRover driver:
 
 ```sh
-cd "$HOME/fun/mame"
+cd ../mame
 PATH="/usr/lib/ccache:$PATH" \
   make SUBTARGET=datarover \
   SOURCES=src/mame/skeleton/datarover.cpp \
@@ -95,7 +102,7 @@ PATH="/usr/lib/ccache:$PATH" \
 (On macOS without coreutils, replace `$(nproc)` with
 `$(sysctl -n hw.ncpu)`.)
 
-This produces `~/fun/mame/datarover`. The scoped build is the normal
+This produces `../mame/datarover`. The scoped build is the normal
 edit-build-run loop; a full MAME build is unnecessary.
 
 ## Run Magic Cap
@@ -108,9 +115,9 @@ The default power-on mode is Magic Cap and the default view is the handheld
 LCD:
 
 ```sh
-cd "$HOME/fun/mame"
+cd ../mame
 ./datarover datarover840 \
-  -rompath "$HOME/fun/magic-cap-assets/roms" \
+  -rompath "$MAGIC_CAP_ASSETS/roms" \
   -window -skip_gameinfo -nokeepaspect -view LCD \
   -lightgun -lightgun_device lightgun
 ```
@@ -199,16 +206,15 @@ entered at the prompt.
 Validate the driver and ROM definition:
 
 ```sh
-cd "$HOME/fun/mame"
+cd ../mame
 ./datarover -validate datarover840
-./datarover -rompath "$HOME/fun/magic-cap-assets/roms" \
+./datarover -rompath "$MAGIC_CAP_ASSETS/roms" \
   -verifyroms datarover840
 ```
 
 Run the analysis-tool unit tests and exact serial checkpoint comparison:
 
 ```sh
-cd "$HOME/fun/magic-cap-emulator"
 python3 -m unittest discover -s tests -v
 python3 tools/serial_regression.py
 python3 tools/serial_regression.py --checkpoint betty
@@ -247,7 +253,7 @@ intentionally creates a real MAME window inside Xvfb to exercise the Tab menu;
 `tools/start_manual.sh` remains the normal interactive launcher.
 
 The serial harness writes generated configuration and logs under
-`~/fun/magic-cap-assets/runtime/serial-regression/`. Override its defaults with
+`$MAGIC_CAP_ASSETS/runtime/serial-regression/`. Override its defaults with
 `--mame`, `--rompath`, `--workdir`, or `--seconds`. The `betty` checkpoint
 uses the monitor's `call` command to execute the ROM's own `BettyTest` at
 `0x13c076b0`. A failed register readback enters the ROM's `StayHere` loop;
@@ -260,7 +266,7 @@ stable lower workbench area; the full-screen checksum is reported but not
 used as an assertion because the clock is time-dependent. It also writes a
 native LCD PNG. Every run keeps its Lua script, MAME output, NVRAM, and
 snapshot under a timestamped directory in
-`~/fun/magic-cap-assets/runtime/desk-regression/`; no binary artifact is
+`$MAGIC_CAP_ASSETS/runtime/desk-regression/`; no binary artifact is
 written to this Git checkout.
 
 The Linux-only menu-touch harness opens a real 720×480 MAME window under
@@ -269,7 +275,7 @@ separate key-down/key-up events, moves to a second point, and presses again.
 It requires the effective X/Y/button bindings to all name lightgun 1 and
 requires both coordinates plus pen-down to change after `menu_active` returns
 to zero. Generated Lua, isolated NVRAM, and host logs remain under
-`~/fun/magic-cap-assets/runtime/menu-touch-regression/`.
+`$MAGIC_CAP_ASSETS/runtime/menu-touch-regression/`.
 
 The power harness is deliberately two processes, not a same-process shortcut.
 It calibrates a fresh heap, enters normal VCC-off power-down, exits so only
@@ -279,7 +285,7 @@ ROM pass through `DeepDoze` and the retained shutdown's final
 and live button status before proving execution has left the whole power-down
 path with VCC restored. Generated Lua, both process logs, NVRAM, and three LCD
 snapshots stay under
-`~/fun/magic-cap-assets/runtime/power-regression/`.
+`$MAGIC_CAP_ASSETS/runtime/power-regression/`.
 
 The Beam harness starts two fresh communicators with isolated configuration
 and NVRAM, calibrates and creates owner name cards for Alice and Bob, then
@@ -289,7 +295,7 @@ pulses Dino's IrDA carrier input, requires the sender to discover and select
 complete SIR frames, requires traffic and peer names in both directions, and
 requires the serialized name-card payload. Raw wire captures, both MAME logs,
 generated Lua, NVRAM, and UI snapshots remain under
-`~/fun/magic-cap-assets/runtime/beam-regression/`.
+`$MAGIC_CAP_ASSETS/runtime/beam-regression/`.
 
 The sound harness boots with SDL's dummy audio backend and asks MAME to write
 the mixed output to a persistent WAV capture. Its default `beep` checkpoint
@@ -302,11 +308,11 @@ the check. See [`betty-registers.md`](betty-registers.md). The emulated DAC
 lands on the capture's second channel, so the analysis always picks the most
 occupied channel.
 The WAV, generated Lua, NVRAM, and log remain under
-`~/fun/magic-cap-assets/runtime/sound-regression/`.
+`$MAGIC_CAP_ASSETS/runtime/sound-regression/`.
 
 The TX39 harness executes signed and unsigned multiply/add instructions from
 uncached RAM and verifies `rd`, `HI`, and `LO`. Its generated inputs and log
-remain under `~/fun/magic-cap-assets/runtime/tx39-regression/`; the CPU audit
+remain under `$MAGIC_CAP_ASSETS/runtime/tx39-regression/`; the CPU audit
 and reference-manual download command are in
 [`tx39-cpu.md`](tx39-cpu.md).
 
@@ -345,9 +351,9 @@ The build also contains `datarover840f`, `datarover840j`, and `datarover840d`
 four external ROM sets with:
 
 ```sh
-cd "$HOME/fun/mame"
+cd ../mame
 for set in datarover840 datarover840d datarover840f datarover840j; do
-  ./datarover -rompath "$HOME/fun/magic-cap-assets/roms" -verifyroms "$set"
+  ./datarover -rompath "$MAGIC_CAP_ASSETS/roms" -verifyroms "$set"
 done
 ```
 
@@ -410,13 +416,13 @@ MAME's native snapshot mode writes one image per emulated screen. With the LCD
 view active, press F12 after the startup artwork appears, or start MAME with:
 
 ```sh
-mkdir -p "$HOME/fun/magic-cap-assets/captures"
-cd "$HOME/fun/mame"
+mkdir -p "$MAGIC_CAP_ASSETS/captures"
+cd ../mame
 ./datarover datarover840 \
-  -rompath "$HOME/fun/magic-cap-assets/roms" \
+  -rompath "$MAGIC_CAP_ASSETS/roms" \
   -window -skip_gameinfo -view LCD \
   -snapview native \
-  -snapshot_directory "$HOME/fun/magic-cap-assets/captures"
+  -snapshot_directory "$MAGIC_CAP_ASSETS/captures"
 ```
 
 Captures stay outside Git. `-snapview native` is also why an LCD capture can

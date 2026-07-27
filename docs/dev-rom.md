@@ -8,7 +8,7 @@ does not. This note records what they are and what they are good for; the
 comparison is reproducible with `tools/rom_diff.py`.
 
 No image, ELF, or string dump is committed. Everything lives under
-`~/fun/magic-cap-assets/sdk-mac/`, fetched by `tools/fetch_assets.sh macsdk`.
+`$MAGIC_CAP_ASSETS/sdk-mac/`, fetched by `tools/fetch_assets.sh macsdk`.
 
 ## What the SDK contains
 
@@ -127,12 +127,11 @@ The driver exposes the Apollo development image as `datarover840d`, a clone of
 hardware change, as its layout predicted:
 
 ```sh
-cd "$HOME/fun/magic-cap-emulator"
 tools/fetch_assets.sh macsdk        # also places the image in the rompath
 
-cd "$HOME/fun/mame"
-./datarover -rompath "$HOME/fun/magic-cap-assets/roms" -verifyroms datarover840d
-./datarover datarover840d -rompath "$HOME/fun/magic-cap-assets/roms" \
+cd ../mame
+./datarover -rompath "$MAGIC_CAP_ASSETS/roms" -verifyroms datarover840d
+./datarover datarover840d -rompath "$MAGIC_CAP_ASSETS/roms" \
   -window -skip_gameinfo -nokeepaspect -view LCD \
   -lightgun -lightgun_device lightgun
 ```
@@ -142,9 +141,9 @@ against it unchanged:
 
 ```sh
 python3 tools/serial_regression.py --system datarover840d \
-  --workdir "$HOME/fun/magic-cap-assets/runtime/serial-regression-dev"
+  --workdir "$MAGIC_CAP_ASSETS/runtime/serial-regression-dev"
 python3 tools/desk_regression.py --system datarover840d \
-  --workdir "$HOME/fun/magic-cap-assets/runtime/desk-regression-dev"
+  --workdir "$MAGIC_CAP_ASSETS/runtime/desk-regression-dev"
 ```
 
 Verified results on this image:
@@ -203,7 +202,6 @@ A suite passes when the marker appears — the function returned — and the
 complaint counter is still zero.
 
 ```sh
-cd "$HOME/fun/magic-cap-emulator"
 python3 tools/devrom_tests.py                       # every suite known to pass
 python3 tools/devrom_tests.py --suite font          # one suite
 python3 tools/devrom_tests.py --self-check          # validate the oracle
@@ -391,13 +389,12 @@ canonical Command-T method supplies the missing intent directly:
 `tools/devrom_command_t.py` runs that method in its real task context:
 
 ```sh
-cd "$HOME/fun/magic-cap-emulator"
 python3 tools/devrom_command_t.py
 ```
 
 By default the harness calibrates a fresh `datarover840d`, copies its NVRAM
 into an isolated run directory under
-`~/fun/magic-cap-assets/runtime/devrom-command-t/`, then starts Command-T.
+`$MAGIC_CAP_ASSETS/runtime/devrom-command-t/`, then starts Command-T.
 `--nvram-source DIR` can reuse an already calibrated NVRAM without modifying
 the source. ROMs, NVRAM, Lua scripts, screenshots, and logs remain outside the
 Git checkout.
@@ -445,12 +442,11 @@ sounds, completed all 16 suites, and reported no complaint.
 ## Reproducing the comparison
 
 ```sh
-cd "$HOME/fun/magic-cap-emulator"
 tools/fetch_assets.sh macsdk
 
-dbg="$HOME/fun/magic-cap-assets/sdk-mac/extracted/MagicDeveloper/MagicDeveloper/Debugger"
+dbg="$MAGIC_CAP_ASSETS/sdk-mac/extracted/MagicDeveloper/MagicDeveloper/Debugger"
 python3 tools/rom_diff.py \
-  "$HOME/fun/magic-cap-assets/roms/datarover840/magiccap-usa.image" \
+  "$MAGIC_CAP_ASSETS/roms/datarover840/magiccap-usa.image" \
   "$dbg/Apollo/MagicCap-USA.image"
 
 # Apollo against Sputnik, same date and OS version:
@@ -465,9 +461,9 @@ reading; point it **outside** the checkout (the ROM's strings are copyrighted
 General Magic content — the repo keeps derived findings, not bulk dumps):
 
 ```sh
-python3 tools/rom_diff.py "$HOME/fun/magic-cap-assets/roms/datarover840/magiccap-usa.image" \
+python3 tools/rom_diff.py "$MAGIC_CAP_ASSETS/roms/datarover840/magiccap-usa.image" \
   "$dbg/Apollo/MagicCap-USA.image" \
-  --dump-strings "$HOME/fun/magic-cap-assets/analysis/rom-diff-usa"
+  --dump-strings "$MAGIC_CAP_ASSETS/analysis/rom-diff-usa"
 ```
 
 Symbol-set comparison uses the two ELFs (Homebrew LLVM, or
@@ -477,7 +473,7 @@ Symbol-set comparison uses the two ELFs (Homebrew LLVM, or
 llvm-readelf --symbols "$dbg/Apollo/MagicCap-USA" \
   | awk '$4=="FUNC" && $2!="00000000" {print $8}' | sort -u > /tmp/dev.syms
 llvm-readelf --symbols \
-  "$HOME/fun/magic-cap-assets/sdk/extracted/Program_Files/debug/apollo/MagicCAP-USA" \
+  "$MAGIC_CAP_ASSETS/sdk/extracted/Program_Files/debug/apollo/MagicCAP-USA" \
   | awk '$4=="FUNC" && $2!="00000000" {print $8}' | sort -u > /tmp/rel.syms
 comm -23 /tmp/dev.syms /tmp/rel.syms | grep -iE "test|suite" | head
 ```

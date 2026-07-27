@@ -15,6 +15,12 @@ import threading
 from typing import Sequence
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+ASSETS_ROOT = Path(
+    os.environ.get("MAGIC_CAP_ASSETS", REPO_ROOT.parent / "magic-cap-assets")
+).expanduser()
+DEFAULT_MAME = REPO_ROOT.parent / "mame" / "datarover"
+
 DEFAULT_BODY = b"""<!doctype html>
 <html>
 <head><title>EtherLink OK</title></head>
@@ -181,13 +187,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--mame",
         type=Path,
-        default=Path("~/fun/mame/datarover"),
-        help="DataRover MAME executable (default: ~/fun/mame/datarover)",
+        default=DEFAULT_MAME,
+        help=f"DataRover MAME executable (default: {DEFAULT_MAME})",
     )
     parser.add_argument(
         "--rompath",
         type=Path,
-        default=Path("~/fun/magic-cap-assets/roms"),
+        default=ASSETS_ROOT / "roms",
         help="MAME ROM search root",
     )
     parser.add_argument(
@@ -199,7 +205,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--workdir",
         type=Path,
-        default=Path("~/fun/magic-cap-assets/runtime/etherlink-regression"),
+        default=ASSETS_ROOT / "runtime" / "etherlink-regression",
         help="persistent artifact root",
     )
     parser.add_argument("--system", default="datarover840")

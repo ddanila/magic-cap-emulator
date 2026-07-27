@@ -13,11 +13,12 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+ASSETS_ROOT = Path(
+    os.environ.get("MAGIC_CAP_ASSETS", REPO_ROOT.parent / "magic-cap-assets")
+).expanduser()
 DEFAULT_MAME = REPO_ROOT.parent / "mame" / "datarover"
-DEFAULT_ROMPATH = Path.home() / "fun" / "magic-cap-assets" / "roms"
-DEFAULT_WORKDIR = (
-    Path.home() / "fun" / "magic-cap-assets" / "runtime" / "power-regression"
-)
+DEFAULT_ROMPATH = ASSETS_ROOT / "roms"
+DEFAULT_WORKDIR = ASSETS_ROOT / "runtime" / "power-regression"
 POFF = 0x504F4646
 ON_BUTTON_POSITIVE = 0x00800000
 POWER_ON_BUTTON_STATUS = 0x80000000

@@ -341,7 +341,6 @@ The driver therefore:
 Run:
 
 ```sh
-cd "$HOME/fun/magic-cap-emulator"
 python3 tools/power_regression.py
 ```
 
@@ -361,7 +360,7 @@ The verified run latched exactly `interrupt5 = 0x00800000` while the button
 was held, read `powerControl = 0xa0002409`, and settled in the normal OS idle
 path with `powerControl = 0x20002c09`. All generated states, NVRAM, logs, Lua,
 and PNGs remain outside Git under
-`~/fun/magic-cap-assets/runtime/power-regression/`.
+`$MAGIC_CAP_ASSETS/runtime/power-regression/`.
 
 ## Reproducing this analysis
 
@@ -370,7 +369,7 @@ The SDK ELF and headers come from `tools/fetch_assets.sh sdk`
 (`brew install llvm`; `binutils-mips-linux-gnu` works the same way on Debian):
 
 ```sh
-assets="$HOME/fun/magic-cap-assets"
+assets="${MAGIC_CAP_ASSETS:-$PWD/../magic-cap-assets}"
 elf="$assets/sdk/extracted/Program_Files/debug/apollo/MagicCAP-USA"
 
 llvm-objdump -d --disassemble-symbols=\

@@ -32,19 +32,18 @@ regression command are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
 The short version:
 
 ```sh
-# 1. Clone this repo and the MAME fork as siblings
-cd "$HOME/fun"
+# 1. From any directory, clone this repo and the MAME fork side by side
 git clone https://github.com/ddanila/magic-cap-emulator.git
 git clone --branch custom https://github.com/ddanila/mame.git
 
 # 2. Mirror and checksum-verify the research inputs (ROMs, packages, manuals).
 #    They are copyrighted abandonware and are never committed to this repo;
-#    the mirror lives under ~/fun/magic-cap-assets/.
-cd "$HOME/fun/magic-cap-emulator"
+#    the mirror defaults to a magic-cap-assets directory next to the clones.
+cd magic-cap-emulator
 tools/fetch_assets.sh all
 
 # 3. Build only the DataRover driver (much faster than a full MAME build)
-cd "$HOME/fun/mame"
+cd ../mame
 PATH="/usr/lib/ccache:$PATH" \
   make SUBTARGET=datarover \
   SOURCES=src/mame/skeleton/datarover.cpp \
@@ -53,13 +52,21 @@ PATH="/usr/lib/ccache:$PATH" \
   -j"$(nproc)"
 
 # 4. Play
-cd "$HOME/fun/magic-cap-emulator"
+cd ../magic-cap-emulator
 tools/start_manual.sh
 ```
 
 At the welcome screen, touch it, then tap the three calibration targets
 (upper-left, lower-right, center) to reach the workbench. **End** is the
 power button.
+
+Nothing depends on where you keep the checkouts. The tools locate this repo
+from their own path, expect the MAME fork as a sibling (`../mame`; override
+per tool with `--mame`, or `MAME_DIR` for `start_manual.sh`), and keep every
+persistent input and generated artifact in the sibling `../magic-cap-assets`
+tree — set the `MAGIC_CAP_ASSETS` environment variable to move it anywhere
+else. Command examples in `docs/` assume the repository root as the working
+directory and write the asset tree as `$MAGIC_CAP_ASSETS`.
 
 ## Documentation
 
@@ -89,7 +96,7 @@ docs/       RE notes and acceptance maps
 docs/media/ the README animation (the only committed recording)
 tools/      automated regression harnesses and analysis scripts
 tests/      unit tests for the tools, with captured serial fixtures
-roms/       optional git-ignored compatibility path; persistent assets live in ~/fun/magic-cap-assets/
+roms/       optional git-ignored compatibility path; persistent assets live in the sibling asset tree
 ```
 
 Driver development happens in the MAME fork at

@@ -19,7 +19,9 @@
 # Groups: rom japan packages wintools manual sdk macsdk
 #
 # Environment overrides:
-#   ASSETS      persistent asset tree (default: ~/fun/magic-cap-assets)
+#   MAGIC_CAP_ASSETS  persistent asset tree
+#                     (default: sibling ../magic-cap-assets of this repo;
+#                     legacy ASSETS is honored too)
 #
 # Extracted-artifact checksums are the documented ones (docs/rom-layout.md,
 # docs/pclink.md, docs/tx39-cpu.md) and are hard assertions. Container archive
@@ -28,7 +30,8 @@
 
 set -euo pipefail
 
-ASSETS="${ASSETS:-$HOME/fun/magic-cap-assets}"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ASSETS="${MAGIC_CAP_ASSETS:-${ASSETS:-$REPO_ROOT/../magic-cap-assets}}"
 PACKAGES_URL="https://joshcarter.com/magic_cap/packages"
 
 verify_only=0

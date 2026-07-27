@@ -124,7 +124,7 @@ isolated NVRAM, and snapshots of discovery, selected recipient, sender result,
 and receiver result under:
 
 ```text
-~/fun/magic-cap-assets/runtime/beam-regression/<timestamp>-<pid>/
+$MAGIC_CAP_ASSETS/runtime/beam-regression/<timestamp>-<pid>/
 ```
 
 Those artifacts stay outside Git; the ROM and generated NVRAM are not

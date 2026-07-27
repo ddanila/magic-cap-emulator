@@ -17,7 +17,7 @@ tests, not a register or circuit specification.
 - SHA-256:
   `7eff057a148015f9baec4f576a7fff0aaa877a518034d4eaf45571ce5ed71e5e`
 - Canonical local path:
-  `~/fun/magic-cap-assets/articles/bringing-tls-to-magic-cap-datarover-2026-07-26.mhtml`
+  `$MAGIC_CAP_ASSETS/articles/bringing-tls-to-magic-cap-datarover-2026-07-26.mhtml`
 
 The live Blogger page includes changing navigation and sidebar content, so a
 checksum of a fresh HTML request would not identify the article body reliably.
@@ -26,7 +26,7 @@ saved by a browser with:
 
 ```sh
 article_download="$HOME/Downloads/Old Vintage Computing Research_ Bringing TLS to the Magic Cap DataRover.mhtml"
-article_mirror="$HOME/fun/magic-cap-assets/articles/bringing-tls-to-magic-cap-datarover-2026-07-26.mhtml"
+article_mirror="$MAGIC_CAP_ASSETS/articles/bringing-tls-to-magic-cap-datarover-2026-07-26.mhtml"
 mkdir -p "$(dirname "$article_mirror")"
 cp "$article_download" "$article_mirror"
 echo '7eff057a148015f9baec4f576a7fff0aaa877a518034d4eaf45571ce5ed71e5e  bringing-tls-to-magic-cap-datarover-2026-07-26.mhtml' \
@@ -62,7 +62,7 @@ reverse engineering.
 The article links Kaiser's modified Apollo browser from Floodgap:
 
 ```sh
-magic_cap_assets="$HOME/fun/magic-cap-assets"
+magic_cap_assets="${MAGIC_CAP_ASSETS:-$PWD/../magic-cap-assets}"
 mkdir -p "$magic_cap_assets/packages"
 curl --fail --location \
   --output "$magic_cap_assets/packages/WebBrowser-MIPS-USA.pkg" \
@@ -81,9 +81,9 @@ Install it through the recovered protocol with:
 
 ```sh
 python3 tools/pclink_regression.py \
-  --package "$HOME/fun/magic-cap-assets/packages/WebBrowser-MIPS-USA.pkg" \
+  --package "$MAGIC_CAP_ASSETS/packages/WebBrowser-MIPS-USA.pkg" \
   --workdir \
-    "$HOME/fun/magic-cap-assets/runtime/pclink-tls-browser"
+    "$MAGIC_CAP_ASSETS/runtime/pclink-tls-browser"
 ```
 
 On 2026-07-26 the emulator accepted the full package stream, returned the
@@ -96,19 +96,19 @@ empty bus enough time to cross the attached-device alert threshold.
 The retained clean evidence is under:
 
 ```text
-~/fun/magic-cap-assets/runtime/pclink-tls-browser-clean/20260726T183612/
+$MAGIC_CAP_ASSETS/runtime/pclink-tls-browser-clean/20260726T183612/
 ```
 
 ## Deterministic HTTPS regression
 
-Keep Crypto Ancienne outside either Git checkout, in the persistent tools
-area requested for local dependencies:
+Keep Crypto Ancienne outside either Git checkout, as a sibling of this
+repository — the default the harness expects (`--carl` overrides it):
 
 ```sh
-git clone https://github.com/classilla/cryanc.git "$HOME/fun/cryanc"
-git -C "$HOME/fun/cryanc" checkout \
+git clone https://github.com/classilla/cryanc.git ../cryanc
+git -C ../cryanc checkout \
   a1572fbfda3a829e210fc3535a22ebd719417419
-cd "$HOME/fun/cryanc"
+cd ../cryanc
 gcc -O3 -Wno-error=incompatible-pointer-types -o carl carl.c
 ./carl -v
 ```
@@ -127,16 +127,15 @@ host alias `10.0.2.2` and TCP port `8765`, then save that provider/browser
 state as an NVRAM source. A known passing local source is:
 
 ```text
-~/fun/magic-cap-assets/runtime/https-rule-config/20260727T050000-http-upgrade/nvram
+$MAGIC_CAP_ASSETS/runtime/https-rule-config/20260727T050000-http-upgrade/nvram
 ```
 
 Run the self-contained acceptance with:
 
 ```sh
-cd "$HOME/fun/magic-cap-emulator"
 python3 tools/https_proxy_regression.py \
   --nvram-source \
-    "$HOME/fun/magic-cap-assets/runtime/https-rule-config/20260727T050000-http-upgrade/nvram"
+    "$MAGIC_CAP_ASSETS/runtime/https-rule-config/20260727T050000-http-upgrade/nvram"
 ```
 
 The harness owns all test services and tears them down: a loopback-only
@@ -160,7 +159,7 @@ A pass requires all of the following:
 The retained passing run is:
 
 ```text
-~/fun/magic-cap-assets/runtime/etherlink-https-regression/20260726T213340.799847Z-2926968/
+$MAGIC_CAP_ASSETS/runtime/etherlink-https-regression/20260726T213340.799847Z-2926968/
 ```
 
 Browser 3.5 makes a couple of later internal requests to `10.0.2.2:8080`.

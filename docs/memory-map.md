@@ -339,7 +339,7 @@ After following the SDK extraction instructions in
 (`binutils-mips-linux-gnu` on Debian/Ubuntu) and run:
 
 ```sh
-magic_cap_assets="$HOME/fun/magic-cap-assets"
+magic_cap_assets="${MAGIC_CAP_ASSETS:-$PWD/../magic-cap-assets}"
 elf="$magic_cap_assets/sdk/extracted/Program_Files/debug/apollo/MagicCAP-USA"
 
 mips-linux-gnu-readelf -h -l -S "$elf"

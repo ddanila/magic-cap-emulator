@@ -21,23 +21,18 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+ASSETS_ROOT = Path(
+    os.environ.get("MAGIC_CAP_ASSETS", REPO_ROOT.parent / "magic-cap-assets")
+).expanduser()
 DEFAULT_MAME = REPO_ROOT.parent / "mame" / "datarover"
-DEFAULT_ROMPATH = Path.home() / "fun" / "magic-cap-assets" / "roms"
+DEFAULT_ROMPATH = ASSETS_ROOT / "roms"
 DEFAULT_STATE = (
-    Path.home()
-    / "fun"
-    / "magic-cap-assets"
+    ASSETS_ROOT
     / "runtime"
     / "state-card-load"
     / "pc-card-only.sta"
 )
-DEFAULT_WORKDIR = (
-    Path.home()
-    / "fun"
-    / "magic-cap-assets"
-    / "runtime"
-    / "modem-bridge"
-)
+DEFAULT_WORKDIR = ASSETS_ROOT / "runtime" / "modem-bridge"
 PTY_PATTERN = re.compile(rb":pccard1:modem PTY: (/[^\r\n]+)")
 PPP_FLAG = 0x7E
 PPP_ESCAPE = 0x7D

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import os
 import re
 import subprocess
 import sys
@@ -12,15 +13,12 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+ASSETS_ROOT = Path(
+    os.environ.get("MAGIC_CAP_ASSETS", REPO_ROOT.parent / "magic-cap-assets")
+).expanduser()
 DEFAULT_MAME = REPO_ROOT.parent / "mame" / "datarover"
-DEFAULT_ROMPATH = Path.home() / "fun" / "magic-cap-assets" / "roms"
-DEFAULT_WORKDIR = (
-    Path.home()
-    / "fun"
-    / "magic-cap-assets"
-    / "runtime"
-    / "serial-regression"
-)
+DEFAULT_ROMPATH = ASSETS_ROOT / "roms"
+DEFAULT_WORKDIR = ASSETS_ROOT / "runtime" / "serial-regression"
 EXPECTED_SERIAL = REPO_ROOT / "tests" / "data" / "idt-monitor.txt"
 UART_TX_PATTERN = re.compile(rb"UARTA TX:\s+([0-9a-fA-F]{2})\b")
 CHECKPOINTS = {

@@ -8,8 +8,8 @@ Hayes command mode and hands the live serial line to classic Slirp after
 `CONNECT`.
 
 No guest state, browser package, ROM, or generated capture is committed.
-Keep those under `~/fun/magic-cap-assets/`; the bridge creates timestamped
-logs under `~/fun/magic-cap-assets/runtime/modem-bridge/`.
+Keep those under `$MAGIC_CAP_ASSETS/`; the bridge creates timestamped
+logs under `$MAGIC_CAP_ASSETS/runtime/modem-bridge/`.
 
 ## Host dependencies
 
@@ -66,7 +66,7 @@ Save the configured communicator state outside Git. The local regression
 default is:
 
 ```text
-~/fun/magic-cap-assets/runtime/state-card-load/pc-card-only.sta
+$MAGIC_CAP_ASSETS/runtime/state-card-load/pc-card-only.sta
 ```
 
 That particular checkpoint is on the provider's connections screen, so the
@@ -79,12 +79,12 @@ modifying that checkpoint. Export the known configured checkpoint into an
 isolated NVRAM directory with:
 
 ```sh
-provider_state="$HOME/fun/magic-cap-assets/runtime/state-card-load/pc-card-only.sta"
-provider_nvram="$HOME/fun/magic-cap-assets/runtime/provider-from-state/nvram"
+provider_state="$MAGIC_CAP_ASSETS/runtime/state-card-load/pc-card-only.sta"
+provider_nvram="$MAGIC_CAP_ASSETS/runtime/provider-from-state/nvram"
 mkdir -p "$provider_nvram"
-cd "$HOME/fun/mame"
+cd ../mame
 ./datarover datarover840 \
-  -rompath "$HOME/fun/magic-cap-assets/roms" \
+  -rompath "$MAGIC_CAP_ASSETS/roms" \
   -state "$provider_state" \
   -pccard1 modem \
   -nvram_directory "$provider_nvram" \
@@ -101,7 +101,7 @@ For the combined browser acceptance, preserve a copy of the configured heap
 *before* completing the first-run owner-card dialog:
 
 ```text
-~/fun/magic-cap-assets/runtime/state-card-load/nvram/
+$MAGIC_CAP_ASSETS/runtime/state-card-load/nvram/
   datarover840/ram
   datarover840/rtc
 ```
@@ -118,9 +118,8 @@ The probe supplies `OK` and `CONNECT`, captures the first async-HDLC PPP
 frame, and exits without needing Slirp:
 
 ```sh
-cd "$HOME/fun/magic-cap-emulator"
 python3 tools/modem_bridge.py --probe \
-  --state "$HOME/fun/magic-cap-assets/runtime/state-card-load/pc-card-only.sta"
+  --state "$MAGIC_CAP_ASSETS/runtime/state-card-load/pc-card-only.sta"
 ```
 
 A passing run verifies this real ROM-generated sequence:
@@ -141,9 +140,8 @@ fragmented Hayes commands, echo changes, escaping, and LCP recognition.
 For an interactive session:
 
 ```sh
-cd "$HOME/fun/magic-cap-emulator"
 python3 tools/modem_bridge.py \
-  --state "$HOME/fun/magic-cap-assets/runtime/state-card-load/pc-card-only.sta"
+  --state "$MAGIC_CAP_ASSETS/runtime/state-card-load/pc-card-only.sta"
 ```
 
 The bridge launches MAME with the modem card, waits for `ATDT`, starts Slirp
@@ -156,7 +154,7 @@ For the finite, unattended acceptance check:
 
 ```sh
 python3 tools/modem_bridge.py --acceptance \
-  --state "$HOME/fun/magic-cap-assets/runtime/state-card-load/pc-card-only.sta"
+  --state "$MAGIC_CAP_ASSETS/runtime/state-card-load/pc-card-only.sta"
 ```
 
 A pass requires Slirp to start, complete LCP and IPCP, and leave a guest
@@ -172,16 +170,15 @@ into a copy of the provider-configured NVRAM and reaches the HTTP result in
 one uninterrupted MAME process:
 
 ```sh
-cd "$HOME/fun/magic-cap-emulator"
 python3 tools/pclink_regression.py \
-  --package "$HOME/fun/magic-cap-assets/packages/WebBrowser40.mc2" \
+  --package "$MAGIC_CAP_ASSETS/packages/WebBrowser40.mc2" \
   --nvram-source \
-    "$HOME/fun/magic-cap-assets/runtime/state-card-load/nvram" \
+    "$MAGIC_CAP_ASSETS/runtime/state-card-load/nvram" \
   --owner-first-name Ada \
   --owner-last-name Lovelace \
   --combined-browser-acceptance \
   --workdir \
-    "$HOME/fun/magic-cap-assets/runtime/combined-browser/live-http"
+    "$MAGIC_CAP_ASSETS/runtime/combined-browser/live-http"
 ```
 
 The harness starts its fixed HTTP/1.0 endpoint on port 8080, owns both host

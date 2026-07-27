@@ -25,7 +25,7 @@ separate Wireless Connectivity Pack driver above the ROM's generic
 Keep downloaded binaries and reference material outside Git:
 
 ```sh
-assets="$HOME/fun/magic-cap-assets"
+assets="${MAGIC_CAP_ASSETS:-$PWD/../magic-cap-assets}"
 mkdir -p "$assets/packages" "$assets/re/3c589"
 
 curl --fail --location \
@@ -51,7 +51,7 @@ For an independent executable reference, the final Linux `3c589_cs` driver
 before its removal remains in the official kernel history. The preserved
 v6.15 source has SHA-256
 `0ce61c6dff8ec4d105517ca9491b00cf23fe2076d886eef7d4002e5d83d127cc`
-at `~/fun/magic-cap-assets/re/3c589/linux-3c589_cs.c`.
+at `$MAGIC_CAP_ASSETS/re/3c589/linux-3c589_cs.c`.
 
 ## Current implementation
 
@@ -72,7 +72,7 @@ The archived driver installs cleanly through PCLink. A clean retained artifact
 with the 64K `EtherLink Driver` object and zero ROM Magic Bus failures is:
 
 ```text
-~/fun/magic-cap-assets/runtime/pclink-etherlink-driver/20260726T190412/
+$MAGIC_CAP_ASSETS/runtime/pclink-etherlink-driver/20260726T190412/
 ```
 
 Passive insertion makes Magic Cap parse the CIS through the MANFID, CONFIG and
@@ -86,16 +86,16 @@ The second transfer starts directly in the Storeroom and leaves both the 64K
 
 ```sh
 python3 tools/pclink_regression.py \
-  --package "$HOME/fun/magic-cap-assets/packages/WebBrowser-MIPS-USA.pkg" \
+  --package "$MAGIC_CAP_ASSETS/packages/WebBrowser-MIPS-USA.pkg" \
   --nvram-source \
-    "$HOME/fun/magic-cap-assets/runtime/pclink-etherlink-driver/20260726T190412/nvram" \
+    "$MAGIC_CAP_ASSETS/runtime/pclink-etherlink-driver/20260726T190412/nvram" \
   --storeroom-source \
   --workdir \
-    "$HOME/fun/magic-cap-assets/runtime/pclink-etherlink-browser"
+    "$MAGIC_CAP_ASSETS/runtime/pclink-etherlink-browser"
 ```
 
 The retained passing layered transfer is under
-`~/fun/magic-cap-assets/runtime/pclink-etherlink-browser/20260726T192140/`.
+`$MAGIC_CAP_ASSETS/runtime/pclink-etherlink-browser/20260726T192140/`.
 
 ## Guest configuration and first claim
 
@@ -133,7 +133,7 @@ network peer attached.
 The preserved provider setup, save states, screenshots and trace are under:
 
 ```text
-~/fun/magic-cap-assets/runtime/etherlink-provider-wizard/20260726T201000/
+$MAGIC_CAP_ASSETS/runtime/etherlink-provider-wizard/20260726T201000/
 ```
 
 ## Rootless frame transports
@@ -159,9 +159,9 @@ endpoint. It answers ARP for `10.0.2.2` and `10.0.2.3`, maps DNS A queries to
 
 ```sh
 python3 tools/etherlink_peer.py \
-  --trace "$HOME/fun/magic-cap-assets/runtime/etherlink/peer-trace.txt" \
+  --trace "$MAGIC_CAP_ASSETS/runtime/etherlink/peer-trace.txt" \
   --http-requests \
-    "$HOME/fun/magic-cap-assets/runtime/etherlink/http-requests.txt"
+    "$MAGIC_CAP_ASSETS/runtime/etherlink/http-requests.txt"
 ```
 
 The fixed response delay prevents an impossible zero-latency reply from
@@ -173,7 +173,7 @@ For the complete host TCP path, Linux builds auto-detect `libslirp` through
 
 ```sh
 sudo apt-get install pkg-config libslirp-dev
-cd "$HOME/fun/mame"
+cd ../mame
 make SUBTARGET=datarover SOURCES=src/mame/skeleton/datarover.cpp \
   NO_USE_PORTAUDIO=1 -j"$(nproc)"
 ./datarover -networkprovider slirp -listnetwork
@@ -232,14 +232,14 @@ marker, browser automation, screenshot and teardown in one process:
 ```sh
 python3 tools/etherlink_regression.py \
   --nvram-source \
-    "$HOME/fun/magic-cap-assets/runtime/etherlink-provider-wizard/20260726T201000/nvram"
+    "$MAGIC_CAP_ASSETS/runtime/etherlink-provider-wizard/20260726T201000/nvram"
 ```
 
 It requires a provider-configured tree containing the installed browser and
 EtherLink driver. A pass requires the canonical absolute request
 `GET http://10.0.2.2:8080/ HTTP/1.0` and
 `snapshots/etherlink-http-result.png`; generated state and captures remain
-under `~/fun/magic-cap-assets/runtime/etherlink-regression/`. The clean
+under `$MAGIC_CAP_ASSETS/runtime/etherlink-regression/`. The clean
 2026-07-26 pass is retained under
 `20260726T193221.829181Z-2890929/`; it rendered the heading
 **EtherLink III works** and the text **Magic Cap reached deterministic local
@@ -261,11 +261,11 @@ run-local HTTPS endpoint. Run it with:
 ```sh
 python3 tools/https_proxy_regression.py \
   --nvram-source \
-    "$HOME/fun/magic-cap-assets/runtime/https-rule-config/20260727T050000-http-upgrade/nvram"
+    "$MAGIC_CAP_ASSETS/runtime/https-rule-config/20260727T050000-http-upgrade/nvram"
 ```
 
 The 2026-07-26 pass is retained under
-`~/fun/magic-cap-assets/runtime/etherlink-https-regression/20260726T213340.799847Z-2926968/`.
+`$MAGIC_CAP_ASSETS/runtime/etherlink-https-regression/20260726T213340.799847Z-2926968/`.
 It requires the independently decrypted `GET / HTTP/1.0` and a final screen
 showing **Crypto Ancienne works**. This proves the frame, ARP, TCP, proxy and
 TLS path without adding crypto hardware to the DataRover.

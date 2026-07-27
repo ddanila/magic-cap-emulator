@@ -20,7 +20,7 @@ class ArgumentTests(unittest.TestCase):
         self.assertEqual(8765, args.proxy_port)
         self.assertEqual(9443, args.https_port)
         self.assertEqual(
-            Path("~/fun/cryanc/carl"),
+            https_proxy.REPO_ROOT.parent / "cryanc" / "carl",
             args.carl,
         )
         self.assertTrue(args.upgrade_http)

@@ -261,7 +261,7 @@ With the SDK ELF extracted as described in
 [`rom-layout.md`](rom-layout.md):
 
 ```sh
-magic_cap_assets="$HOME/fun/magic-cap-assets"
+magic_cap_assets="${MAGIC_CAP_ASSETS:-$PWD/../magic-cap-assets}"
 elf="$magic_cap_assets/sdk/extracted/Program_Files/debug/apollo/MagicCAP-USA"
 
 mips-linux-gnu-objdump -d \

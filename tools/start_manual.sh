@@ -13,14 +13,16 @@
 #   tools/start_manual.sh -- <args>    # pass extra args straight through to ./datarover
 #
 # Environment overrides:
-#   MAME_DIR    MAME fork checkout (default: sibling ../mame of this repo)
-#   ASSETS      persistent asset tree (default: ~/fun/magic-cap-assets)
+#   MAME_DIR          MAME fork checkout (default: sibling ../mame of this repo)
+#   MAGIC_CAP_ASSETS  persistent asset tree
+#                     (default: sibling ../magic-cap-assets of this repo;
+#                     legacy ASSETS is honored too)
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MAME_DIR="${MAME_DIR:-$REPO_ROOT/../mame}"
-ASSETS="${ASSETS:-$HOME/fun/magic-cap-assets}"
+ASSETS="${MAGIC_CAP_ASSETS:-${ASSETS:-$REPO_ROOT/../magic-cap-assets}}"
 ROMPATH="$ASSETS/roms"
 BIN="$MAME_DIR/datarover"
 ROM="$ROMPATH/datarover840/magiccap-usa.image"

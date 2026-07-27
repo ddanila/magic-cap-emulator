@@ -29,7 +29,7 @@ Its InstallShield cabinets contain these particularly useful Apollo artifacts:
 
 The SDK's ROM image is byte-identical to the separately published image. Keep
 all persistent binary inputs outside the Git repositories under
-`~/fun/magic-cap-assets/`. This avoids committing copyrighted binaries without
+`$MAGIC_CAP_ASSETS/`. This avoids committing copyrighted binaries without
 making research inputs ephemeral.
 
 The separate **Mac** Rosemary SDK adds four development ROM images dated
@@ -49,7 +49,7 @@ emulator and is recorded as an optional checksum-pinned input in
 The product-level behavioral reference is Icras's 234-page
 [*Using Magic Cap*][user-guide-pdf], written specifically for Magic Cap 3.1 on
 the DataRover 840. The mirrored file is
-`~/fun/magic-cap-assets/docs/Using_Magic_Cap.pdf`, with SHA-256
+`$MAGIC_CAP_ASSETS/docs/Using_Magic_Cap.pdf`, with SHA-256
 `20010cefe051b94fde9f8fa16273a6c33547e85cc061fb5e80625296fa21f22a`.
 Its acceptance requirements and current coverage are mapped in
 [`user-guide.md`](user-guide.md).
@@ -57,11 +57,10 @@ Its acceptance requirements and current coverage are mapped in
 ### Mirror everything at once
 
 These inputs live on personal and community hosts that could disappear, so the
-local mirror under `~/fun/magic-cap-assets/` is the real dependency, not the
+local mirror under `$MAGIC_CAP_ASSETS/` is the real dependency, not the
 download. `tools/fetch_assets.sh` reproduces and checks it:
 
 ```sh
-cd "$HOME/fun/magic-cap-emulator"
 tools/fetch_assets.sh all       # ROMs, packages, Windows tools, manuals, SDK
 tools/fetch_assets.sh --verify  # check the existing mirror, download nothing
 ```
@@ -84,7 +83,7 @@ persistent sibling research directory and arrange the ROM as MAME expects;
 none of the resulting binaries should be added to Git.
 
 ```sh
-magic_cap_assets="$HOME/fun/magic-cap-assets"
+magic_cap_assets="${MAGIC_CAP_ASSETS:-$PWD/../magic-cap-assets}"
 mkdir -p "$magic_cap_assets/roms/datarover840"
 
 curl --fail --location \
@@ -122,7 +121,7 @@ The archived Japan image is a separate 6,091,544-byte build. Keep its
 original ZIP and arrange the extracted file under the MAME set name:
 
 ```sh
-magic_cap_assets="$HOME/fun/magic-cap-assets"
+magic_cap_assets="${MAGIC_CAP_ASSETS:-$PWD/../magic-cap-assets}"
 mkdir -p "$magic_cap_assets/roms/datarover840j"
 curl --fail --location \
   --output "$magic_cap_assets/roms/MagicCap-Japan.zip" \
@@ -154,10 +153,10 @@ The current 840F model uses four byte-wide Fujitsu MBM29F016A devices on the
 8 MiB capacity. Each 2 MiB lane is independently writable and persistent:
 
 ```text
-~/fun/magic-cap-assets/runtime/.../datarover840f/flash0
-~/fun/magic-cap-assets/runtime/.../datarover840f/flash1
-~/fun/magic-cap-assets/runtime/.../datarover840f/flash2
-~/fun/magic-cap-assets/runtime/.../datarover840f/flash3
+$MAGIC_CAP_ASSETS/runtime/.../datarover840f/flash0
+$MAGIC_CAP_ASSETS/runtime/.../datarover840f/flash1
+$MAGIC_CAP_ASSETS/runtime/.../datarover840f/flash2
+$MAGIC_CAP_ASSETS/runtime/.../datarover840f/flash3
 ```
 
 The exact production flash part marking has not surfaced in a board photo,
@@ -168,7 +167,7 @@ a confirmed physical chip identification.
 obtained separately when its serial protocol needs investigation:
 
 ```sh
-magic_cap_assets="$HOME/fun/magic-cap-assets"
+magic_cap_assets="${MAGIC_CAP_ASSETS:-$PWD/../magic-cap-assets}"
 mkdir -p "$magic_cap_assets/tools/windownload"
 curl --fail --location \
   --output "$magic_cap_assets/tools/WinDownload.zip" \
@@ -185,7 +184,7 @@ The SDK is inside a larger Archive.org bundle. Download it and extract the
 three InstallShield cabinet parts:
 
 ```sh
-magic_cap_assets="$HOME/fun/magic-cap-assets"
+magic_cap_assets="${MAGIC_CAP_ASSETS:-$PWD/../magic-cap-assets}"
 mkdir -p "$magic_cap_assets/sdk/installer"
 curl --fail --location \
   --output "$magic_cap_assets/sdk/Datarover840.zip" \

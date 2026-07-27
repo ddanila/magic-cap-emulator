@@ -29,15 +29,12 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+ASSETS_ROOT = Path(
+    os.environ.get("MAGIC_CAP_ASSETS", REPO_ROOT.parent / "magic-cap-assets")
+).expanduser()
 DEFAULT_MAME = REPO_ROOT.parent / "mame" / "datarover"
-DEFAULT_ROMPATH = Path.home() / "fun" / "magic-cap-assets" / "roms"
-DEFAULT_WORKDIR = (
-    Path.home()
-    / "fun"
-    / "magic-cap-assets"
-    / "runtime"
-    / "builtin-modem-regression"
-)
+DEFAULT_ROMPATH = ASSETS_ROOT / "roms"
+DEFAULT_WORKDIR = ASSETS_ROOT / "runtime" / "builtin-modem-regression"
 
 STUB = 0x0030_0000
 DONE = STUB + 0xF0

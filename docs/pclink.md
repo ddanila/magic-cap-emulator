@@ -15,7 +15,7 @@ pin/multiplexer relationship at that jack is not yet proven, so the product
 name alone is not evidence that PCLink bytes belong in the packet controller.
 
 No package, ROM, or Windows executable is committed. Keep all of them in the
-persistent `~/fun/magic-cap-assets/` tree.
+persistent `$MAGIC_CAP_ASSETS/` tree.
 
 ## Download the test package and reference host
 
@@ -23,7 +23,6 @@ The repository mirror helper downloads and checksum-verifies every archived
 package used below:
 
 ```sh
-cd "$HOME/fun/magic-cap-emulator"
 tools/fetch_assets.sh packages
 ```
 
@@ -33,7 +32,7 @@ original locations remain recoverable even without the helper.
 The small Dvorak keyboard package is the default regression input:
 
 ```sh
-magic_cap_assets="$HOME/fun/magic-cap-assets"
+magic_cap_assets="${MAGIC_CAP_ASSETS:-$PWD/../magic-cap-assets}"
 mkdir -p \
   "$magic_cap_assets/packages" \
   "$magic_cap_assets/tools/winpclink"
@@ -61,7 +60,7 @@ behavioral reference and for its bundled user guide.
 Other useful archived inputs can be kept beside the test package:
 
 ```sh
-magic_cap_assets="$HOME/fun/magic-cap-assets"
+magic_cap_assets="${MAGIC_CAP_ASSETS:-$PWD/../magic-cap-assets}"
 mkdir -p "$magic_cap_assets/packages"
 
 curl --fail --location \
@@ -85,7 +84,6 @@ beb0de0cdb51207534c280c88402ec11972dd7dfce11cd08514adc92c2f6f406  MagicJavaScrip
 Build the sibling MAME fork first, then run:
 
 ```sh
-cd "$HOME/fun/magic-cap-emulator"
 python3 tools/pclink_regression.py
 ```
 
@@ -118,7 +116,7 @@ Use another archived input without copying it into Git:
 
 ```sh
 python3 tools/pclink_regression.py \
-  --package "$HOME/fun/magic-cap-assets/packages/Betteris.pkg"
+  --package "$MAGIC_CAP_ASSETS/packages/Betteris.pkg"
 ```
 
 Kaiser's checksum-pinned 461,876-byte modified browser is a more demanding
@@ -126,15 +124,15 @@ input:
 
 ```sh
 python3 tools/pclink_regression.py \
-  --package "$HOME/fun/magic-cap-assets/packages/WebBrowser-MIPS-USA.pkg" \
+  --package "$MAGIC_CAP_ASSETS/packages/WebBrowser-MIPS-USA.pkg" \
   --workdir \
-    "$HOME/fun/magic-cap-assets/runtime/pclink-tls-browser"
+    "$MAGIC_CAP_ASSETS/runtime/pclink-tls-browser"
 ```
 
 A clean run accepts the package, returns the final `Pong`, sends `GBye`,
 shows a 454K Web Browser object without an alert, and records zero entries
 into `MagicBus_HandleMagicBusFailure`. The retained evidence is under
-`~/fun/magic-cap-assets/runtime/pclink-tls-browser-clean/20260726T183612/`.
+`$MAGIC_CAP_ASSETS/runtime/pclink-tls-browser-clean/20260726T183612/`.
 Provenance, download checksum and the real-hardware comparison are in
 [`oldvcr-tls.md`](oldvcr-tls.md).
 
@@ -143,14 +141,14 @@ continues through PPP and local HTTP without restarting MAME:
 
 ```sh
 python3 tools/pclink_regression.py \
-  --package "$HOME/fun/magic-cap-assets/packages/WebBrowser40.mc2" \
+  --package "$MAGIC_CAP_ASSETS/packages/WebBrowser40.mc2" \
   --nvram-source \
-    "$HOME/fun/magic-cap-assets/runtime/state-card-load/nvram" \
+    "$MAGIC_CAP_ASSETS/runtime/state-card-load/nvram" \
   --owner-first-name Ada \
   --owner-last-name Lovelace \
   --combined-browser-acceptance \
   --workdir \
-    "$HOME/fun/magic-cap-assets/runtime/combined-browser/live-http"
+    "$MAGIC_CAP_ASSETS/runtime/combined-browser/live-http"
 ```
 
 The source is the pre-owner-setup NVRAM saved while configuring the two
@@ -172,7 +170,7 @@ its cleanup path while rejecting the scripted touch input.
 
 The run's `nvram/`, screenshots, PCLink and modem wire captures, Hayes
 transcript, Slirp PPP debug log, and recorded HTTP requests are persistent
-and isolated under `~/fun/magic-cap-assets/`, so the large install is neither
+and isolated under `$MAGIC_CAP_ASSETS/`, so the large install is neither
 discarded with `/tmp` nor copied into Git. See [`modem.md`](modem.md) for the
 combined pass criteria.
 

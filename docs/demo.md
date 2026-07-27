@@ -30,10 +30,11 @@ calibration targets and then presses the power button the way a user does, so
 the resulting NVRAM boots straight to the welcome scene.
 
 ```sh
-DEMO=~/fun/magic-cap-assets/runtime/demo/tour
+assets="${MAGIC_CAP_ASSETS:-$PWD/../magic-cap-assets}"
+DEMO="$assets/runtime/demo/tour"
 mkdir -p "$DEMO"/{nvram,cfg,frames}
 ../mame/datarover datarover840 \
-  -rompath ~/fun/magic-cap-assets/roms \
+  -rompath "$assets/roms" \
   -nvram_directory "$DEMO/nvram" -cfg_directory "$DEMO/cfg" \
   -autoboot_delay 0 -autoboot_script tools/demo_prep.lua \
   -video none -videodriver dummy -audiodriver dummy \
@@ -51,7 +52,7 @@ snapshots at the LCD's own 480×320 rather than the window size.
 
 ```sh
 ../mame/datarover datarover840 \
-  -rompath ~/fun/magic-cap-assets/roms \
+  -rompath "$assets/roms" \
   -nvram_directory "$DEMO/nvram" -cfg_directory "$DEMO/cfg" \
   -autoboot_delay 0 -autoboot_script tools/demo_tour.lua \
   -mngwrite "$DEMO/demo.mng" -wavwrite "$DEMO/demo.wav" \
@@ -103,6 +104,6 @@ Reference numbers for the committed tour: 8001 frames captured, 175 kept,
 
 ## Artifacts
 
-Recordings live outside the repo under `~/fun/magic-cap-assets/demo/` with the
+Recordings live outside the repo under `$MAGIC_CAP_ASSETS/demo/` with the
 rest of the large assets; only the README animation
 ([`docs/media/datarover-tour.gif`](media/datarover-tour.gif)) is committed.

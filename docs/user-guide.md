@@ -18,7 +18,7 @@ once those registers are modelled.
 - SHA-256:
   `20010cefe051b94fde9f8fa16273a6c33547e85cc061fb5e80625296fa21f22a`
 - Canonical local path:
-  `~/fun/magic-cap-assets/docs/Using_Magic_Cap.pdf`
+  `$MAGIC_CAP_ASSETS/docs/Using_Magic_Cap.pdf`
 
 Fetch or verify it with:
 
