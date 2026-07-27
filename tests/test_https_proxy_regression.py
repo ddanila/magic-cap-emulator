@@ -23,7 +23,7 @@ class ArgumentTests(unittest.TestCase):
             https_proxy.REPO_ROOT.parent / "cryanc" / "carl",
             args.carl,
         )
-        self.assertTrue(args.upgrade_http)
+        self.assertFalse(args.upgrade_http)
         self.assertTrue(args.implicit_url_port)
 
 

@@ -232,17 +232,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--https-port", type=int, default=9443)
     route = parser.add_mutually_exclusive_group()
     route.add_argument(
+        "--http-upgrade",
         "--upgrade-http",
         dest="upgrade_http",
         action="store_true",
-        default=True,
-        help="use browser Rule 13 plus carl -u (default)",
+        default=False,
+        help="use legacy browser Rule 13 plus carl -u",
     )
     route.add_argument(
         "--https-rule",
         dest="upgrade_http",
         action="store_false",
-        help="exercise the currently unresolved browser HTTPS Rule 14",
+        help="use the corrected browser's native HTTPS Rule 14 (default)",
     )
     port_mode = parser.add_mutually_exclusive_group()
     port_mode.add_argument(

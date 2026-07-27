@@ -129,8 +129,9 @@ A simulator is a native Mac recompile of the same portable Magic Cap source tree
   them natively; PCLink installs them onto the emulated DataRover. Building a
   trivial package and comparing its behavior side by side closes the loop from
   source to emulated device. The Floodgap archive also hosts Kaiser's
-  MIPS-native TLS-capable `WebBrowser-MIPS-USA.pkg`, built with the Rosemary
-  GCC 2.7.1 toolchain; see [`oldvcr-tls.md`](oldvcr-tls.md).
+  MIPS-native proxy-capable `WebBrowser-MIPS-USA.pkg`, built with the Rosemary
+  GCC 2.7.1 toolchain. Its checksum-guarded HTTPS dispatch correction is
+  documented in [`oldvcr-tls.md`](oldvcr-tls.md).
 - **Debug-build details**: `Assert` / `Whisper` / `Log` / `DebugMessage` macros are compiled in only in the simulator ("ignored on communicators"), and "Simulate Device Contrast" confirms the 16-gray LCD rendering expectations.
 
 ## Verification (no real hardware)

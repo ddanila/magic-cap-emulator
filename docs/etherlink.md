@@ -95,7 +95,7 @@ The second transfer starts directly in the Storeroom and leaves both the 64K
 
 ```sh
 python3 tools/pclink_regression.py \
-  --package "$MAGIC_CAP_ASSETS/packages/WebBrowser-MIPS-USA.pkg" \
+  --package "$MAGIC_CAP_ASSETS/packages/WebBrowser-MIPS-USA-HTTPS.pkg" \
   --nvram-source \
     "$MAGIC_CAP_ASSETS/runtime/pclink-etherlink-driver/20260726T190412/nvram" \
   --storeroom-source \
@@ -261,29 +261,23 @@ process alive through the request instead.
 
 ## Proxy-assisted local HTTPS
 
-The same native EtherLink path now carries a deterministic host-proxied TLS
-request. The modified Web Browser 3.5 connects its HTTP proxy Rule 13 to
+The same native EtherLink path carries a deterministic host-proxied TLS
+request. The corrected Web Browser 3.5 connects its native HTTPS Rule 14 to
 Slirp's `10.0.2.2:8765`; a loopback-only superserver invokes pinned Crypto
-Ancienne `carl -Nptu`, which upgrades the request and negotiates TLS with a
-run-local HTTPS endpoint. Run it with:
+Ancienne `carl -Npt`, which negotiates TLS with a run-local HTTPS endpoint.
+Run it with:
 
 ```sh
 python3 tools/https_proxy_regression.py \
-  --nvram-source \
-    "$MAGIC_CAP_ASSETS/runtime/https-rule-config/20260727T050000-http-upgrade/nvram"
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/https-rule-config/nvram"
 ```
 
-The 2026-07-26 pass is retained under
-`$MAGIC_CAP_ASSETS/runtime/etherlink-https-regression/20260726T213340.799847Z-2926968/`.
-It requires the independently decrypted `GET / HTTP/1.0` and a final screen
-showing **Crypto Ancienne works**. This proves the frame, ARP, TCP, proxy and
-TLS path without adding crypto hardware to the DataRover.
-
-Browser 3.5's native HTTPS Rule 14 remains a narrower known gap: it can be
-enabled and configured, but an `https://` URL still connects directly rather
-than reaching the proxy. `tools/https_proxy_regression.py --https-rule`
-reproduces that behavior. Build instructions, security boundaries and the
-browser's explicit-port input quirk are in
+It requires the absolute `GET https://localhost/ HTTP/1.0` from Magic Cap, the
+independently decrypted `GET / HTTP/1.0`, and a final screen showing **Crypto
+Ancienne works**. This proves native browser dispatch plus the frame, ARP,
+TCP, proxy, and TLS paths without adding crypto hardware to the DataRover.
+Package correction instructions, security boundaries, and the browser's
+explicit-port input quirk are in
 [`oldvcr-tls.md`](oldvcr-tls.md#deterministic-https-regression).
 
 ## Acceptance sequence
@@ -307,6 +301,5 @@ The gates, in order, are:
    with a deterministic local endpoint, which observes the exact request, and
    Magic Cap renders the response.
 
-Both plain HTTP and proxy-assisted local TLS are therefore covered over the
-original EtherLink driver. The remaining browser network target is native
-HTTPS Rule 14 dispatch, not basic Ethernet, TCP or TLS interoperability.
+Both plain HTTP and native Rule 14 proxy-assisted TLS are therefore covered
+over the original EtherLink driver.

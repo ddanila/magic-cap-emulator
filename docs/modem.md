@@ -236,16 +236,17 @@ and sends the full URL; the host-side Crypto Ancienne `carl -p` process
 performs TLS. This is compatible with the existing PC Card PPP path and does
 not require emulated crypto hardware.
 
-The checksum-pinned MIPS package installs cleanly through PCLink, and the
-complete flow is now automated over the original EtherLink III driver.
-`tools/https_proxy_regression.py` uses Browser 3.5's HTTP proxy Rule 13 plus
-Crypto Ancienne's `-u` upgrade, a local HTTPS endpoint, and an isolated pinned
-proxy. It requires both the exact decrypted request and rendered result.
+The checksum-pinned MIPS package, with its one-byte HTTPS scheme correction,
+installs cleanly through PCLink, and the complete flow is automated over the
+original EtherLink III driver. `tools/https_proxy_regression.py` uses Browser
+3.5's native HTTPS proxy Rule 14, a local HTTPS endpoint, and an isolated
+pinned proxy. It requires both the exact decrypted request and rendered
+result.
 
 The same host-side design can be reused for a future PPP-specific acceptance;
 the current HTTPS regression proves EtherLink, not the modem path. Crypto
 Ancienne does not bind its own socket, has no proxy authentication or access
 control, and currently does not validate certificates, so the result is
-protocol interoperability rather than secure browsing. Native HTTPS Rule 14
-dispatch remains a browser-level gap. Full setup and evidence are in
+protocol interoperability rather than secure browsing. Full setup and
+evidence are in
 [`oldvcr-tls.md`](oldvcr-tls.md#deterministic-https-regression).

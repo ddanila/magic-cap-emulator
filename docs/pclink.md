@@ -119,22 +119,21 @@ python3 tools/pclink_regression.py \
   --package "$MAGIC_CAP_ASSETS/packages/Betteris.pkg"
 ```
 
-Kaiser's checksum-pinned 461,876-byte modified browser is a more demanding
-input:
+Kaiser's corrected, checksum-pinned 461,876-byte modified browser is a more
+demanding input. Create it from the original download as described in
+[`oldvcr-tls.md`](oldvcr-tls.md#reproducible-mips-package), then run:
 
 ```sh
 python3 tools/pclink_regression.py \
-  --package "$MAGIC_CAP_ASSETS/packages/WebBrowser-MIPS-USA.pkg" \
+  --package "$MAGIC_CAP_ASSETS/packages/WebBrowser-MIPS-USA-HTTPS.pkg" \
   --workdir \
     "$MAGIC_CAP_ASSETS/runtime/pclink-tls-browser"
 ```
 
 A clean run accepts the package, returns the final `Pong`, sends `GBye`,
 shows a 454K Web Browser object without an alert, and records zero entries
-into `MagicBus_HandleMagicBusFailure`. The retained evidence is under
-`$MAGIC_CAP_ASSETS/runtime/pclink-tls-browser-clean/20260726T183612/`.
-Provenance, download checksum and the real-hardware comparison are in
-[`oldvcr-tls.md`](oldvcr-tls.md).
+into `MagicBus_HandleMagicBusFailure`. Provenance, both package checksums,
+and the real-hardware comparison are in [`oldvcr-tls.md`](oldvcr-tls.md).
 
 The full Web Browser 4.0 acceptance uses the same transfer path and then
 continues through PPP and local HTTP without restarting MAME:

@@ -77,27 +77,42 @@ proxy Rules. It is a modified Icras binary distributed by its author with a
 legal and no-warranty disclaimer. For that reason it is an optional research
 input, not part of `tools/fetch_assets.sh all`.
 
+The Apollo package has a one-byte dispatch defect on the Go To path. Its
+connection code compares the scheme returned by `ParseURL` with the C literal
+`https:`. The parsed scheme is `https`, so the comparison fails and the code
+falls through to a direct connection using the HTTP default port. An outgoing
+frame trace made the failure concrete: `https://localhost` attempted
+`127.0.0.1:80` instead of the Rule 14 endpoint at `10.0.2.2:8765`.
+
+`tools/patch_tls_browser.py` changes only that fixed-size C literal from
+`https:` to `https`. It validates the complete source checksum, expected size,
+unique byte context, and offset before writing a separate corrected package;
+neither package is committed:
+
+```sh
+python3 tools/patch_tls_browser.py \
+  "$magic_cap_assets/packages/WebBrowser-MIPS-USA.pkg" \
+  "$magic_cap_assets/packages/WebBrowser-MIPS-USA-HTTPS.pkg"
+echo 'bdc6960304ead7948712f26298960b7320bf8b29d60b7e6137bfddd7632fce1e  WebBrowser-MIPS-USA-HTTPS.pkg' \
+  | (cd "$magic_cap_assets/packages" && sha256sum --check)
+```
+
 Install it through the recovered protocol with:
 
 ```sh
 python3 tools/pclink_regression.py \
-  --package "$MAGIC_CAP_ASSETS/packages/WebBrowser-MIPS-USA.pkg" \
+  --package "$MAGIC_CAP_ASSETS/packages/WebBrowser-MIPS-USA-HTTPS.pkg" \
   --workdir \
     "$MAGIC_CAP_ASSETS/runtime/pclink-tls-browser"
 ```
 
-On 2026-07-26 the emulator accepted the full package stream, returned the
-final `Pong`, disconnected, and displayed a 454K **Web Browser** object in the
-Storeroom without an alert. The regression also counted calls to the ROM's
-`MagicBus_HandleMagicBusFailure` and observed zero. The modeled `ATKB`
-keyboard must stay present for this: the ROM counts unanswered Magic Bus
-address assignment as a peripheral failure, and a transfer this long gives an
-empty bus enough time to cross the attached-device alert threshold.
-The retained clean evidence is under:
-
-```text
-$MAGIC_CAP_ASSETS/runtime/pclink-tls-browser-clean/20260726T183612/
-```
+On 2026-07-27 the emulator accepted the full corrected package stream,
+returned the final `Pong`, sent `GBye`, and displayed a 454K **Web Browser**
+object in the Storeroom without an alert. The regression also counted calls
+to the ROM's `MagicBus_HandleMagicBusFailure` and observed zero. The modeled
+`ATKB` keyboard must stay present for this: the ROM counts unanswered Magic
+Bus address assignment as a peripheral failure, and a transfer this long
+gives an empty bus enough time to cross the attached-device alert threshold.
 
 ## Deterministic HTTPS regression
 
@@ -122,30 +137,25 @@ private key remain outside Git.
 
 The installed package identifies itself as **Web Browser 3.5** (its HTTP
 user-agent says `MCWB3.5.1`). In its Rules desk accessory, Rule 13 is the Web
-proxy rule and Rule 14 is the TLS proxy rule. Configure Rule 13 for the Slirp
-host alias `10.0.2.2` and TCP port `8765`, then save that provider/browser
-state as an NVRAM source. A known passing local source is:
-
-```text
-$MAGIC_CAP_ASSETS/runtime/https-rule-config/20260727T050000-http-upgrade/nvram
-```
+proxy rule and Rule 14 is the TLS proxy rule. Configure Rule 14 for the Slirp
+host alias `10.0.2.2` and TCP port `8765`, close the Rules window cleanly, and
+save that provider/browser state as an NVRAM source.
 
 Run the self-contained acceptance with:
 
 ```sh
 python3 tools/https_proxy_regression.py \
-  --nvram-source \
-    "$MAGIC_CAP_ASSETS/runtime/https-rule-config/20260727T050000-http-upgrade/nvram"
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/https-rule-config/nvram"
 ```
 
 The harness owns all test services and tears them down: a loopback-only
-superserver on host port 8765, one `carl -Nptu` child for the intended browser
+superserver on host port 8765, one `carl -Npt` child for the intended browser
 request, and a run-local TLS server on port 9443 with a newly generated
 self-signed certificate. The guest enters the canonical
-`http://localhost`; `carl -u` deliberately upgrades that HTTP proxy request to
-TLS. Because an unprivileged test cannot own port 443, the superserver records
-the original guest bytes and maps only this isolated `localhost` request to
-port 9443 before invoking `carl`.
+`https://localhost`, which the corrected browser sends through Rule 14 as an
+absolute HTTPS proxy request. Because an unprivileged test cannot own port
+443, the superserver records the original guest bytes and maps only this
+isolated `localhost` request to port 9443 before invoking `carl`.
 
 A pass requires all of the following:
 
@@ -156,24 +166,17 @@ A pass requires all of the following:
   **Crypto Ancienne works** and **Magic Cap reached deterministic local HTTPS
   through EtherLink III.**
 
-The retained passing run is:
-
-```text
-$MAGIC_CAP_ASSETS/runtime/etherlink-https-regression/20260726T213340.799847Z-2926968/
-```
-
 Browser 3.5 makes a couple of later internal requests to `10.0.2.2:8080`.
 They are retained verbatim in the browser-request capture and answered with
 the same deterministic body so the old UI settles, but only the independently
 decrypted `localhost` request creates the TLS success marker. This prevents an
 internal browser probe from producing a false pass.
 
-Two diagnostic modes preserve the remaining browser findings:
+Two optional modes preserve related diagnostics:
 
-- `--https-rule` enters `https://localhost` and exercises Rule 14. Although
-  the Rule is visibly enabled and configured, the browser currently contacts
-  the destination directly and never reaches the proxy. This is the next
-  browser-level gap; it is not an EtherLink or TLS transport failure.
+- `--http-upgrade` enters `http://localhost`, uses HTTP Rule 13, and asks
+  `carl -u` to upgrade the request to TLS. This is the earlier workaround;
+  native Rule 14 is now the default acceptance.
 - `--explicit-url-port` types port 9443 into the guest URL. Natural keyboard
   input currently produces a stray semicolon in the absolute proxy target
   (`localhost:9443;/`), which Crypto Ancienne correctly rejects. The default
@@ -198,13 +201,14 @@ Two diagnostic modes preserve the remaining browser findings:
    HTTP/1.0 request, and renders the deterministic local page. See
    [`etherlink.md`](etherlink.md) for provenance, disassembly evidence and the
    repeatable harness.
-3. **Deterministic HTTPS through a host proxy — covered, with a Rule 14
-   caveat.** The modified browser, native EtherLink driver and rootless
+3. **Deterministic HTTPS through the native Rule 14 — covered.** The corrected
+   browser, native EtherLink driver and rootless
    libslirp send the request to a loopback-only superserver. Pinned
    [Crypto Ancienne][cryanc] performs TLS against a run-local HTTPS endpoint;
    the harness requires both the exact decrypted request and rendered result.
-   The proven route uses HTTP proxy Rule 13 plus `carl -u`. Native HTTPS Rule
-   14 dispatch remains a separately reproducible browser gap.
+   The captured guest request begins `GET https://localhost/ HTTP/1.0`, the
+   TLS endpoint independently receives `GET / HTTP/1.0`, and the rendered
+   result is captured before the test passes.
 4. **Memory-pressure warm start.** Use a deterministic page large enough to
    reach the physical browser's transient-memory limit, follow the normal
    warm-start/garbage-collection path, and verify that the persistent page

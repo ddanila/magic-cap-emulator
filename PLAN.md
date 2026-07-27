@@ -20,7 +20,7 @@ The full regression list and expected checkpoints are in
 | Built-in software modem | Continuous 48-word SIB telecom DMA ring drives the ROM's V.32 pump/control/FIR through a TX39 `MADD` | [`builtin-modem.md`](docs/builtin-modem.md) |
 | Magic Bus | Address assignment, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
-| PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core, completes TCP through rootless libslirp, renders deterministic local HTTP, and carries a host-proxied local TLS request | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
+| PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core, completes TCP through rootless libslirp, renders deterministic local HTTP, and carries Browser 3.5's native HTTPS Rule through a host TLS proxy | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap, including the 452K Apollo browser from the Old VCR field report | [`pclink.md`](docs/pclink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
 | IrDA / Beam | Two fresh communicators discover each other by name over SIR, the sender selects the receiver, and a name card arrives in the receiver's Inbox | [`irda.md`](docs/irda.md) |
 | Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 fetches and renders deterministic local HTTP | [`modem.md`](docs/modem.md) |
@@ -52,15 +52,6 @@ The full regression list and expected checkpoints are in
   A restore therefore deliberately pulses card detect and makes Magic Cap
   re-enumerate the card instead of resuming an in-flight modem session
   ([`mame-bringup.md`](docs/mame-bringup.md#known-gap-save-state-coverage)).
-
-- **Resolve the modified browser's native HTTPS Rule.** Deterministic
-  proxy-assisted TLS is covered through Browser 3.5's HTTP proxy Rule 13 and
-  Crypto Ancienne's documented `-u` HTTP-to-TLS upgrade: the exact decrypted
-  local request and rendered page are both required. Rule 14 can be configured
-  visibly, but an `https://` URL still opens the destination directly instead
-  of the configured proxy. That browser-level dispatch gap is now isolated
-  from EtherLink, TCP, proxy and TLS interoperability
-  ([`oldvcr-tls.md`](docs/oldvcr-tls.md#deterministic-https-regression)).
 
 - **Model the built-in modem's external line side.** The SIB telecom DMA ring
   and ROM V.32 DSP execute, but the external DAA, carrier acquisition, and a
