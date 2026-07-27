@@ -32,6 +32,14 @@ all persistent binary inputs outside the Git repositories under
 `$MAGIC_CAP_ASSETS/`. This avoids committing copyrighted binaries without
 making research inputs ephemeral.
 
+The SDK's target name does not mean the shipping machine is byte-for-byte the
+same as every hand-built Apollo prototype. Josh Carter's preserved
+[prototype history](https://joshcarter.com/magic_cap/apollo/) says those
+twelve Oki units had 4 MiB of flash, while the production DataRover 840 had
+8 MiB and its ROM could brick a prototype. This project models the production
+8 MiB ROM window. The broader mirrored-source audit and target boundaries are
+in [`archive-mirrors.md`](archive-mirrors.md).
+
 The separate **Mac** Rosemary SDK adds four development ROM images dated
 1998-04-07 (USA and Japan, for the Apollo and Sputnik platforms), each with its
 own unstripped ELF and `.dx` debugger database. The USA Apollo development

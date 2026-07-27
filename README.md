@@ -73,6 +73,7 @@ directory and write the asset tree as `$MAGIC_CAP_ASSETS`.
 | Doc | Contents |
 |---|---|
 | [`background.md`](docs/background.md) | The machine, the ROM, prior art, simulators, resources, verification philosophy |
+| [`archive-mirrors.md`](docs/archive-mirrors.md) | Preserved developer sites, extracted SDK evidence, checksums and roadmap impact |
 | [`mame-bringup.md`](docs/mame-bringup.md) | Host setup, build, run, and the full regression suite |
 | [`rom-layout.md`](docs/rom-layout.md) | ROM/SDK provenance, checksums, asset mirror, image format |
 | [`memory-map.md`](docs/memory-map.md) | Memory map, Dino peripheral block, Magic Bus, Glacier |

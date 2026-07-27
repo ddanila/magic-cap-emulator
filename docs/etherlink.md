@@ -20,6 +20,15 @@ card was the original or B revision. The package also imports
 separate Wireless Connectivity Pack driver above the ROM's generic
 `WCPack_EtherServer`, not a hidden ROM network-card implementation.
 
+The recovered General Magic PC Card FAQ independently documents that
+architecture: a package installs a `CardServer` subclass into `iCardServers`,
+Magic Cap calls `CanHandleCard()` after insertion, and the accepted instance
+owns subsequent operations. The complete Magic Internet Kit also contains an
+older source-level Xircom driver demonstrating card-ready interrupts and
+reset flow. That source is useful for the software contract, but targets the
+earlier Astro platform and is not a 3C589 hardware reference. See
+[`archive-mirrors.md`](archive-mirrors.md#internet-and-pc-card-software).
+
 ## Preserved inputs
 
 Keep downloaded binaries and reference material outside Git:

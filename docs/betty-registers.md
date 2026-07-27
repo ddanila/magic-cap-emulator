@@ -183,6 +183,15 @@ programmed rate and receive delivers either the loopback or silence.
 The driver's own clock for this channel comes from `kSibTelDivMask`, separate
 from the sound divisor, so the two channels can run at different rates.
 
+This recovered register behavior now has a public design-level cross-check.
+General Magic's
+[`SoftModem specifications`](http://www.datarover.com/Softmodem.html)
+require 7,200 samples/s, 48-sample DMA frames and half/full double-buffer
+service for the V.32bis embedded target, and name Betty as its codec. The
+source does not expose register numbers, but it independently validates the
+ring geometry and interrupt cadence used here; see
+[`archive-mirrors.md`](archive-mirrors.md#published-softmodem-and-sib-requirements).
+
 `tools/telecom_regression.py` drives a transfer directly instead of waiting for
 the OS to dial, with the machine in IDT monitor mode so Magic Cap is not using
 the SIB at the same time:

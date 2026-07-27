@@ -105,6 +105,12 @@ image, is the one Magic Cap machine that can.
   [Josh Carter's FAQs](https://joshcarter.com/magic_cap/),
   [comp.os.magic-cap archives](https://groups.google.com/g/comp.os.magic-cap),
   and [archive.org DataRover 840 software](https://archive.org/details/DataRover840).
+- **Preserved developer sites.** Local snapshots of Josh Carter's Magic Cap
+  archive and the resurrected datarover.com add the complete Magic Internet
+  Kit source, SDK manuals, FAQs, samples, packages and earlier-platform
+  equates. Their provenance, checksums, extraction procedure, findings and
+  strict Apollo-versus-Astro boundaries are in
+  [`archive-mirrors.md`](archive-mirrors.md).
 - **Ghidra** — free RE suite with solid big-endian MIPS-I support for static analysis of the ROM.
 
 ## The Magic Cap Simulators

@@ -28,7 +28,7 @@ because it drives a real MAME Tab menu under Xvfb. The bridge's dependencies
 Install the Xcode Command Line Tools, then:
 
 ```sh
-brew install sdl2 sdl2_ttf coreutils
+brew install sdl2 sdl2_ttf coreutils unar
 ```
 
 `coreutils` supplies the `sha256sum` and `nproc` used by these docs
@@ -54,7 +54,7 @@ sudo apt-get install \
   libsdl2-dev libsdl2-ttf-dev libfontconfig-dev libpulse-dev \
   pkg-config libslirp-dev \
   qt6-base-dev qt6-base-dev-tools qtchooser \
-  ccache binutils-mips-linux-gnu gdb-multiarch unshield xvfb xdotool \
+  ccache binutils-mips-linux-gnu gdb-multiarch unshield unar xvfb xdotool \
   curl unzip gzip openssl slirp bubblewrap \
   imagemagick ffmpeg gifsicle
 ```
@@ -62,7 +62,10 @@ sudo apt-get install \
 The cross-GCC packages are not required. In particular,
 `gcc-mips-linux-gnu` and `g++-mips-linux-gnu` are absent from some current
 Debian/Ubuntu repositories; `binutils-mips-linux-gnu` supplies the `readelf`,
-`nm`, and `objdump` tools used for static analysis.
+`nm`, and `objdump` tools used for static analysis. `unar` is only needed to
+inspect the preserved StuffIt/BinHex developer archives documented in
+[`archive-mirrors.md`](archive-mirrors.md); it is not a MAME build
+dependency.
 
 Mirror every research input (ROMs, packages, Windows reference tools, CPU
 manual) with one checksum-verified command; add `all` to include the 176 MiB

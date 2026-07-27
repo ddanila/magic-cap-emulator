@@ -309,6 +309,20 @@ Glacier 1 and 2 have different platform wiring. Modeling their register
 semantics can wait until boot code reaches the corresponding interrupt or
 GPIO paths, but both address windows should be logged from the start.
 
+The current driver goes further than this original bring-up note: both blocks
+route PC Card detect, READY/IREQ, BVD and write-protect inputs, latch insertion
+edges, and expose slot common/attribute/I/O cycles. The linear-card option
+persists an 8 MiB common-memory image and returns a generic SRAM CIS.
+
+The recovered General Magic FAQ now defines the OS-visible piece that generic
+CIS lacks. Magic Cap expects vendor tuple `0xA0` with magic `GMMC`, version
+`0x00010001`, card type and the common-memory offset of its metacluster. A
+blank image uses type `BLNK`; a formatted card uses `RAMC`. This tuple belongs
+in attribute memory, not at the beginning of the raw common-memory image.
+Field layout, all card types, the standard-card `CardServer` path and a
+concrete lifecycle acceptance sequence are in
+[`archive-mirrors.md`](archive-mirrors.md#storage-cards-an-exact-os-visible-contract).
+
 ## Boot landmarks
 
 | Address | ELF symbol | Emulator relevance |

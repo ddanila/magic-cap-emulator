@@ -49,6 +49,33 @@ this source. In particular, it turns PC Card Ethernet, a sustained PCLink
 transfer and proxy-assisted HTTPS into concrete field-derived checks. Those
 claims remain separate from Icras's product contract.
 
+## Developer storage-card specification
+
+The product guide describes what the user sees; General Magic's preserved
+[`PC Cards` FAQ](http://www.datarover.com/Develop/MagicCap/Docs/FAQ/Q+A_PCCards.html)
+supplies the missing software format. Attribute-memory CIS tuple `0xA0`
+contains eight big-endian words: magic `GMMC`, version `0x00010001`, a
+four-character card type, common-memory offset of the metacluster, unique ID,
+modification date, modification time and CRC. The documented construction
+path sets the final three words to zero. Relevant types are `BLNK` for an
+unformatted RAM card and `RAMC` for a formatted one; the complete type table
+and field layout are in
+[`archive-mirrors.md`](archive-mirrors.md#storage-cards-an-exact-os-visible-contract).
+
+This is not yet implemented. The current 8 MiB linear-card model returns a
+generic SRAM CIS and an all-`0xff` common-memory image. It proves Glacier,
+PCMCIA and persistence plumbing, but does not supply the documented Magic Cap
+card metadata. Adding a `BLNK` tuple is therefore the first controlled
+lifecycle experiment; the real ROM flow must confirm whether that omission is
+the reason setup does not start before the resulting metacluster is treated
+as understood.
+
+The same FAQ distinguishes self-hosted custom cards from ordinary PCMCIA
+cards. An ordinary card is claimed by a separately installed `CardServer`
+subclass in `iCardServers` after its `CanHandleCard()` accepts the insertion.
+This matches the already working package-supplied EtherLink path and provides
+the contract for future archived WaveLAN, NE2000 and wireless-card work.
+
 ## Requirements and coverage
 
 | Area | User-guide contract | Current evidence | Coverage |
@@ -59,7 +86,7 @@ claims remain separate from Icras's product contract.
 | Web access | Internet Center provider settings drive dial-up Web access and downloaded-page handling (pp. 105–120, 165–174) | PC Card modem completes Hayes/PPP and Web Browser 4.0 fetches a deterministic local page | Covered for the PC Card PPP route |
 | Telephone and built-in modem | The built-in fax modem uses a telephone line and supports tone/pulse configuration (pp. 135–163, 216) | ROM V.32 code and continuous telecom DMA execute | Internal ROM/DSP boundary covered; DAA, dial tone, carrier, remote peer, pulse dialing and fax are missing |
 | Storeroom and packages | Packages can be moved, unpacked, sent, backed up and restored through Storeroom (pp. 179–206) | PCLink installs a real package into built-in storage | Package installation covered; storage-card backup/restore is not |
-| Storage cards | A card inserted while off is offered for setup after power-on; Option-insert while running can erase/setup it; Magic Cap displays card battery state and can translate older packages (pp. 183–198, 210–215) | Both Glacier slots expose common memory, CIS, writes and insertion edges using a disposable linear card image | Electrical/raw path covered; full setup, formatting, battery and backup lifecycle is not |
+| Storage cards | A card inserted while off is offered for setup after power-on; Option-insert while running can erase/setup it; Magic Cap displays card battery state and can translate older packages (pp. 183–198, 210–215) | Both Glacier slots expose common memory, generic CIS, writes and insertion edges; the developer FAQ now defines the missing Magic tuple | Electrical/raw path covered and next format step specified; setup, formatting, battery and backup lifecycle is not |
 | Power | Main and backup batteries are displayed; AC operation recharges the main cell; automatic shutoff defaults to five minutes and is adjustable from 1–60 minutes, optionally while plugged in (pp. 209–211) | Battery ADC levels, AC/cover inputs and retained-RAM suspend/wake pass | Inputs and explicit wake covered; charging, time-varying capacity and the user-configured idle policy are not |
 | Magic Bus | The connector supports PCs, external keyboards, external modems and other accessories, commonly daisy-chained (p. 217) | One checksummed bidirectional `ATKB` keyboard is discovered and exchanges Set-2/LED traffic | Single keyboard covered; multiple devices, chaining and other accessory classes are not |
 | Persistence and privacy | Storage-card backup/restore and power-on password confirmation protect retained information (pp. 196–198, 207–208) | Battery-backed DRAM and RTC survive a two-process power cycle | Hardware retention covered; backup/restore and password UI are not automated |
@@ -73,10 +100,12 @@ hardware gaps:
    stamp, record from a deterministic host source, stop, play it back and
    verify the captured samples. This is the clearest acceptance test for
    Betty/Dino sound-RX DMA and microphone input.
-2. **Storage-card lifecycle.** Use a disposable blank card, power-cycle with
-   it inserted, complete Magic Cap's setup/name flow, write an object, relaunch,
+2. **Storage-card lifecycle.** Add CIS tuple `0xA0` with `GMMC`, version
+   `0x00010001`, type `BLNK` and a stable unique ID to a disposable card.
+   Power-cycle with it inserted, complete Magic Cap's setup/name flow, capture
+   any resulting tuple and metacluster changes, write an object, relaunch,
    then back up and restore built-in information. Add selectable BVD battery
-   levels and test the live Option-insert erase/setup path separately.
+   levels and test live Option-insert erase plus `Translation.pkg` separately.
 3. **Power Controls policy and charging.** Verify the five-minute default,
    1–60 minute adjustment and “even when plugged in” choice. With AC attached
    and charger enable asserted, advance a modelled main-battery level and

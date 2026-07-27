@@ -200,3 +200,21 @@ host-side close operation. The metadata records the file size twice,
 `0x80000000`, the filename's character count, and its UTF-16BE name. Unit
 tests cover framing, escaping across a frame boundary, CRC rejection,
 packets, and this metadata layout.
+
+### Frozen package versus MagicXChange wrapper
+
+The mirrored SDK adds an important format boundary. MIPS Magic Developer
+builds an ELF and extracts its code and data into one frozen `.package` file.
+The preserved DataRover inputs consumed by this harness are that raw stream:
+`DvorakKeyboard.pkg`, `Translation.pkg` and `WebBrowser40.mc2` begin with a
+frozen marker containing `SALTCOD`, not a desktop file header.
+
+The extracted `Random Code/DownloadPackage` sample defines an optional
+MagicXChange-compatible wrapper around a `Wireline`-serialized
+`FrozenPackage`: `MCap`, version 0, display size, filename length/name, then
+`MPkg`, `STREAM_VERSION`, size, timestamps and package flags. Its comments
+explicitly distinguish that wrapper from ObjectMaker images. It therefore
+does not change the working `SPkg` transfer: PCLink supplies its own outer
+metadata and continues to send the raw preserved package. The exact source
+provenance and the separate monitor-to-card loader flow are mapped in
+[`archive-mirrors.md`](archive-mirrors.md#package-build-card-loading-and-stream-formats).

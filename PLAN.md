@@ -40,8 +40,12 @@ The full regression list and expected checkpoints are in
 - **Complete the storage-card lifecycle.** Both Glacier slots currently pass
   raw common-memory, CIS, insertion and write/readback checks. They do not yet
   cover Magic Cap's blank-card setup/format flow, storage-card battery levels,
-  live Option-insert erase/setup, package translation, or backup/restore
-  ([`user-guide.md`](docs/user-guide.md#acceptance-backlog-derived-from-the-guide)).
+  live Option-insert erase/setup, package translation, or backup/restore. The
+  recovered developer FAQ removes the principal format ambiguity: the current
+  generic SRAM CIS lacks Magic Cap tuple `0xA0`, whose exact `GMMC` layout,
+  `BLNK`/`RAMC` types and metacluster pointer are now documented
+  ([`archive-mirrors.md`](docs/archive-mirrors.md#storage-cards-an-exact-os-visible-contract),
+  [`user-guide.md`](docs/user-guide.md#developer-storage-card-specification)).
 
 - **Complete PC Card modem save states.** The main driver state is registered,
   but the optional modem card's 16550 registers and receive queue are not.

@@ -281,6 +281,21 @@ The platform header names the signals: `Gen2MFS.asm.h` defines
 sound, MagicBus, and modem, so it is the right place to model board power as a
 whole rather than patching ADC constants.
 
+### Package-level reset evidence
+
+The mirrored General Magic `Flasher` sample provides a useful software-side
+boundary. Its “flashing” choice is persistent, but its `Timer` and callback
+parameter buffer are transient. When package transient clusters are
+reinitialized, the class recreates the timer if the persistent choice was
+set. This is consistent with Magic Cap rebuilding transient state after a
+reset and preserving normal package state across power transitions.
+
+It also prevents two misleading emulator conclusions: pausing MAME's host UI
+does not itself constitute a guest sleep, and a lost transient callback after
+a real reset is the package's responsibility rather than evidence that DRAM
+retention failed. The source inventory and related `MemoryMonger` test are in
+[`archive-mirrors.md`](archive-mirrors.md#reset-memory-and-source-level-acceptance-material).
+
 ## Entering sleep
 
 `Doze` (`0x13c3b250`) is minimal — clear then set `kPowerStopCpuMask`:

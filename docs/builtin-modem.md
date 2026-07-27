@@ -31,6 +31,23 @@ two-half ring. Only an explicit `kSibTelDmaOnceMask` transfer stops at the end;
 the register-level behavior is covered separately in
 [`betty-registers.md`](betty-registers.md#sib-telecom-dma).
 
+## Published design cross-check
+
+General Magic's preserved
+[`SoftModem specifications`](http://www.datarover.com/Softmodem.html)
+independently describe the original target as a 36 MHz R3000 with 4 KiB
+instruction and 1 KiB data caches and a single-cycle 16×16
+multiply-accumulate extension. Its low-cost configuration explicitly names
+Dino and the Betty 14-bit codec. V.32bis uses 7,200 samples/s in 48-sample
+DMA frames and requires half/full interrupts or equivalent double buffering.
+
+Those published requirements match the recovered TX39 cache sizes and
+`MADD`, the implemented continuous 48-word RX/TX ring, and the ROM's
+half/full service routines. They are independent confirmation of the model,
+not a register specification: the page does not identify Dino bit fields,
+Betty registers or the external DAA. The complete preserved-source assessment
+is in [`archive-mirrors.md`](archive-mirrors.md#published-softmodem-and-sib-requirements).
+
 ## Reproduce the ROM/Dino boundary
 
 First fetch the ROM and the SDK's unstripped Apollo ELF. They are research
