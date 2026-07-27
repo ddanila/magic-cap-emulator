@@ -34,7 +34,7 @@ the register-level behavior is covered separately in
 ## Published design cross-check
 
 General Magic's preserved
-[`SoftModem specifications`](http://www.datarover.com/Softmodem.html)
+[`SoftModem specifications`](http://www.datarover.com/Softmodem/)
 independently describe the original target as a 36 MHz R3000 with 4 KiB
 instruction and 1 KiB data caches and a single-cycle 16×16
 multiply-accumulate extension. Its low-cost configuration explicitly names
@@ -46,7 +46,7 @@ Those published requirements match the recovered TX39 cache sizes and
 half/full service routines. They are independent confirmation of the model,
 not a register specification: the page does not identify Dino bit fields,
 Betty registers or the external DAA. The complete preserved-source assessment
-is in [`archive-mirrors.md`](archive-mirrors.md#published-softmodem-and-sib-requirements).
+is in [`developer-archives.md`](developer-archives.md#published-softmodem-and-sib-requirements).
 
 ## Reproduce the ROM/Dino boundary
 

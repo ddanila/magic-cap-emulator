@@ -27,7 +27,7 @@ owns subsequent operations. The complete Magic Internet Kit also contains an
 older source-level Xircom driver demonstrating card-ready interrupts and
 reset flow. That source is useful for the software contract, but targets the
 earlier Astro platform and is not a 3C589 hardware reference. See
-[`archive-mirrors.md`](archive-mirrors.md#internet-and-pc-card-software).
+[`developer-archives.md`](developer-archives.md#internet-and-pc-card-software).
 
 ## Preserved inputs
 

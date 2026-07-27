@@ -283,7 +283,7 @@ whole rather than patching ADC constants.
 
 ### Package-level reset evidence
 
-The mirrored General Magic `Flasher` sample provides a useful software-side
+The public General Magic `Flasher` sample provides a useful software-side
 boundary. Its “flashing” choice is persistent, but its `Timer` and callback
 parameter buffer are transient. When package transient clusters are
 reinitialized, the class recreates the timer if the persistent choice was
@@ -294,7 +294,7 @@ It also prevents two misleading emulator conclusions: pausing MAME's host UI
 does not itself constitute a guest sleep, and a lost transient callback after
 a real reset is the package's responsibility rather than evidence that DRAM
 retention failed. The source inventory and related `MemoryMonger` test are in
-[`archive-mirrors.md`](archive-mirrors.md#reset-memory-and-source-level-acceptance-material).
+[`developer-archives.md`](developer-archives.md#reset-memory-and-source-level-acceptance-material).
 
 ## Entering sleep
 

@@ -7,7 +7,7 @@ simulators. Register behavior still comes from the ROM, SDK headers and TX39
 documentation; this guide defines what a user should be able to accomplish
 once those registers are modelled.
 
-## Source and local mirror
+## Source and checksum
 
 - Title: *Using Magic Cap: The User's Guide for the DataRover 840*
 - Publisher: Icras, Inc.
@@ -17,7 +17,7 @@ once those registers are modelled.
   [`Using_Magic_Cap.pdf`](https://bitsavers.trailing-edge.com/pdf/generalMagic/Using_Magic_Cap.pdf)
 - SHA-256:
   `20010cefe051b94fde9f8fa16273a6c33547e85cc061fb5e80625296fa21f22a`
-- Canonical local path:
+- Download destination:
   `$MAGIC_CAP_ASSETS/docs/Using_Magic_Cap.pdf`
 
 Fetch or verify it with:
@@ -60,7 +60,7 @@ modification date, modification time and CRC. The documented construction
 path sets the final three words to zero. Relevant types are `BLNK` for an
 unformatted RAM card and `RAMC` for a formatted one; the complete type table
 and field layout are in
-[`archive-mirrors.md`](archive-mirrors.md#storage-cards-an-exact-os-visible-contract).
+[`developer-archives.md`](developer-archives.md#storage-cards-an-exact-os-visible-contract).
 
 This is not yet implemented. The current 8 MiB linear-card model returns a
 generic SRAM CIS and an all-`0xff` common-memory image. It proves Glacier,

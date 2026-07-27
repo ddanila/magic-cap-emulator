@@ -203,7 +203,7 @@ packets, and this metadata layout.
 
 ### Frozen package versus MagicXChange wrapper
 
-The mirrored SDK adds an important format boundary. MIPS Magic Developer
+The public SDK archives add an important format boundary. MIPS Magic Developer
 builds an ELF and extracts its code and data into one frozen `.package` file.
 The preserved DataRover inputs consumed by this harness are that raw stream:
 `DvorakKeyboard.pkg`, `Translation.pkg` and `WebBrowser40.mc2` begin with a
@@ -217,4 +217,4 @@ explicitly distinguish that wrapper from ObjectMaker images. It therefore
 does not change the working `SPkg` transfer: PCLink supplies its own outer
 metadata and continues to send the raw preserved package. The exact source
 provenance and the separate monitor-to-card loader flow are mapped in
-[`archive-mirrors.md`](archive-mirrors.md#package-build-card-loading-and-stream-formats).
+[`developer-archives.md`](developer-archives.md#package-build-card-loading-and-stream-formats).

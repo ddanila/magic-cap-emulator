@@ -63,8 +63,8 @@ The cross-GCC packages are not required. In particular,
 `gcc-mips-linux-gnu` and `g++-mips-linux-gnu` are absent from some current
 Debian/Ubuntu repositories; `binutils-mips-linux-gnu` supplies the `readelf`,
 `nm`, and `objdump` tools used for static analysis. `unar` is only needed to
-inspect the preserved StuffIt/BinHex developer archives documented in
-[`archive-mirrors.md`](archive-mirrors.md); it is not a MAME build
+inspect the public StuffIt/BinHex developer archives documented in
+[`developer-archives.md`](developer-archives.md); it is not a MAME build
 dependency.
 
 Mirror every research input (ROMs, packages, Windows reference tools, CPU

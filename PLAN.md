@@ -44,7 +44,7 @@ The full regression list and expected checkpoints are in
   recovered developer FAQ removes the principal format ambiguity: the current
   generic SRAM CIS lacks Magic Cap tuple `0xA0`, whose exact `GMMC` layout,
   `BLNK`/`RAMC` types and metacluster pointer are now documented
-  ([`archive-mirrors.md`](docs/archive-mirrors.md#storage-cards-an-exact-os-visible-contract),
+  ([`developer-archives.md`](docs/developer-archives.md#storage-cards-an-exact-os-visible-contract),
   [`user-guide.md`](docs/user-guide.md#developer-storage-card-specification)).
 
 - **Complete PC Card modem save states.** The main driver state is registered,

@@ -321,7 +321,7 @@ blank image uses type `BLNK`; a formatted card uses `RAMC`. This tuple belongs
 in attribute memory, not at the beginning of the raw common-memory image.
 Field layout, all card types, the standard-card `CardServer` path and a
 concrete lifecycle acceptance sequence are in
-[`archive-mirrors.md`](archive-mirrors.md#storage-cards-an-exact-os-visible-contract).
+[`developer-archives.md`](developer-archives.md#storage-cards-an-exact-os-visible-contract).
 
 ## Boot landmarks
 

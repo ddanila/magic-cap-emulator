@@ -37,8 +37,8 @@ same as every hand-built Apollo prototype. Josh Carter's preserved
 [prototype history](https://joshcarter.com/magic_cap/apollo/) says those
 twelve Oki units had 4 MiB of flash, while the production DataRover 840 had
 8 MiB and its ROM could brick a prototype. This project models the production
-8 MiB ROM window. The broader mirrored-source audit and target boundaries are
-in [`archive-mirrors.md`](archive-mirrors.md).
+8 MiB ROM window. The broader public-source audit and target boundaries are
+in [`developer-archives.md`](developer-archives.md).
 
 The separate **Mac** Rosemary SDK adds four development ROM images dated
 1998-04-07 (USA and Japan, for the Apollo and Sputnik platforms), each with its
@@ -56,7 +56,7 @@ emulator and is recorded as an optional checksum-pinned input in
 
 The product-level behavioral reference is Icras's 234-page
 [*Using Magic Cap*][user-guide-pdf], written specifically for Magic Cap 3.1 on
-the DataRover 840. The mirrored file is
+the DataRover 840. The checksum-verified download is
 `$MAGIC_CAP_ASSETS/docs/Using_Magic_Cap.pdf`, with SHA-256
 `20010cefe051b94fde9f8fa16273a6c33547e85cc061fb5e80625296fa21f22a`.
 Its acceptance requirements and current coverage are mapped in
