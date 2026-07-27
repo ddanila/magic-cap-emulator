@@ -249,4 +249,7 @@ Ancienne does not bind its own socket, has no proxy authentication or access
 control, and currently does not validate certificates, so the result is
 protocol interoperability rather than secure browsing. Full setup and
 evidence are in
-[`oldvcr-tls.md`](oldvcr-tls.md#deterministic-https-regression).
+[`oldvcr-tls.md`](oldvcr-tls.md#deterministic-https-regression). The guarded
+interactive launcher described there is likewise verified over EtherLink;
+using it through this PPP bridge is plausible but is not yet an acceptance
+claim.

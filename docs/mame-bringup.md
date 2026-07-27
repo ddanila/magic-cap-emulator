@@ -112,7 +112,9 @@ edit-build-run loop; a full MAME build is unnecessary.
 
 For interactive play, `tools/start_manual.sh` wraps everything below (views,
 persistent state in the assets tree, pointer alignment) — see its header for
-modes. The rest of this section documents the underlying invocation.
+modes. Set `MAGIC_CAP_NVRAM` to an NVRAM root containing `datarover840/` when
+an interactive session should use a prepared state instead of the default
+manual state. The rest of this section documents the underlying invocation.
 
 The default power-on mode is Magic Cap and the default view is the handheld
 LCD:
@@ -242,6 +244,8 @@ python3 tools/etherlink_regression.py \
   --nvram-source /path/to/provider-and-browser/nvram
 python3 tools/https_proxy_regression.py \
   --nvram-source /path/to/proxy-rule-configured/nvram
+# Long-running loopback proxy for interactive public HTTPS browsing:
+python3 tools/https_proxy.py
 python3 tools/modem_bridge.py --probe
 python3 tools/modem_bridge.py --acceptance
 python3 tools/devrom_tests.py

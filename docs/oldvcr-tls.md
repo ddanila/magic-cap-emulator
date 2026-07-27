@@ -182,6 +182,116 @@ Two optional modes preserve related diagnostics:
   (`localhost:9443;/`), which Crypto Ancienne correctly rejects. The default
   implicit-port mode avoids conflating that text-entry issue with TLS.
 
+## Browsing the live Web
+
+`tools/https_proxy.py` is the interactive counterpart to the deterministic
+regression. It listens continuously, passes each accepted request to a
+separate pinned `carl -Npst` process without changing the destination, streams
+the reply back to the browser, and stops cleanly with Ctrl-C. It does not
+contain the regression harness's `localhost` port mapping or deterministic
+fallback response.
+
+Complete the package installation and Rule 14 setup above first. Then start
+the proxy from the repository root in one terminal:
+
+```sh
+python3 tools/https_proxy.py
+```
+
+The startup text must say that it is listening on `127.0.0.1:8765`. The
+listener address is intentionally fixed and has no command-line override.
+MAME's Slirp host alias makes that loopback socket visible to the emulated
+machine as `10.0.2.2:8765`, the host and port configured in browser Rule 14.
+
+In another terminal, start the normal interactive emulator with the EtherLink
+card and rootless Slirp backend. If the corrected package and Rule 14 are in
+the default manual state, use:
+
+```sh
+tools/start_manual.sh -- -pccard1 3c589 -networkprovider slirp
+```
+
+If they are in a separate prepared NVRAM root instead, select that root (the
+directory containing `datarover840/ram`) without moving it into the checkout:
+
+```sh
+MAGIC_CAP_NVRAM=/path/to/proxy-rule-configured/nvram \
+  tools/start_manual.sh -- -pccard1 3c589 -networkprovider slirp
+```
+
+Use a dedicated writable copy if the prepared tree is an acceptance fixture;
+an interactive session changes its battery-backed RAM.
+
+Open the corrected **Web Browser 3.5**, enter a modest public URL such as
+`https://example.com/`, and press **Go**. Keep the proxy terminal open for the
+session. Its persistent diagnostic log defaults to
+`$MAGIC_CAP_ASSETS/runtime/https-proxy/proxy.log`; it records timestamps,
+methods, destination hosts and child exit status, but not URL paths, query
+strings, headers or bodies. `--log`, timeouts, request-size limits, and the
+connection cap are available in `python3 tools/https_proxy.py --help`.
+
+The default policy has several deliberate guardrails:
+
+- the server can bind only IPv4 loopback, so it cannot become a LAN or
+  Internet-facing open proxy;
+- it accepts only absolute `https://` HTTP/1.0 or HTTP/1.1 requests using
+  `GET`, `HEAD`, or `POST`; it does not offer `CONNECT`;
+- destination DNS results must all be public IPv4 addresses. Loopback,
+  private, link-local, multicast, and reserved targets are rejected, reducing
+  the chance that old or hostile content can reach a host or LAN service;
+- requests have header/body limits, read and transaction deadlines, and a
+  four-child concurrency cap; the default POST-body limit is 1 MiB;
+- inherited `ALL_PROXY` settings are removed and `carl -N` independently
+  ignores them; the log is created with mode `0600`.
+
+`--allow-private-targets` disables the destination-address guard for explicit
+local testing. It does **not** change the loopback-only listener, but it lets
+the guest request host and LAN services and should not be used for ordinary
+browsing. DNS is checked before `carl` resolves the name itself, so this is a
+useful best-effort SSRF guard rather than a proof against a malicious DNS
+rebinding service.
+
+### Security and compatibility limits
+
+This path makes selected modern sites reachable; it does not turn a 1998
+browser into a secure modern browser:
+
+- **No certificate authentication.** Crypto Ancienne encrypts the host-to-site
+  connection but `carl` does not validate the server certificate. A
+  man-in-the-middle can impersonate any site. Do not log in, send passwords,
+  submit personal or financial information, or use this for any sensitive
+  action.
+- **The guest-to-proxy hop is plain HTTP.** It remains inside the emulated
+  Slirp network and host loopback under the default setup, but the proxy sees
+  the complete request and response in plaintext.
+- **Old content engine.** Browser 3.5 predates modern HTML, CSS, JavaScript,
+  fonts, media, compression conventions, authentication flows, and Web
+  application APIs. Static, small, server-rendered pages are the realistic
+  target; script-heavy sites may be blank, broken, or exhaust the roughly
+  768 KiB application working-memory budget.
+- **Protocol limits.** Crypto Ancienne/carl supports IPv4 and HTTP/1.x, not
+  IPv6-only destinations, `CONNECT`, HTTP/2, or HTTP/3. Some modern TLS
+  certificate/algorithm combinations are unsupported. A server may also
+  reject the old `MCWB3.5.1` user agent or return an encoding the browser
+  cannot render.
+- **Resource limits are intentional.** One request may run for at most 90
+  seconds by default. Large POSTs, request transfer encodings, pipelining, and
+  more than four simultaneous transactions are rejected. These values can be
+  adjusted for a known site, but increasing them also increases exposure to
+  hangs and memory pressure.
+- **HTTPS only.** Rule 14 and this launcher handle `https://` targets. Plain
+  `http://` uses the browser's separate Web proxy Rule 13 or its direct path;
+  the deterministic harness's `--http-upgrade` compatibility mode is not a
+  feature of the live listener.
+
+On 2026-07-28, the complete emulated path requested
+`https://example.com/`: Web Browser 3.5 sent an unchanged
+`GET https://example.com/ HTTP/1.0` through its native Rule 14, EtherLink III
+and Slirp; the guarded listener's pinned Crypto Ancienne child returned the
+public endpoint's `200 OK` HTML; and the Magic Cap screen rendered the
+**Example Domain** heading, explanatory paragraph, and **Learn more** link.
+The persistent screenshot and logs remain test artifacts outside Git.
+
 ## Acceptance targets derived from the article
 
 1. **Clean sustained PCLink transfer — covered.** The checksum-pinned
@@ -209,11 +319,17 @@ Two optional modes preserve related diagnostics:
    The captured guest request begins `GET https://localhost/ HTTP/1.0`, the
    TLS endpoint independently receives `GET / HTTP/1.0`, and the rendered
    result is captured before the test passes.
-4. **Memory-pressure warm start.** Use a deterministic page large enough to
+4. **Interactive public HTTPS — covered at the transport boundary.** The
+   corrected browser and guarded live launcher pass an unchanged absolute
+   request to pinned Crypto Ancienne, return a real public HTTPS response, and
+   render the small static Example Domain page. Certificate authenticity and
+   general modern page compatibility are explicitly outside this
+   interoperability claim.
+5. **Memory-pressure warm start.** Use a deterministic page large enough to
    reach the physical browser's transient-memory limit, follow the normal
    warm-start/garbage-collection path, and verify that the persistent page
    canvas remains navigable without increasing the machine's 4 MiB RAM.
-5. **Simulator comparison.** When the Rosemary simulator is available, compare
+6. **Simulator comparison.** When the Rosemary simulator is available, compare
    the same package's Rules, object layout and small page rendering. Keep its
    Open Transport tunnel and virtual-card persistence out of device-hardware
    conclusions.

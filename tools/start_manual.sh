@@ -17,6 +17,8 @@
 #   MAGIC_CAP_ASSETS  persistent asset tree
 #                     (default: sibling ../magic-cap-assets of this repo;
 #                     legacy ASSETS is honored too)
+#   MAGIC_CAP_NVRAM   NVRAM root containing datarover840/ (default:
+#                     $MAGIC_CAP_ASSETS/runtime/manual/nvram)
 
 set -euo pipefail
 
@@ -26,6 +28,8 @@ ASSETS="${MAGIC_CAP_ASSETS:-${ASSETS:-$REPO_ROOT/../magic-cap-assets}}"
 ROMPATH="$ASSETS/roms"
 BIN="$MAME_DIR/datarover"
 ROM="$ROMPATH/datarover840/magiccap-usa.image"
+state="$ASSETS/runtime/manual"
+nvram="${MAGIC_CAP_NVRAM:-$state/nvram}"
 
 fail() { printf 'error: %s\n' "$1" >&2; exit 1; }
 
@@ -51,10 +55,10 @@ case "$mode" in
     # A stale battery-backed RAM state can wedge Magic Cap (e.g. after
     # playing at the IDT monitor prompt, which shares the OS heap RAM).
     # Move it aside so the next boot is a clean cold start + calibration.
-    if [[ -d "$ASSETS/runtime/manual/nvram/datarover840" ]]; then
+    if [[ -d "$nvram/datarover840" ]]; then
       backup="$ASSETS/runtime/manual-backup-$(date +%Y%m%dT%H%M%S)"
       mkdir -p "$backup"
-      mv "$ASSETS/runtime/manual/nvram/datarover840" "$backup/"
+      mv "$nvram/datarover840" "$backup/"
       echo "previous state moved to $backup"
     fi ;;
   --)         ;;  # only pass-through args follow
@@ -70,10 +74,9 @@ elif [[ "${2:-}" == "--" ]]; then
   extra+=("$@")
 fi
 
-# Keep MAME runtime state (config, battery-backed NVRAM) in the assets
-# tree so nothing lands in the Git checkout.
-state="$ASSETS/runtime/manual"
-mkdir -p "$state/cfg" "$state/nvram"
+# Keep the default MAME runtime state in the assets tree so nothing lands in
+# the Git checkout. MAGIC_CAP_NVRAM may select another explicit NVRAM root.
+mkdir -p "$state/cfg" "$nvram"
 
 # SDL_VIDEO_HIGHDPI_DISABLED: on Retina Macs, SDL otherwise reports mouse
 #   motion and window size in mismatched units (pixels vs points), which
@@ -93,7 +96,7 @@ set -x
 exec "$BIN" datarover840 \
   -rompath "$ROMPATH" \
   -cfg_directory "$state/cfg" \
-  -nvram_directory "$state/nvram" \
+  -nvram_directory "$nvram" \
   -window -skip_gameinfo \
   -ui_active \
   -nokeepaspect \

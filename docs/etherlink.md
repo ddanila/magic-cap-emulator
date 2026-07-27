@@ -280,6 +280,13 @@ Package correction instructions, security boundaries, and the browser's
 explicit-port input quirk are in
 [`oldvcr-tls.md`](oldvcr-tls.md#deterministic-https-regression).
 
+For interactive public-Web use, `tools/https_proxy.py` supplies the missing
+long-running superserver without the regression's local URL rewrite or fake
+responses. It is deliberately fixed to host loopback and blocks non-public
+targets by default. Setup, launch commands, and the important certificate and
+browser limitations are in
+[`oldvcr-tls.md`](oldvcr-tls.md#browsing-the-live-web).
+
 ## Acceptance sequence
 
 The gates, in order, are:
@@ -299,7 +306,9 @@ The gates, in order, are:
    and renders the deterministic page.
 5. **Covered:** the loopback-only Crypto Ancienne superserver negotiates TLS
    with a deterministic local endpoint, which observes the exact request, and
-   Magic Cap renders the response.
+   Magic Cap renders the response. The separate guarded launcher also relays
+   an unchanged absolute request to public HTTPS endpoints for interactive
+   browsing.
 
 Both plain HTTP and native Rule 14 proxy-assisted TLS are therefore covered
 over the original EtherLink driver.
