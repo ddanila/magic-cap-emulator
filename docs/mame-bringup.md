@@ -351,9 +351,7 @@ page, then reopen page 2 and require a byte-identical screenshot. All other
 phases use isolated NVRAM, every phase isolates MAME configuration, and only
 the intended state group plus card image are shared. Generated cards, logs,
 Lua and screenshots remain under
-`$MAGIC_CAP_ASSETS/runtime/storage-card-regression/`. A nonempty eligible
-package translation remains tracked in
-[`user-guide.md`](user-guide.md).
+`$MAGIC_CAP_ASSETS/runtime/storage-card-regression/`.
 
 The longer companion drives the documented full-device backup and restore:
 
@@ -381,7 +379,7 @@ python3 tools/legacy_card_image.py \
   --output "$MAGIC_CAP_ASSETS/runtime/legacy-1x.card"
 ```
 
-The corresponding automated entry-path check requires an isolated NVRAM tree
+The corresponding automated translation check requires an isolated NVRAM tree
 in which the public
 [`Translation.pkg`](https://joshcarter.com/magic_cap/packages/Translation.pkg)
 has already been installed through PCLink:
@@ -394,15 +392,15 @@ python3 tools/storage_translation_regression.py \
 ```
 
 It requires the real CompatibilityCardServer to accept the card with no
-generic-card failure, checks the 1.x `GMMC`/`RAMC` tuple and metacluster,
-touches **translate**, requires the package-selection window, and re-hashes
-all three source representations afterward. The copyrighted Simulator/card
-inputs remain outside Git; the public Simulator behavior and menu contract are
-documented at
+generic-card failure or software reset, checks the 1.x `GMMC`/`RAMC` tuple and
+metacluster, selects the card's genuine `new items` package, translates it to
+Built-in storage, and opens the resulting second Notebook page. It re-hashes
+all source representations afterward. Create the fixture with **Don't Save
+Changes** clear, then power off and eject the simulated card; a live-memory
+capture can contain unfinished object references and is not a valid input.
+The copyrighted Simulator/card inputs remain outside Git; the public
+Simulator behavior and menu contract are documented at
 [*Magic Cap Simulator*](https://www.datarover.com/Develop/MagicCap/Docs/Tools/CWMagic/Simulator.html).
-The current data-only Help Books fixture has no eligible row, so completing a
-nonempty package copy remains tracked in
-[`user-guide.md`](user-guide.md).
 
 The PCLink harness uses the real UART-A PTY and recovered WinPCLink framing to
 install an archived package through the Storeroom computer. It fails on a
@@ -523,7 +521,7 @@ the separate serial-terminal view.
 | Sound output | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
 | Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 FIR code through a TX39 `MADD` |
 | Magic Bus | ROM assigns and later reassigns address zero, validates the checksummed `ATKB` descriptor, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures |
-| PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback and live-OS checks; blank storage setup, persistent `RAMC` remount, Option-insert reformat, Good/Low/Dead battery pins, a card-backed Notebook object and full built-in backup/restore also pass; an authentic Simulator 1.x card reaches `Translation.pkg`'s selection UI without source writes |
+| PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback and live-OS checks; blank storage setup, persistent `RAMC` remount, Option-insert reformat, Good/Low/Dead battery pins, a card-backed Notebook object and full built-in backup/restore also pass; `Translation.pkg` copies an authentic 1.x `new items` package into Built-in storage without source writes |
 | PC Card Ethernet | The archived EtherLink driver initializes the 3C589, completes ARP/TCP through rootless libslirp, renders deterministic local HTTP, and carries Browser 3.5's native HTTPS Rule through a loopback Crypto Ancienne proxy; the absolute request, decrypted request, and rendered result are checked |
 | PCLink | The Storeroom computer installs archived `DvorakKeyboard.pkg`; the optional 452K TLS-browser package also transfers, disconnects cleanly, and records zero ROM Magic Bus failures |
 | IrDA / Beam | Two fresh peers exchange SIR discovery frames, select `bob Receiver`, and transfer `alice Sender`'s name card into the receiver's Inbox |
@@ -532,8 +530,8 @@ the separate serial-terminal view.
 
 The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
 still incomplete. The current gaps are the board-level effect of power-supply
-outputs, the remaining storage-card workflows, complete PC Card modem save
-state, the built-in modem's external line side,
+outputs, complete PC Card modem save state, the built-in modem's external line
+side,
 microphone/sound-receive DMA, multi-device Magic Bus topology, and hardware
 fidelity beyond the register behavior
 exercised by the ROM; see

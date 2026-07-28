@@ -23,8 +23,8 @@ both live PC Card PPP and the original EtherLink III driver, and deterministic
 native `https://` dispatch through Web Browser 3.5's TLS proxy Rule and Crypto
 Ancienne all work, each covered by an automated regression. Blank, formatted,
 and authentic Simulator 1.x storage cards are also recognized; full
-built-in-storage backup/restore passes, while an older card reaches the real
-`Translation.pkg` package-selection UI without changing its source image. A
+built-in-storage backup/restore passes, and `Translation.pkg` copies a real
+1.x `new items` package into 3.1 Built-in storage without changing its source. A
 guarded loopback launcher also lets that corrected browser visit public HTTPS
 sites; see
 [the live-browsing instructions](docs/oldvcr-tls.md#browsing-the-live-web).

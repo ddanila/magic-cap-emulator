@@ -150,14 +150,15 @@ states, and a card-backed Notebook object across fresh processes.
 
 Magic Cap Simulator 1.x adds one representation detail not present on a
 physical card. Its GMCD file starts with a 12-byte Macintosh wrapper, followed
-by a compact CIS through file offset `0x6f`; common memory begins at `0x70`.
-An optional same-sized changes file is the newer common-memory snapshot.
+by a compact CIS through file offset `0x6f`; the metacluster begins at `0x70`.
+An optional headerless changes file is the newer common-memory snapshot.
 `tools/legacy_card_image.py` validates the `GMMC`, `0x00010001`, `RAMC`
 contract, merges that snapshot without touching either input, and pads a new
 8 MiB image. The linear-card device presents the compact CIS from offset
-`0x0c` as attribute memory and maps common memory from file offset `0x70`.
-Treating either wrapper as guest common memory makes `FirstTuple()` miss
-`0xA0`, which is why merely padding the Macintosh file does not work.
+`0x0c` as attribute memory and preserves the combined file offsets in common
+memory. In particular, the CIS-advertised metacluster offset `0x70` must land
+on file offset `0x70`; stripping the wrapper a second time makes Translator
+scan unrelated words 112 bytes beyond the metacluster.
 
 This behavior matches the public
 [*Magic Cap Simulator*](https://www.datarover.com/Develop/MagicCap/Docs/Tools/CWMagic/Simulator.html)
@@ -169,12 +170,19 @@ With
 [`Translation.pkg`](https://joshcarter.com/magic_cap/packages/Translation.pkg)
 installed, `tools/storage_translation_regression.py` now proves that the real
 CompatibilityCardServer accepts an authentic 1.x card, no generic-card failure
-is raised, the version warning advances to the package-selection window, and
-the wrapper, changes file, and generated source card retain their original
-SHA-256 hashes. The preserved fixture currently contains only a data-only Help
-Books package, which produces an empty eligible-package list. Copying a
-nonempty eligible 1.x package into a new destination is therefore the
-remaining translation acceptance.
+or software reset is raised, and the version warning advances to a populated
+package-selection window. The harness selects a system-created `new items`
+package, translates it into Built-in storage, opens the resulting second
+Notebook page, and re-hashes the wrapper, optional changes file, and generated
+source card afterward.
+
+The positive fixture must be cleanly serialized by the classic Simulator:
+clear **Don't Save Changes**, create the new item after selecting the card as
+the new-items destination, power the simulated communicator off, and eject
+the card. A live process-memory capture is not equivalent. In one rejected
+capture an unfinished object reference ended in `0x...a7`; the official
+Translator followed it as an odd address and requested a reset. The
+cleanly ejected file contained the aligned `0x...ae` reference.
 
 `tools/storage_backup_regression.py` covers the other documented workflow. It
 sets up an erased card, drives Storeroom's built-in-storage backup, then starts
