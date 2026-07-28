@@ -159,9 +159,10 @@ The next storage acceptance can now be specific:
 3. Record the tuple and common-memory changes made by the OS. If setup updates
    the tuple as expected, require `RAMC` and a valid metacluster offset;
    either way, require the resulting card to persist across eject/relaunch.
-4. Create a user object through the new-items preference, then exercise backup
-   and restore. Option-insert erase and all three BVD battery indications are
-   now covered by `tools/storage_card_regression.py`.
+4. Exercise backup and restore. Creating and reopening a drawn Notebook page
+   through the card's new-items preference, Option-insert erase and all three
+   BVD battery indications are now covered by
+   `tools/storage_card_regression.py`.
 5. Install [`Translation.pkg`](https://joshcarter.com/magic_cap/packages/Translation.pkg),
    insert a preserved 1.x fixture, and separately
    cover translation without modifying the source card.

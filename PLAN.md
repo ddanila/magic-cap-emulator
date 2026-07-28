@@ -42,9 +42,10 @@ The full regression list and expected checkpoints are in
   writes its metacluster to common memory, and remounts the persisted image as
   `RAMC`. A separate fresh boot proves live Option-insert erase/setup and
   header regeneration. Both slots now offer Good/Low/Dead card-battery
-  settings and expose the BVD state the ROM decodes. Package translation,
-  moving a real object onto the card, and built-in-storage backup/restore
-  remain
+  settings and expose the BVD state the ROM decodes. The card can also be
+  selected as the new-item destination; a drawn Notebook page survives a
+  fresh emulator process byte-for-byte. Package translation and
+  built-in-storage backup/restore remain
   ([`developer-archives.md`](docs/developer-archives.md#storage-cards-an-exact-os-visible-contract),
   [`user-guide.md`](docs/user-guide.md#developer-storage-card-specification)).
 

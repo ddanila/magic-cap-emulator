@@ -33,6 +33,8 @@ class StorageCardRegressionTests(unittest.TestCase):
         setup = storage_card_regression.automation_script("/tmp/card")
         reinsert = storage_card_regression.reinsertion_script("/tmp/card")
         option = storage_card_regression.option_insert_script("/tmp/card")
+        create = storage_card_regression.object_creation_script("/tmp/card")
+        relaunch = storage_card_regression.object_relaunch_script("/tmp/card")
         self.assertIn('card_image:load("/tmp/card")', setup)
         self.assertIn("STORAGE_BLANK", setup)
         self.assertIn("STORAGE_FORMAT", setup)
@@ -43,6 +45,12 @@ class StorageCardRegressionTests(unittest.TestCase):
         self.assertIn("option_button:set_value(1)", option)
         self.assertIn("STORAGE_OPTION", option)
         self.assertIn("STORAGE_FINAL", option)
+        self.assertIn("storage-new-items-package.png", create)
+        self.assertIn("storage-object-blank.png", create)
+        self.assertIn("storage-object-drawn.png", create)
+        self.assertIn("STORAGE_OBJECT_CREATE", create)
+        self.assertIn("storage-object-relaunched.png", relaunch)
+        self.assertIn("STORAGE_OBJECT_RELAUNCH", relaunch)
 
     def test_blank_digest_is_stable(self) -> None:
         self.assertEqual(

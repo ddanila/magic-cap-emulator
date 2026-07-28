@@ -24,7 +24,7 @@ DEFAULT_WORKDIR = ASSETS_ROOT / "runtime" / "storage-card-regression"
 CARD_SIZE = 8 * 1024 * 1024
 BLANK_SHA256 = hashlib.sha256(b"\xff" * CARD_SIZE).hexdigest()
 CHECKPOINT_PATTERN = re.compile(
-    rb"STORAGE_(BLANK|FORMAT|BATTERY|REINSERT|OPTION|FINAL) ([^\r\n]+)"
+    rb"STORAGE_(BLANK|FORMAT|BATTERY|REINSERT|OPTION|FINAL|OBJECT_CREATE|OBJECT_RELAUNCH) ([^\r\n]+)"
 )
 
 
@@ -357,6 +357,144 @@ end)
 """
 
 
+def object_creation_script(card_path: Path | str) -> str:
+    """Route new items to the card, create a notebook page, and commit it."""
+    encoded_card_path = json.dumps(str(card_path))
+    return f"""local machine = manager.machine
+local program = machine.devices[":maincpu"].spaces["program"]
+local ports = machine.ioport.ports
+local touch_x = ports[":TOUCH_X"]:field(0xffff)
+local touch_y = ports[":TOUCH_Y"]:field(0xffff)
+local touch_button = ports[":TOUCH_BUTTON"]:field(0x01)
+local frames = 0
+
+local function move(x, y)
+    touch_x:set_value(math.floor((x * 0xffff) / 479))
+    touch_y:set_value(math.floor((y * 0xffff) / 319))
+end
+
+local function press(x, y)
+    move(x, y)
+    touch_button:set_value(1)
+end
+
+local function load_card()
+    for _, image in pairs(machine.images) do
+        if image.brief_instance_name == "card" then
+            local error = image:load({encoded_card_path})
+            if error ~= nil then
+                print("STORAGE_ERROR load " .. tostring(error))
+                machine:exit()
+            end
+            return
+        end
+    end
+    print("STORAGE_ERROR no card image device")
+    machine:exit()
+end
+
+emu.register_frame_done(function()
+    frames = frames + 1
+    if frames == 1300 then load_card()
+    elseif frames == 1600 then press(382, 80)
+    elseif frames == 1620 then touch_button:set_value(0)
+    elseif frames == 1900 then press(29, 145)
+    elseif frames == 1920 then touch_button:set_value(0)
+    elseif frames == 2100 then press(240, 145)
+    elseif frames == 2120 then touch_button:set_value(0)
+    elseif frames == 2400 then
+        machine.screens[":screen"]:snapshot("storage-new-items-package.png")
+    elseif frames == 2500 then press(35, 300)
+    elseif frames == 2520 then touch_button:set_value(0)
+    elseif frames == 2800 then press(335, 170)
+    elseif frames == 2820 then touch_button:set_value(0)
+    elseif frames == 3100 then press(450, 100)
+    elseif frames == 3120 then touch_button:set_value(0)
+    elseif frames == 3400 then press(145, 92)
+    elseif frames == 3420 then touch_button:set_value(0)
+    elseif frames == 3700 then press(237, 110)
+    elseif frames == 3720 then touch_button:set_value(0)
+    elseif frames == 3900 then
+        machine.screens[":screen"]:snapshot("storage-object-blank.png")
+    elseif frames == 4000 then press(100, 100)
+    elseif frames == 4010 then move(140, 130)
+    elseif frames == 4020 then move(180, 160)
+    elseif frames == 4030 then move(220, 130)
+    elseif frames == 4040 then move(260, 100)
+    elseif frames == 4050 then touch_button:set_value(0)
+    elseif frames == 4100 then press(260, 100)
+    elseif frames == 4110 then move(220, 130)
+    elseif frames == 4120 then move(180, 160)
+    elseif frames == 4130 then move(140, 130)
+    elseif frames == 4140 then move(100, 100)
+    elseif frames == 4150 then touch_button:set_value(0)
+    elseif frames == 4350 then
+        machine.screens[":screen"]:snapshot("storage-object-drawn.png")
+    elseif frames == 4450 then press(440, 10)
+    elseif frames == 4470 then touch_button:set_value(0)
+    elseif frames == 4750 then
+        machine.screens[":screen"]:snapshot("storage-object-committed.png")
+        print(string.format(
+            "STORAGE_OBJECT_CREATE HEADER=%08X",
+            program:read_u32(0x24000058)))
+    elseif frames == 4850 then machine:exit()
+    end
+end)
+"""
+
+
+def object_relaunch_script(card_path: Path | str) -> str:
+    """Reinsert the card in a new process and reopen its notebook object."""
+    encoded_card_path = json.dumps(str(card_path))
+    return f"""local machine = manager.machine
+local program = machine.devices[":maincpu"].spaces["program"]
+local ports = machine.ioport.ports
+local touch_x = ports[":TOUCH_X"]:field(0xffff)
+local touch_y = ports[":TOUCH_Y"]:field(0xffff)
+local touch_button = ports[":TOUCH_BUTTON"]:field(0x01)
+local frames = 0
+
+local function press(x, y)
+    touch_x:set_value(math.floor((x * 0xffff) / 479))
+    touch_y:set_value(math.floor((y * 0xffff) / 319))
+    touch_button:set_value(1)
+end
+
+local function load_card()
+    for _, image in pairs(machine.images) do
+        if image.brief_instance_name == "card" then
+            local error = image:load({encoded_card_path})
+            if error ~= nil then
+                print("STORAGE_ERROR load " .. tostring(error))
+                machine:exit()
+            end
+            return
+        end
+    end
+    print("STORAGE_ERROR no card image device")
+    machine:exit()
+end
+
+emu.register_frame_done(function()
+    frames = frames + 1
+    if frames == 1300 then load_card()
+    elseif frames == 1550 then press(237, 110)
+    elseif frames == 1570 then touch_button:set_value(0)
+    elseif frames == 1900 then press(335, 170)
+    elseif frames == 1920 then touch_button:set_value(0)
+    elseif frames == 2150 then press(274, 12)
+    elseif frames == 2170 then touch_button:set_value(0)
+    elseif frames == 2450 then
+        machine.screens[":screen"]:snapshot("storage-object-relaunched.png")
+        print(string.format(
+            "STORAGE_OBJECT_RELAUNCH HEADER=%08X",
+            program:read_u32(0x24000058)))
+    elseif frames == 2550 then machine:exit()
+    end
+end)
+"""
+
+
 def parse_checkpoints(output: bytes) -> dict[str, dict[str, int]]:
     """Parse named hexadecimal checkpoint fields from MAME output."""
     result: dict[str, dict[str, int]] = {}
@@ -413,19 +551,23 @@ def run_regression(args: argparse.Namespace) -> int:
         return 2
 
     phases = (
-        ("setup", automation_script(card_path), False),
-        ("reinsert", reinsertion_script(card_path), False),
-        ("option", option_insert_script(card_path), True),
+        ("setup", automation_script(card_path), False, "setup"),
+        ("reinsert", reinsertion_script(card_path), False, "reinsert"),
+        ("option", option_insert_script(card_path), True, "object"),
+        ("object-create", object_creation_script(card_path), False, "object"),
+        ("object-relaunch", object_relaunch_script(card_path), False, "object"),
     )
     outputs: list[bytes] = []
     snapshot_dirs: dict[str, Path] = {}
-    for name, script, needs_debugger in phases:
+    card_hashes: dict[str, str] = {}
+    for name, script, needs_debugger, state_name in phases:
+        print(f"Running {name} phase...", flush=True)
         phase_dir = run_dir / name
-        nvram_dir = phase_dir / "nvram"
+        nvram_dir = run_dir / "state" / state_name / "nvram"
         cfg_dir = phase_dir / "cfg"
         snapshot_dir = phase_dir / "snapshots"
-        nvram_dir.mkdir(parents=True)
-        cfg_dir.mkdir()
+        nvram_dir.mkdir(parents=True, exist_ok=True)
+        cfg_dir.mkdir(parents=True)
         snapshot_dir.mkdir()
         snapshot_dirs[name] = snapshot_dir
         lua_path = phase_dir / f"storage-card-{name}.lua"
@@ -481,6 +623,7 @@ def run_regression(args: argparse.Namespace) -> int:
         phase_log = phase_dir / "mame-output.txt"
         phase_log.write_bytes(completed.stdout)
         outputs.append(completed.stdout)
+        card_hashes[name] = hashlib.sha256(card_path.read_bytes()).hexdigest()
         if completed.returncode or b"STORAGE_ERROR" in completed.stdout:
             print(
                 f"FAIL: MAME {name} phase failed; see {phase_log}",
@@ -529,6 +672,8 @@ def run_regression(args: argparse.Namespace) -> int:
             "TYPE": 0x52414D43,
             "CLUSTER": 0x000000B0,
         },
+        "OBJECT_CREATE": {"HEADER": 0x4D434150},
+        "OBJECT_RELAUNCH": {"HEADER": 0x4D434150},
     }
     for name, fields in expected.items():
         actual = checkpoints.get(name)
@@ -555,6 +700,13 @@ def run_regression(args: argparse.Namespace) -> int:
             "storage-option-name.png",
             "storage-final.png",
         },
+        "object-create": {
+            "storage-new-items-package.png",
+            "storage-object-blank.png",
+            "storage-object-drawn.png",
+            "storage-object-committed.png",
+        },
+        "object-relaunch": {"storage-object-relaunched.png"},
     }
     if any(
         not (snapshot_dirs[phase] / filename).is_file()
@@ -574,9 +726,40 @@ def run_regression(args: argparse.Namespace) -> int:
         print(f"FAIL: formatted image did not persist: {card_path}", file=sys.stderr)
         return 1
 
+    blank_object = (
+        snapshot_dirs["object-create"] / "storage-object-blank.png"
+    ).read_bytes()
+    drawn_object = (
+        snapshot_dirs["object-create"] / "storage-object-drawn.png"
+    ).read_bytes()
+    relaunched_object = (
+        snapshot_dirs["object-relaunch"] / "storage-object-relaunched.png"
+    ).read_bytes()
+    if blank_object == drawn_object:
+        print(
+            f"FAIL: notebook pen input did not change the object; see {run_dir}",
+            file=sys.stderr,
+        )
+        return 1
+    if drawn_object != relaunched_object:
+        print(
+            f"FAIL: card-backed notebook object changed across relaunch; "
+            f"see {run_dir}",
+            file=sys.stderr,
+        )
+        return 1
+    if card_hashes["option"] == card_hashes["object-create"]:
+        print(
+            f"FAIL: creating the notebook object did not change the card image; "
+            f"see {run_dir}",
+            file=sys.stderr,
+        )
+        return 1
+
     print(
         "PASS: blank setup, format, naming, persistence, reinsertion, "
-        "and Option-insert reformat match Magic Cap"
+        "Option-insert reformat, and a card-backed notebook object match "
+        "Magic Cap"
     )
     print(f"Persistent card: {card_path}")
     print(f"Artifacts: {run_dir}")

@@ -331,7 +331,10 @@ a **PC Card slot battery** machine setting. Good drives BVD2/BVD1=`11`, Low
 drives `01`, and Dead drives `00`; slot 1 BVD1 appears at Dino IO bit 1
 (`0x10c00180`) and BVD2 at Glacier 1 IO-input bit 1 (`0x1040000c`). The ROM
 maps those three codes to `kCardBatteryGood`, `kCardBatteryLow` and
-`kCardBatteryDead`.
+`kCardBatteryDead`. The same regression selects the mounted card as Magic
+Cap's new-item destination, draws on a Notebook page, leaves the scene to
+commit the object, and proves the page's rendered pixels after reinsertion in
+a fresh emulator process.
 
 ## Boot landmarks
 
