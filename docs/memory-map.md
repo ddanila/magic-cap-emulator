@@ -174,9 +174,11 @@ boot, OS, and peripheral regressions:
   selected with `-nvram_directory`.
 
 These are deliberately ROM-observed behaviors, not a claim that all Dino
-timing and interrupt semantics are complete. Sound-receive DMA/microphone
-input and power outputs without a represented consumer, such as card Vpp,
-remain outside this implemented subset.
+timing and interrupt semantics are complete. Sound-receive DMA accepts host
+microphone, deterministic-tone and silence inputs; its direct buffer and
+interrupt behavior passes, while the Magic Cap sound-stamp UI workflow remains
+to be automated. Power outputs without a represented consumer, such as card
+Vpp, remain outside this implemented subset.
 
 ## Magic Bus
 

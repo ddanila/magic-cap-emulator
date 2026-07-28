@@ -237,19 +237,31 @@ bit cuts the chime off after a single 190 ms pass; the regression's lower
 bound rejects that failure directly. Note that the DAC output lands on the capture's
 second channel; the analysis picks the most occupied channel for that reason.
 
-Only the speaker/transmit side is implemented today. The driver does not act
-on `sibSoundRxStart` or `kSibEnSoundRxDmaMask`, does not raise the corresponding
-sound-receive DMA/ready events, and has no host microphone source. Audio
-recording is therefore a remaining hardware path, not something covered by
-the playback regression.
+The receive side is implemented through the same pointer, half-buffer and
+end-of-buffer lifecycle. The driver writes signed 16-bit microphone samples to
+`sibSoundRxStart`, advances the hardware-owned pointer, raises sound-receive
+DMA/ready events, and stops a one-shot transfer at its declared end. Its
+**Microphone source** setting selects the host input, a deterministic 1 kHz
+tone, or silence. Verify the hardware boundary without depending on a host
+audio device:
+
+```sh
+python3 tools/sound_input_regression.py
+```
+
+The regression captures 128 test-tone samples, requires the expected range
+and zero crossings, checks half/end/pointer and receive-ready interrupts, then
+switches the live source to silence and requires 128 zero samples. This covers
+the Dino/Betty receive path directly; it does not yet claim the product UI
+workflow.
 
 *Using Magic Cap*, pp. 67–68, supplies the acceptance workflow rather than
 leaving “microphone support” abstract: create an email, add the general-drawer
 sound stamp, open its recording controls, record from the DataRover microphone,
 stop early or at the configured duration, and play the same stamp back. A
-deterministic host sample fed through sound-RX DMA and recovered through the
-already-working speaker path would prove the entire boundary. The broader
-product coverage map is in [`user-guide.md`](user-guide.md).
+deterministic sample fed through sound-RX DMA and recovered through the
+already-working speaker path will prove the remaining end-to-end boundary.
+The broader product coverage map is in [`user-guide.md`](user-guide.md).
 
 The complete ROM diagnostic now runs as a regression:
 
