@@ -59,6 +59,12 @@ KEY_FRAME = 600
 
 def automation_script(frames: int) -> str:
     """Return Lua that counts entries into each watched routine."""
+    keyboard_attached_index = next(
+        index
+        for index, (name, _address, _symbol) in enumerate(WATCHED)
+        if name == "keyboard_attached"
+    )
+    keyboard_attached_slot = SCRATCH + keyboard_attached_index * 4
     setup = "\n".join(
         f'    watch({SCRATCH + index * 4}, 0x{address:08x}, "{name}")'
         for index, (name, address, _symbol) in enumerate(WATCHED)
@@ -73,6 +79,7 @@ local program = cpu.spaces["program"]
 local caps_lock = machine.ioport.ports[
     ":magicbus_keyboard:pc_keyboard_3"].fields["Caps"]
 local frames = 0
+local key_down_frame = nil
 
 local function watch(slot, address, name)
     program:write_u32(slot, 0)
@@ -86,11 +93,25 @@ emu.register_frame_done(function()
     frames = frames + 1
     if frames == 60 then
 {setup}
-    elseif frames == {KEY_FRAME} then
+    end
+
+    -- The power-supply class deliberately cycles Magic Bus Vcc during boot.
+    -- Inject only after the real client has attached: a physical keyboard
+    -- cannot retain a key pressed before that power cycle either.
+    if frames >= {KEY_FRAME}
+            and key_down_frame == nil
+            and program:read_u32({keyboard_attached_slot}) > 0 then
+        key_down_frame = frames
+        print(string.format(
+            "MAGICBUS KEY_DOWN MFIO=%08X CONTROL=%08X",
+            program:read_u32(0x10c00184),
+            program:read_u32(0x10c000e0)))
         caps_lock:set_value(caps_lock.mask)
-    elseif frames == {KEY_FRAME + 10} then
+    elseif key_down_frame ~= nil and frames == key_down_frame + 10 then
         caps_lock:set_value(0)
-    elseif frames == {frames} then
+    end
+
+    if frames == {frames} then
         print("MAGICBUS COUNTS " .. {report})
         machine:exit()
     end
@@ -137,7 +158,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--frames",
         type=int,
         default=9000,
-        help="emulated frames to watch (must exceed 610 for key injection)",
+        help=(
+            "emulated frames to watch; key injection waits for the real "
+            "keyboard client to attach"
+        ),
     )
     parser.add_argument(
         "--require-clean",

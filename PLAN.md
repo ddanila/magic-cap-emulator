@@ -16,6 +16,7 @@ The full regression list and expected checkpoints are in
 | Touch | One absolute pointer device drives X/Y/pen-down through calibration and remains live across MAME Tab-menu round trips | [`mame-bringup.md`](docs/mame-bringup.md) |
 | Persistence & power | Battery-backed DRAM + RTC as NVRAM; power-button suspend/wake across a retained-RAM relaunch | [`power-wake.md`](docs/power-wake.md) |
 | Battery & supply inputs | Both ADC channels answer within the ROM's own calibration thresholds, so the spurious backup-battery warning is gone; battery levels, AC adapter and battery cover are selectable, and removing the cover raises the IO interrupt the OS services | [`power-wake.md`](docs/power-wake.md#battery-levels) |
+| Power outputs & charging | MFIO LCD power blanks scanout without destroying the framebuffer; active-high Magic Bus Vcc-off removes and rediscovers its peripheral; AC plus charger enable advances the main-battery ADC and charger disable stops it | [`power-wake.md`](docs/power-wake.md#outputs-the-os-writes) |
 | Sound output | ROM's startup tone (unbuffered hold register) plus the buffered SIB sound DMA ring: half/end handlers continuously refill DRAM buffers and complete the OS speaker lifecycle | [`betty-registers.md`](docs/betty-registers.md) |
 | Built-in software modem | Continuous 48-word SIB telecom DMA ring drives the ROM's V.32 pump/control/FIR through a TX39 `MADD` | [`builtin-modem.md`](docs/builtin-modem.md) |
 | Magic Bus | Address assignment and reinitialization, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
@@ -30,13 +31,11 @@ The full regression list and expected checkpoints are in
 
 ## Remaining work
 
-- **Act on the power-supply outputs.** The charger and the LCD, IR, sound,
-  MagicBus and modem Vcc rails round-trip through `mfioDataOutput`, so the OS
-  reads back what it wrote, but nothing acts on them: LCD power off does not
-  blank the display and the charger does not recharge the modelled cells. The
-  DataRover guide explicitly promises live AC charging and a configurable
-  1–60 minute idle shutoff, making both concrete acceptance targets
-  ([`power-wake.md`](docs/power-wake.md#outputs-the-os-writes)).
+- **Automate the Power Controls idle policy.** The output-side hardware and
+  live AC charging now pass, but the product-level five-minute default,
+  adjustable 1–60 minute delay and “even when plugged in” choice have not yet
+  been driven through the real controls window and followed to automatic
+  shutoff ([`power-wake.md`](docs/power-wake.md#outputs-the-os-writes)).
 
 - **Complete PC Card modem save states.** The main driver state is registered,
   but the optional modem card's 16550 registers and receive queue are not.

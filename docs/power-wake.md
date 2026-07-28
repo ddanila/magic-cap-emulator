@@ -222,12 +222,12 @@ Observed behavior:
 |---|---|
 | Cover removed **while the desk is up** | The OS reacts — 163 pixels change in the name-bar region, deterministically. Covered by `tools/battery_regression.py` |
 | Cover removed **before power-on** | The machine never brings the display up. Reasonable for hardware whose cover holds the cells, so the harness always toggles mid-session instead |
-| AC adapter attached | No observable difference found — not at boot, and not in the wording of the backup-battery alert, despite that alert mentioning being unplugged. The input is modelled because the ROM reads it; no behavior has been demonstrated |
+| AC adapter attached | With charger enable asserted and the cover fitted, the modelled main-battery ADC rises over emulated time; detaching AC stops it. Covered by `tools/power_outputs_regression.py` |
 
 ## Outputs the OS writes
 
-The charger and the supply rails are outputs, and the driver already round-trips
-them: `mfioDataOutput` (`0x184`) stores what the OS writes and reads it back, so
+The charger and the supply rails are outputs. `mfioDataOutput` (`0x184`) stores
+what the OS writes and reads it back, so
 `PowerSupplyGen2MFS_BatteryChargerEnabled`, `VccLCDEnabled` and the rest observe
 their own settings. `Gen2MFS.asm.h` names the pins:
 
@@ -242,44 +242,71 @@ their own settings. `Gen2MFS.asm.h` names the pins:
 | 1 | Charger enable |
 | 0 | Telecom ring-detect status (input) |
 
-What is deliberately **not** modelled is the *effect* of those outputs: turning
-LCD power off does not blank the emulated display, and the charger does not
-change the battery readings over time. Nothing in the ROM's behavior so far
-depends on it, and guessing at it would risk the display and sleep paths that
-already work.
+The outputs with represented consumers now act:
+
+- MFIO 17 blanks the LCD scanout while leaving the 2 bpp framebuffer intact,
+  so restoring the rail restores the same image.
+- Setting active-high MFIO 16 removes Magic Bus accessory power. Its request,
+  address and pending transaction are lost; after power returns, the ROM's
+  broadcast discovery assigns the keyboard again.
+- MFIO 1 advances the selected synthetic main-battery level only while AC is
+  attached and the cover is fitted. The deterministic qualitative rate is
+  four ADC counts per emulated second, capped at the release calibration's
+  800-count full point. Detaching AC, opening the cover or clearing charger
+  enable freezes it. A machine-configuration battery change supplies a fresh
+  starting level.
+
+This is intentionally not a cell-chemistry or real-time charge-duration model:
+the Full/Low/Empty inputs and their rate are acceptance fixtures around the
+ROM's real 80/320/800 thresholds.
 
 The product guide turns two of these from speculative fidelity into observable
 acceptance requirements. *Using Magic Cap*, pp. 209–211, says AC power
 recharges the main cell while the communicator remains in use. It also defines
 a five-minute automatic-shutoff default, adjustable from 1–60 minutes, with a
-separate choice for shutting off while plugged in. A complete power regression
-should therefore drive the Power controls, verify those policy values, observe
-idle power-down, and make a charger-enabled AC run advance a modelled battery
-level. The same window displays storage-card battery state, which belongs to
-the storage-card lifecycle tracked in [`user-guide.md`](user-guide.md).
+separate choice for shutting off while plugged in. A complete UI regression
+still needs to drive the Power controls, verify those policy values and observe
+idle power-down. Charger-enabled AC movement is now covered below. The same
+window displays storage-card battery state, which belongs to the storage-card
+lifecycle tracked in [`user-guide.md`](user-guide.md).
 
-## Still unmodelled around the power supply
+Run the direct output acceptance check with:
+
+```sh
+python3 tools/power_outputs_regression.py
+```
+
+It starts the IDT monitor with a low battery and proves all three output
+effects. The accepted run held the ADC at 200 with AC detached, raised it to
+208 after two emulated seconds with AC attached, held 208 after charger
+disable, observed a Magic Bus request change from present to absent across Vcc
+removal and return after restoration, and compared powered/blank native LCD
+snapshots.
+
+## ROM evidence and remaining policy work
 
 Where to look, all in the release build unless noted:
 
-| Address | Symbol | Why |
+| Address | Symbol | What it establishes |
 |---|---|---|
-| `0x13c399ac` | `MainBatteryServer_InitAtoDChannel` | Which Betty ADC channel the OS actually programs |
-| `0x13c39ad0` | `BackupBatteryServer_InitAtoDChannel` | Same for the backup cell |
-| `0x13c399cc` / `0x13c39af0` | `*_InitializeBatteryFields` | The thresholds and field layout |
-| `0x13c3b118` | `PowerSupplyGen2MFS_BatteryCoverAttached` | Cover state, a separate signal from voltage |
-| `0x13c3b0d4` | `PowerSupplyGen2MFS_ACAdapterAttached` | External power |
-| `0x13c3aeb0` / `0x13c3af14` | `PowerSupplyGen2MFS_{,Set}BatteryChargerEnabled` | Charger control |
-| `0x13c3aa1c` / `0x13c3aaf8` | `MainBatteryCoverPositive/Negative` | Cover-switch edge handlers |
-| `0x13c35370` | `BackupBatteryServer_Charging` | Whether the OS thinks the backup cell is charging |
+| `0x13c399ac` | `MainBatteryServer_InitAtoDChannel` | Main cell uses Betty ADC channel 24 |
+| `0x13c39ad0` | `BackupBatteryServer_InitAtoDChannel` | Backup cell uses Betty ADC channel 28 |
+| `0x13c399cc` / `0x13c39af0` | `*_InitializeBatteryFields` | Calibration thresholds and field layout |
+| `0x13c3b118` | `PowerSupplyGen2MFS_BatteryCoverAttached` | Cover state is separate from voltage |
+| `0x13c3b0d4` | `PowerSupplyGen2MFS_ACAdapterAttached` | External-power input |
+| `0x13c3aeb0` / `0x13c3af14` | `PowerSupplyGen2MFS_{,Set}BatteryChargerEnabled` | MFIO 1 charger control |
+| `0x13c3ad30` / `0x13c3ad78` | `PowerSupplyGen2MFS_{,Set}VccMagicBusEnabled` | MFIO 16 is active-high Vcc-off |
+| `0x13c3ade4` / `0x13c3ae64` | `PowerSupplyGen2MFS_{,Set}VccLCDEnabled` | MFIO 17 controls LCD power |
 
 The platform header names the signals: `Gen2MFS.asm.h` defines
 `kMainBatteryCoverPositive` / `kMainBatteryCoverNegative` as
 `kioPositiveInterrupt2` / `kioNegativeInterrupt2`, plus
 `kIOMfioChargerEnableMask` (MFIO select 1) and `kIOMfioLCDPowerMask`
-(MFIO select 17). The same class also gates the Vcc rails for the LCD, IR,
-sound, MagicBus, and modem, so it is the right place to model board power as a
-whole rather than patching ADC constants.
+(MFIO select 17). Disassembly also prevents over-modelling: in this Apollo
+release, the Sound, IR and Modem1 Vcc accessors at `0x13c3ae80`–`0x13c3aea8`
+are literal stubs (getters always return true and setters do nothing), rather
+than unimplemented MFIO rails. LCD, Magic Bus and charger are the actual
+software-visible output paths.
 
 ### Package-level reset evidence
 
@@ -364,8 +391,10 @@ The harness uses a fresh private NVRAM directory and two MAME processes:
 1. Boot, calibrate, reach the desk, press power, and verify two stable
    `WaitForPowerDown` samples with `shutdownReason == 'POFF'` and VCC off.
 2. Relaunch only the persisted RAM/RTC. The ROM moves through `DeepDoze` to a
-   VCC-on cleanup `Doze`; one button event lets that retained shutdown
-   transaction finish at VCC-off `WaitForPowerDown`.
+   VCC-on cleanup path; the scheduled stop-timer status may release that
+   intermediate doze, so acceptance requires observed entry rather than two
+   permanently stopped samples. One button event then lets the retained
+   shutdown transaction finish at VCC-off `WaitForPowerDown`.
 3. Hold the on-button from the final sleep. The acceptance checkpoint
    requires `interrupt5 & 0x00800000`, live `powerControl & 0x80000000`, and
    StopCpu released; later checkpoints must have VCC on and PCs outside

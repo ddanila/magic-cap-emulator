@@ -162,6 +162,10 @@ boot, OS, and peripheral regressions:
   VCC-on doze, while an on-button edge restores VCC after power-down. Dino's
   bank-6 low-priority summary follows enabled status in banks 1–5, including
   the polled `DeepDoze` wake path.
+- Apollo MFIO output effects: LCD power blanks scanout while preserving its
+  framebuffer, Magic Bus Vcc-off removes the peripheral and its assigned
+  address, and charger enable advances the selected main-battery ADC only
+  while AC is attached and the battery cover is fitted.
 - Synchronous stop-timer completion used by the low-level Betty reset.
 - Power-on mode input bit 3: high boots Magic Cap, low stays in the IDT
   monitor.
@@ -171,8 +175,8 @@ boot, OS, and peripheral regressions:
 
 These are deliberately ROM-observed behaviors, not a claim that all Dino
 timing and interrupt semantics are complete. Sound-receive DMA/microphone
-input and board-level effects of the power-rail outputs remain outside this
-implemented subset.
+input and power outputs without a represented consumer, such as card Vpp,
+remain outside this implemented subset.
 
 ## Magic Bus
 

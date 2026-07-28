@@ -17,7 +17,8 @@ are shortened; the animations play at their recorded speed. How it is made:
 
 The emulated machine boots ROM build 3.1.2j to the interactive Magic Cap
 workbench: touchscreen, persistent storage and suspend/wake, speaker output,
-both PC Card slots, package installation over serial PCLink, IrDA beaming
+live AC charging with LCD/Magic Bus power-rail effects, both PC Card slots,
+package installation over serial PCLink, IrDA beaming
 between two emulated communicators, Web Browser 4.0 fetching local HTTP over
 both live PC Card PPP and the original EtherLink III driver, and deterministic
 native `https://` dispatch through Web Browser 3.5's TLS proxy Rule and Crypto
