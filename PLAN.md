@@ -21,6 +21,7 @@ The full regression list and expected checkpoints are in
 | Magic Bus | Address assignment, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core, completes TCP through rootless libslirp, renders deterministic local HTTP, carries Browser 3.5's native HTTPS Rule through a host TLS proxy, and can browse public HTTPS sites through a guarded loopback launcher | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
+| Storage cards | Blank setup, persistent remount, live Option-insert reformat, battery states and card-backed objects; authentic Simulator 1.x cards reach `Translation.pkg`'s selection UI while remaining byte-for-byte unchanged | [`developer-archives.md`](docs/developer-archives.md#storage-cards-an-exact-os-visible-contract), [`mame-bringup.md`](docs/mame-bringup.md) |
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap, including the 452K Apollo browser from the Old VCR field report | [`pclink.md`](docs/pclink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
 | IrDA / Beam | Two fresh communicators discover each other by name over SIR, the sender selects the receiver, and a name card arrives in the receiver's Inbox | [`irda.md`](docs/irda.md) |
 | Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 fetches and renders deterministic local HTTP | [`modem.md`](docs/modem.md) |
@@ -44,7 +45,11 @@ The full regression list and expected checkpoints are in
   header regeneration. Both slots now offer Good/Low/Dead card-battery
   settings and expose the BVD state the ROM decodes. The card can also be
   selected as the new-item destination; a drawn Notebook page survives a
-  fresh emulator process byte-for-byte. Package translation and
+  fresh emulator process byte-for-byte. The converter now separates a
+  Simulator 1.x file's 12-byte Macintosh wrapper, compact CIS and common
+  memory correctly; the installed CompatibilityCardServer accepts the card,
+  opens the real package-selection UI and leaves the source unchanged.
+  Translating a nonempty eligible 1.x package into a new destination and
   built-in-storage backup/restore remain
   ([`developer-archives.md`](docs/developer-archives.md#storage-cards-an-exact-os-visible-contract),
   [`user-guide.md`](docs/user-guide.md#developer-storage-card-specification)).
