@@ -62,13 +62,21 @@ unformatted RAM card and `RAMC` for a formatted one; the complete type table
 and field layout are in
 [`developer-archives.md`](developer-archives.md#storage-cards-an-exact-os-visible-contract).
 
-This is not yet implemented. The current 8 MiB linear-card model returns a
-generic SRAM CIS and an all-`0xff` common-memory image. It proves Glacier,
-PCMCIA and persistence plumbing, but does not supply the documented Magic Cap
-card metadata. Adding a `BLNK` tuple is therefore the first controlled
-lifecycle experiment; the real ROM flow must confirm whether that omission is
-the reason setup does not start before the resulting metacluster is treated
-as understood.
+The 8 MiB linear-card model now distinguishes product storage from unrelated
+raw images. An erased or previously formatted storage image exposes the
+documented `GMMC` tuple; it starts as `BLNK`, while a common-memory `MCAP`
+header changes the derived tuple to `RAMC` and supplies its metacluster offset.
+Other raw images retain the generic SRAM CIS, so the 840F flasher and the
+low-level card-window regression are not misidentified as erasable storage.
+
+`tools/storage_card_regression.py` runs three isolated boots against one
+disposable card file. The first captures Magic Cap's setup and naming windows
+and formats the erased image. The second proves the on-disk header and
+`RAMC`/`0xb0` tuple survive a fresh process. The third inserts the formatted
+card while holding Option, captures the erase/setup and naming windows, and
+requires the regenerated header stamp to differ. BVD battery selection,
+package translation, moving a real object onto the card, and backup/restore
+remain separate workflows.
 
 The same FAQ distinguishes self-hosted custom cards from ordinary PCMCIA
 cards. An ordinary card is claimed by a separately installed `CardServer`
@@ -86,7 +94,7 @@ the contract for future archived WaveLAN, NE2000 and wireless-card work.
 | Web access | Internet Center provider settings drive dial-up Web access and downloaded-page handling (pp. 105–120, 165–174) | PC Card modem completes Hayes/PPP and Web Browser 4.0 fetches a deterministic local page | Covered for the PC Card PPP route |
 | Telephone and built-in modem | The built-in fax modem uses a telephone line and supports tone/pulse configuration (pp. 135–163, 216) | ROM V.32 code and continuous telecom DMA execute | Internal ROM/DSP boundary covered; DAA, dial tone, carrier, remote peer, pulse dialing and fax are missing |
 | Storeroom and packages | Packages can be moved, unpacked, sent, backed up and restored through Storeroom (pp. 179–206) | PCLink installs a real package into built-in storage | Package installation covered; storage-card backup/restore is not |
-| Storage cards | A card inserted while off is offered for setup after power-on; Option-insert while running can erase/setup it; Magic Cap displays card battery state and can translate older packages (pp. 183–198, 210–215) | Both Glacier slots expose common memory, generic CIS, writes and insertion edges; the developer FAQ now defines the missing Magic tuple | Electrical/raw path covered and next format step specified; setup, formatting, battery and backup lifecycle is not |
+| Storage cards | A card inserted while off is offered for setup after power-on; Option-insert while running can erase/setup it; Magic Cap displays card battery state and can translate older packages (pp. 183–198, 210–215) | Erased `BLNK` setup/naming, persistent `RAMC` remount and live Option-insert reformat pass across isolated boots | Core format lifecycle covered; battery states, translation, object transfer and backup/restore remain |
 | Power | Main and backup batteries are displayed; AC operation recharges the main cell; automatic shutoff defaults to five minutes and is adjustable from 1–60 minutes, optionally while plugged in (pp. 209–211) | Battery ADC levels, AC/cover inputs and retained-RAM suspend/wake pass | Inputs and explicit wake covered; charging, time-varying capacity and the user-configured idle policy are not |
 | Magic Bus | The connector supports PCs, external keyboards, external modems and other accessories, commonly daisy-chained (p. 217) | One checksummed bidirectional `ATKB` keyboard is discovered and exchanges Set-2/LED traffic | Single keyboard covered; multiple devices, chaining and other accessory classes are not |
 | Persistence and privacy | Storage-card backup/restore and power-on password confirmation protect retained information (pp. 196–198, 207–208) | Battery-backed DRAM and RTC survive a two-process power cycle | Hardware retention covered; backup/restore and password UI are not automated |
@@ -100,12 +108,11 @@ hardware gaps:
    stamp, record from a deterministic host source, stop, play it back and
    verify the captured samples. This is the clearest acceptance test for
    Betty/Dino sound-RX DMA and microphone input.
-2. **Storage-card lifecycle.** Add CIS tuple `0xA0` with `GMMC`, version
-   `0x00010001`, type `BLNK` and a stable unique ID to a disposable card.
-   Power-cycle with it inserted, complete Magic Cap's setup/name flow, capture
-   any resulting tuple and metacluster changes, write an object, relaunch,
-   then back up and restore built-in information. Add selectable BVD battery
-   levels and test live Option-insert erase plus `Translation.pkg` separately.
+2. **Remaining storage-card workflows.** Add selectable BVD battery levels,
+   move a real object onto the formatted card and prove it after relaunch,
+   exercise `Translation.pkg`, then back up and restore built-in information.
+   `BLNK` setup/naming, persistent `RAMC` remount and live Option-insert
+   reformat are covered by `tools/storage_card_regression.py`.
 3. **Power Controls policy and charging.** Verify the five-minute default,
    1–60 minute adjustment and “even when plugged in” choice. With AC attached
    and charger enable asserted, advance a modelled main-battery level and

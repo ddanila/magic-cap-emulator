@@ -312,7 +312,9 @@ GPIO paths, but both address windows should be logged from the start.
 The current driver goes further than this original bring-up note: both blocks
 route PC Card detect, READY/IREQ, BVD and write-protect inputs, latch insertion
 edges, and expose slot common/attribute/I/O cycles. The linear-card option
-persists an 8 MiB common-memory image and returns a generic SRAM CIS.
+persists an 8 MiB common-memory image. Unrelated raw images return a generic
+SRAM CIS; erased and formatted Magic Cap storage images instead expose the
+vendor tuple below.
 
 The recovered General Magic FAQ now defines the OS-visible piece that generic
 CIS lacks. Magic Cap expects vendor tuple `0xA0` with magic `GMMC`, version
@@ -322,6 +324,9 @@ in attribute memory, not at the beginning of the raw common-memory image.
 Field layout, all card types, the standard-card `CardServer` path and a
 concrete lifecycle acceptance sequence are in
 [`developer-archives.md`](developer-archives.md#storage-cards-an-exact-os-visible-contract).
+The implemented sequence is automated by `tools/storage_card_regression.py`;
+it proves `BLNK` setup, the ROM-written `MCAP` header, a derived `RAMC` tuple,
+fresh-process persistence and live Option-insert reformat.
 
 ## Boot landmarks
 

@@ -37,13 +37,13 @@ The full regression list and expected checkpoints are in
   1–60 minute idle shutoff, making both concrete acceptance targets
   ([`power-wake.md`](docs/power-wake.md#outputs-the-os-writes)).
 
-- **Complete the storage-card lifecycle.** Both Glacier slots currently pass
-  raw common-memory, CIS, insertion and write/readback checks. They do not yet
-  cover Magic Cap's blank-card setup/format flow, storage-card battery levels,
-  live Option-insert erase/setup, package translation, or backup/restore. The
-  recovered developer FAQ removes the principal format ambiguity: the current
-  generic SRAM CIS lacks Magic Cap tuple `0xA0`, whose exact `GMMC` layout,
-  `BLNK`/`RAMC` types and metacluster pointer are now documented
+- **Finish the remaining storage-card workflows.** Erased 8 MiB images now
+  expose Magic Cap tuple `0xA0` as `BLNK`; the ROM sets them up and names them,
+  writes its metacluster to common memory, and remounts the persisted image as
+  `RAMC`. A separate fresh boot proves live Option-insert erase/setup and
+  header regeneration. Selectable card-battery levels, package translation,
+  moving a real object onto the card, and built-in-storage backup/restore
+  remain
   ([`developer-archives.md`](docs/developer-archives.md#storage-cards-an-exact-os-visible-contract),
   [`user-guide.md`](docs/user-guide.md#developer-storage-card-specification)).
 
