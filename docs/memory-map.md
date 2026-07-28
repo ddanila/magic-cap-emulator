@@ -326,7 +326,12 @@ concrete lifecycle acceptance sequence are in
 [`developer-archives.md`](developer-archives.md#storage-cards-an-exact-os-visible-contract).
 The implemented sequence is automated by `tools/storage_card_regression.py`;
 it proves `BLNK` setup, the ROM-written `MCAP` header, a derived `RAMC` tuple,
-fresh-process persistence and live Option-insert reformat.
+fresh-process persistence and live Option-insert reformat. Each slot also has
+a **PC Card slot battery** machine setting. Good drives BVD2/BVD1=`11`, Low
+drives `01`, and Dead drives `00`; slot 1 BVD1 appears at Dino IO bit 1
+(`0x10c00180`) and BVD2 at Glacier 1 IO-input bit 1 (`0x1040000c`). The ROM
+maps those three codes to `kCardBatteryGood`, `kCardBatteryLow` and
+`kCardBatteryDead`.
 
 ## Boot landmarks
 

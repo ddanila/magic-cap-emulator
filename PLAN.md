@@ -41,7 +41,8 @@ The full regression list and expected checkpoints are in
   expose Magic Cap tuple `0xA0` as `BLNK`; the ROM sets them up and names them,
   writes its metacluster to common memory, and remounts the persisted image as
   `RAMC`. A separate fresh boot proves live Option-insert erase/setup and
-  header regeneration. Selectable card-battery levels, package translation,
+  header regeneration. Both slots now offer Good/Low/Dead card-battery
+  settings and expose the BVD state the ROM decodes. Package translation,
   moving a real object onto the card, and built-in-storage backup/restore
   remain
   ([`developer-archives.md`](docs/developer-archives.md#storage-cards-an-exact-os-visible-contract),

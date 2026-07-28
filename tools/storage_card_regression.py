@@ -24,7 +24,7 @@ DEFAULT_WORKDIR = ASSETS_ROOT / "runtime" / "storage-card-regression"
 CARD_SIZE = 8 * 1024 * 1024
 BLANK_SHA256 = hashlib.sha256(b"\xff" * CARD_SIZE).hexdigest()
 CHECKPOINT_PATTERN = re.compile(
-    rb"STORAGE_(BLANK|FORMAT|REINSERT|OPTION|FINAL) ([^\r\n]+)"
+    rb"STORAGE_(BLANK|FORMAT|BATTERY|REINSERT|OPTION|FINAL) ([^\r\n]+)"
 )
 
 
@@ -37,8 +37,12 @@ local ports = machine.ioport.ports
 local touch_x = ports[":TOUCH_X"]:field(0xffff)
 local touch_y = ports[":TOUCH_Y"]:field(0xffff)
 local touch_button = ports[":TOUCH_BUTTON"]:field(0x01)
+local card_battery = ports[":PCCARD1_BATTERY"]:field(0x03)
 local frames = 0
 local card_image = nil
+local battery_good = 0
+local battery_low = 0
+local battery_dead = 0
 
 local function press(x, y)
     touch_x:set_value(math.floor((x * 0xffff) / 479))
@@ -74,6 +78,12 @@ local function tuple_word(first)
             0x08000000 + index * 2)
     end
     return value
+end
+
+local function battery_pins()
+    local bvd1 = (program:read_u32(0x10c00180) >> 1) & 1
+    local bvd2 = program:read_u16(0x1040000c) & 2
+    return bvd1 | bvd2
 end
 
 emu.register_frame_done(function()
@@ -126,6 +136,28 @@ emu.register_frame_done(function()
         press(239, 145)
     elseif frames == 2770 then
         touch_button:set_value(0)
+    elseif frames == 2800 then
+        battery_good = battery_pins()
+        -- Configuration fields are toggle inputs in MAME's Lua API.  Pulse
+        -- the field once for each setting instead of passing the setting's
+        -- numeric value (all non-zero values mean "pressed").
+        card_battery:set_value(1)
+    elseif frames == 2801 then
+        card_battery:set_value(0)
+    elseif frames == 2840 then
+        battery_low = battery_pins()
+        card_battery:set_value(1)
+    elseif frames == 2841 then
+        card_battery:set_value(0)
+    elseif frames == 2880 then
+        battery_dead = battery_pins()
+        card_battery:set_value(1)
+    elseif frames == 2881 then
+        card_battery:set_value(0)
+    elseif frames == 2920 then
+        print(string.format(
+            "STORAGE_BATTERY GOOD=%X LOW=%X DEAD=%X",
+            battery_good, battery_low, battery_dead))
     elseif frames == 3000 then
         machine:exit()
     end
@@ -390,8 +422,10 @@ def run_regression(args: argparse.Namespace) -> int:
     for name, script, needs_debugger in phases:
         phase_dir = run_dir / name
         nvram_dir = phase_dir / "nvram"
+        cfg_dir = phase_dir / "cfg"
         snapshot_dir = phase_dir / "snapshots"
         nvram_dir.mkdir(parents=True)
+        cfg_dir.mkdir()
         snapshot_dir.mkdir()
         snapshot_dirs[name] = snapshot_dir
         lua_path = phase_dir / f"storage-card-{name}.lua"
@@ -403,6 +437,8 @@ def run_regression(args: argparse.Namespace) -> int:
             str(rompath),
             "-nvram_directory",
             str(nvram_dir),
+            "-cfg_directory",
+            str(cfg_dir),
             "-snapshot_directory",
             str(snapshot_dir),
             "-snapview",
@@ -470,6 +506,11 @@ def run_regression(args: argparse.Namespace) -> int:
             "VERSION": 0x00020001,
             "CLUSTER": 0x000000B0,
             "NAME": 0x0055006E,
+        },
+        "BATTERY": {
+            "GOOD": 0x3,
+            "LOW": 0x1,
+            "DEAD": 0x0,
         },
         "REINSERT": {
             "MAGIC": 0x474D4D43,

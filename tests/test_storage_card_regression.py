@@ -36,6 +36,8 @@ class StorageCardRegressionTests(unittest.TestCase):
         self.assertIn('card_image:load("/tmp/card")', setup)
         self.assertIn("STORAGE_BLANK", setup)
         self.assertIn("STORAGE_FORMAT", setup)
+        self.assertIn("STORAGE_BATTERY", setup)
+        self.assertIn('ports[":PCCARD1_BATTERY"]', setup)
         self.assertIn('image:load("/tmp/card")', reinsert)
         self.assertIn("STORAGE_REINSERT", reinsert)
         self.assertIn("option_button:set_value(1)", option)

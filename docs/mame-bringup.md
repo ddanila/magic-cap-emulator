@@ -338,10 +338,13 @@ python3 tools/storage_card_regression.py
 
 Its three isolated boots prove blank-card setup and naming, persisted
 `BLNK`→`RAMC`/metacluster conversion, normal remount, and live Option-insert
-erase/setup with header regeneration. Generated cards, logs, Lua and
-screenshots remain under
-`$MAGIC_CAP_ASSETS/runtime/storage-card-regression/`. Card-battery reporting,
-package translation, object transfer and backup/restore remain tracked in
+erase/setup with header regeneration. The first boot additionally cycles the
+slot through Good, Low and Dead battery settings and requires BVD2/BVD1
+codes `11`, `01` and `00`. Every phase uses isolated NVRAM and MAME
+configuration directories, sharing only the card image. Generated cards,
+logs, Lua and screenshots remain under
+`$MAGIC_CAP_ASSETS/runtime/storage-card-regression/`. Package translation,
+object transfer and backup/restore remain tracked in
 [`user-guide.md`](user-guide.md).
 
 The PCLink harness uses the real UART-A PTY and recovered WinPCLink framing to
@@ -463,7 +466,7 @@ the separate serial-terminal view.
 | Sound output | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
 | Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 FIR code through a TX39 `MADD` |
 | Magic Bus | ROM assigns address zero, validates the checksummed `ATKB` descriptor, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures |
-| PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback and live-OS checks; blank storage setup, persistent `RAMC` remount and Option-insert reformat also pass |
+| PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback and live-OS checks; blank storage setup, persistent `RAMC` remount, Option-insert reformat and Good/Low/Dead battery pins also pass |
 | PC Card Ethernet | The archived EtherLink driver initializes the 3C589, completes ARP/TCP through rootless libslirp, renders deterministic local HTTP, and carries Browser 3.5's native HTTPS Rule through a loopback Crypto Ancienne proxy; the absolute request, decrypted request, and rendered result are checked |
 | PCLink | The Storeroom computer installs archived `DvorakKeyboard.pkg`; the optional 452K TLS-browser package also transfers, disconnects cleanly, and records zero ROM Magic Bus failures |
 | IrDA / Beam | Two fresh peers exchange SIR discovery frames, select `bob Receiver`, and transfer `alice Sender`'s name card into the receiver's Inbox |
