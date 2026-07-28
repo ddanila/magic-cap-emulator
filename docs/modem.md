@@ -112,6 +112,35 @@ dialing location, and binds that location to `PPP PC Card` in the same
 process. It copies the seed into each run, so the preserved source remains
 unchanged.
 
+## Save-state boundary
+
+The optional card's complete modeled state is serialized: configuration
+option, FIFO control, interrupt enable, line/modem control, baud divisor,
+scratch register, pending transmit interrupt, the 64 KiB circular receive
+buffer with its head/count, and Glacier READY/IREQ. A state captured with the
+card present restores it continuously instead of generating the older
+synthetic remove/insert pulse. Selecting the modem while loading a checkpoint
+that genuinely saved an empty slot still produces the insertion needed for
+that workflow.
+
+Run the hardware-level acceptance check with:
+
+```sh
+python3 tools/modem_save_regression.py
+```
+
+It uses the monitor boot path, feeds `ABCD` through the announced PTY, consumes
+`A`, saves, destroys every state group, and reloads. Acceptance requires
+restored `BCD`, divisor `0x1234`, the distinctive UART registers, FIFO-mode RX
+then TX interrupt identification (`c4`, `c2`, `c1`), READY returning after the
+queue and transmit interrupt clear, and no new card-detect edge. The saved
+artifact stays under `$MAGIC_CAP_ASSETS/runtime/modem-save-regression/`.
+
+The PTY's host peer and any Slirp process are outside MAME and are therefore
+not serialized. The test proves that no guest-visible modem byte or interrupt
+is lost inside MAME; resuming an entire live PPP conversation additionally
+requires a peer whose own protocol state has been retained.
+
 ## Verify the guest modem boundary
 
 The probe supplies `OK` and `CONNECT`, captures the first async-HDLC PPP

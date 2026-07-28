@@ -25,17 +25,11 @@ The full regression list and expected checkpoints are in
 | Storage cards | Blank setup, persistent remount, live Option-insert reformat, battery states, card-backed objects, full built-in-storage backup/restore, and source-preserving translation of a real 1.x `new items` package into 3.1 Built-in storage | [`developer-archives.md`](docs/developer-archives.md#storage-cards-an-exact-os-visible-contract), [`mame-bringup.md`](docs/mame-bringup.md) |
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap, including the 452K Apollo browser from the Old VCR field report | [`pclink.md`](docs/pclink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
 | IrDA / Beam | Two fresh communicators discover each other by name over SIR, the sender selects the receiver, and a name card arrives in the receiver's Inbox | [`irda.md`](docs/irda.md) |
-| Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 fetches and renders deterministic local HTTP | [`modem.md`](docs/modem.md) |
+| Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 fetches and renders deterministic local HTTP; its 16550 registers, partially consumed receive FIFO and IREQ state survive save/load without a false card-removal edge | [`modem.md`](docs/modem.md) |
 | Variants | `datarover840` / `840f` (writable flash) / `840j` / `840d` (1998-04-07 development ROM) all build and verify; `840d` also boots to the workbench | [`rom-layout.md`](docs/rom-layout.md), [`dev-rom.md`](docs/dev-rom.md) |
 | OS self-tests | The development ROM's real Command-T runs through the OS scheduler: all 16 basic suites complete and return with no complaint. Fourteen individually driven unit tests — including `CheckROMPristineTable`, the OS verifying its own ROM — remain useful focused checks | [`dev-rom.md`](docs/dev-rom.md) |
 
 ## Remaining work
-
-- **Complete PC Card modem save states.** The main driver state is registered,
-  but the optional modem card's 16550 registers and receive queue are not.
-  A restore therefore deliberately pulses card detect and makes Magic Cap
-  re-enumerate the card instead of resuming an in-flight modem session
-  ([`mame-bringup.md`](docs/mame-bringup.md#known-gap-save-state-coverage)).
 
 - **Model the built-in modem's external line side.** The SIB telecom DMA ring
   and ROM V.32 DSP execute, but the external DAA, carrier acquisition, and a

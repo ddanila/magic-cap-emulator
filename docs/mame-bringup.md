@@ -150,18 +150,22 @@ persist into the cfg directory, so a stray setting can silently affect later
 runs. Every headless harness here passes its own `-cfg_directory` for that
 reason.
 
-### Known gap: save-state coverage
+### Save-state coverage
 
-The machine is `MACHINE_SUPPORTS_SAVE`, but not every driver member is
-registered with `save_item`. The PC Card modem's 16550 state is the notable
-group — `m_config_option`, `m_fcr`, `m_ier`, `m_lcr`, `m_mcr`, `m_divisor`,
-`m_scratch`, `m_rx_data`, `m_rx_head`, `m_rx_count`, and
-`m_tx_irq_pending` — and the slot's `m_pccard_ready` state is also omitted.
-A restored session therefore cannot resume an in-flight modem exchange. The
-driver deliberately pulses card detect after loading so Magic Cap
-re-enumerates the selected modem and its new host PTY. Anything added to the
-driver should be registered at the same time; two DMA flags were missed that
-way and fixed afterwards.
+The machine is `MACHINE_SUPPORTS_SAVE`, and the modeled driver state is
+registered with `save_item`, including the PC Card modem's configuration
+option, 16550 registers, 64 KiB circular receive buffer and indices, pending
+transmit interrupt, and Glacier READY/IREQ level. A state saved with the modem
+present restores continuous card presence; it no longer manufactures a
+remove/insert edge. For compatibility, selecting the optional modem while
+loading a state whose saved CD pins describe an empty slot remains a genuine
+insertion and is signaled as such.
+
+`tools/modem_save_regression.py` writes distinctive UART state, supplies four
+host bytes, consumes one, saves, corrupts every group, reloads, and proves the
+three remaining bytes, divisor/register values, RX-then-TX interrupt priority,
+READY/IREQ transition, and absence of new card-detect edges. A host PTY peer
+or Slirp process is external to MAME and is not serialized.
 
 `-lightgun -lightgun_device lightgun` maps the host pointer to one absolute
 SDL lightgun device. The driver binds X, Y, and pen-down to that same device;
@@ -241,6 +245,7 @@ python3 tools/ir_probe.py
 python3 tools/beam_regression.py
 python3 tools/tx39_regression.py
 python3 tools/pccard_regression.py
+python3 tools/modem_save_regression.py
 python3 tools/storage_card_regression.py
 python3 tools/storage_backup_regression.py
 # Requires a state made by installing Translation.pkg with pclink_regression:
@@ -528,14 +533,13 @@ the separate serial-terminal view.
 | PC Card Ethernet | The archived EtherLink driver initializes the 3C589, completes ARP/TCP through rootless libslirp, renders deterministic local HTTP, and carries Browser 3.5's native HTTPS Rule through a loopback Crypto Ancienne proxy; the absolute request, decrypted request, and rendered result are checked |
 | PCLink | The Storeroom computer installs archived `DvorakKeyboard.pkg`; the optional 452K TLS-browser package also transfers, disconnects cleanly, and records zero ROM Magic Bus failures |
 | IrDA / Beam | Two fresh peers exchange SIR discovery frames, select `bob Receiver`, and transfer `alice Sender`'s name card into the receiver's Inbox |
-| PC Card modem | Magic Cap detects the card, completes its Hayes sequence, and emits an async-HDLC PPP LCP frame |
+| PC Card modem | Magic Cap detects the card, completes its Hayes sequence, emits an async-HDLC PPP LCP frame, and preserves its 16550/RX/IREQ state without a false card edge across save/load |
 | Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
 
 The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
-still incomplete. The current gaps are complete PC Card modem save state, the
-built-in modem's external line side,
-microphone/sound-receive DMA, multi-device Magic Bus topology, and hardware
-fidelity beyond the register behavior
+still incomplete. The current gaps are the built-in modem's external line
+side, microphone/sound-receive DMA, multi-device Magic Bus topology, and
+hardware fidelity beyond the register behavior
 exercised by the ROM; see
 [`PLAN.md`](../PLAN.md#remaining-work). Magic Bus discovery and its
 AT-keyboard traffic are functional and covered by the headless probe.
