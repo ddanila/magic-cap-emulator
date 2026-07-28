@@ -264,10 +264,9 @@ The product guide turns two of these from speculative fidelity into observable
 acceptance requirements. *Using Magic Cap*, pp. 209–211, says AC power
 recharges the main cell while the communicator remains in use. It also defines
 a five-minute automatic-shutoff default, adjustable from 1–60 minutes, with a
-separate choice for shutting off while plugged in. A complete UI regression
-still needs to drive the Power controls, verify those policy values and observe
-idle power-down. Charger-enabled AC movement is now covered below. The same
-window displays storage-card battery state, which belongs to the storage-card
+separate choice for shutting off while plugged in. Both the charger effect and
+the complete Power Controls policy are now covered below. The same window
+displays storage-card battery state, which belongs to the storage-card
 lifecycle tracked in [`user-guide.md`](user-guide.md).
 
 Run the direct output acceptance check with:
@@ -283,7 +282,30 @@ disable, observed a Magic Bus request change from present to absent across Vcc
 removal and return after restoration, and compared powered/blank native LCD
 snapshots.
 
-## ROM evidence and remaining policy work
+### Power Controls idle policy
+
+Run the real UI acceptance check with:
+
+```sh
+python3 tools/power_policy_regression.py
+```
+
+It opens Hallway → Controls → Power and uses the actual minus, plus and
+checkbox controls. OCR verifies the release defaults to five minutes, clamps
+at one minute after ten minus presses, clamps at 60 after 70 plus presses and
+returns to one after 70 minus presses. The checkbox interior is checked
+independently so a coincidental OCR result cannot hide a missed touch.
+
+With AC attached and “even when plugged in” initially clear, waiting 70
+emulated seconds leaves VCC on in the ordinary doze loop: PC `0x13c3b270`,
+shutdown reason zero and power control `0x6000241b`. After selecting the
+checkbox and waiting the same interval, the ROM reaches `WaitForPowerDown` at
+`0x13c3b1c8` with normal-sleep reason `SLEE` (`0x534c4545`) and power control
+`0x60002408`, with VCC off. This covers both the numeric bounds and the
+external-power exception rather than substituting direct register writes for
+the user policy.
+
+## ROM evidence
 
 Where to look, all in the release build unless noted:
 

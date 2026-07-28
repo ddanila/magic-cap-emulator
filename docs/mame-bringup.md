@@ -28,7 +28,7 @@ because it drives a real MAME Tab menu under Xvfb. The bridge's dependencies
 Install the Xcode Command Line Tools, then:
 
 ```sh
-brew install sdl2 sdl2_ttf coreutils unar
+brew install sdl2 sdl2_ttf coreutils unar tesseract
 ```
 
 `coreutils` supplies the `sha256sum` and `nproc` used by these docs
@@ -56,7 +56,7 @@ sudo apt-get install \
   qt6-base-dev qt6-base-dev-tools qtchooser \
   ccache binutils-mips-linux-gnu gdb-multiarch unshield unar xvfb xdotool \
   curl unzip gzip openssl slirp bubblewrap \
-  imagemagick ffmpeg gifsicle
+  imagemagick ffmpeg gifsicle tesseract-ocr
 ```
 
 The cross-GCC packages are not required. In particular,
@@ -235,6 +235,7 @@ python3 tools/builtin_modem_regression.py \
   --nvram-source /path/to/a/passing/combined-browser/run/nvram
 python3 tools/battery_regression.py
 python3 tools/power_outputs_regression.py
+python3 tools/power_policy_regression.py
 python3 tools/magicbus_probe.py
 python3 tools/ir_probe.py
 python3 tools/beam_regression.py
@@ -519,7 +520,7 @@ the separate serial-terminal view.
 | Calibration | Upper-left, lower-right, and center targets accept synthesized Betty ADC samples |
 | Workbench | Live Dino buffer `0x003f6a00` reaches stable lower-workbench signature `0x9dab458b`; the clock-dependent full-screen checksum is informational |
 | Persistence | 4 MiB DRAM and Dino RTC use external NVRAM files; a two-process regression proves retained-RAM power-down and on-button wake |
-| Power outputs | LCD power blanks scanout without losing its framebuffer; Magic Bus Vcc-off drops and later rediscovers the accessory; AC plus charger enable raises the main-battery ADC and disabling the charger stops it |
+| Power | LCD power blanks scanout without losing its framebuffer; Magic Bus Vcc-off drops and later rediscovers the accessory; AC plus charger enable raises the main-battery ADC; the real controls clamp 1–60 minutes and their AC-idle checkbox governs automatic `SLEE`/VCC-off shutdown |
 | Sound output | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
 | Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 FIR code through a TX39 `MADD` |
 | Magic Bus | ROM assigns and later reassigns address zero, validates the checksummed `ATKB` descriptor, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures |
@@ -531,9 +532,8 @@ the separate serial-terminal view.
 | Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
 
 The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
-still incomplete. The current gaps are the Power Controls automatic-shutoff
-policy, complete PC Card modem save state, the built-in modem's external line
-side,
+still incomplete. The current gaps are complete PC Card modem save state, the
+built-in modem's external line side,
 microphone/sound-receive DMA, multi-device Magic Bus topology, and hardware
 fidelity beyond the register behavior
 exercised by the ROM; see
