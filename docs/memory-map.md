@@ -283,6 +283,13 @@ into `MagicBusError` or `MagicBus_HandleMagicBusFailure`. The probe refuses the
 development ROM because those routine addresses shift and would silently
 measure nothing.
 
+Magic Cap later repeats broadcast address assignment when it reinitializes
+the bus. The single modeled keyboard answers that broadcast even after an
+earlier assignment, allowing the ROM to discard and recreate its client at
+address zero. `tools/storage_backup_regression.py` exercises this path during
+both backup and restore and rejects any entry into
+`MagicBus_HandleMagicBusFailure`.
+
 ## Glacier blocks
 
 The monitor initializes two custom 16-bit GPIO/interrupt blocks at

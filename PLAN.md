@@ -18,10 +18,10 @@ The full regression list and expected checkpoints are in
 | Battery & supply inputs | Both ADC channels answer within the ROM's own calibration thresholds, so the spurious backup-battery warning is gone; battery levels, AC adapter and battery cover are selectable, and removing the cover raises the IO interrupt the OS services | [`power-wake.md`](docs/power-wake.md#battery-levels) |
 | Sound output | ROM's startup tone (unbuffered hold register) plus the buffered SIB sound DMA ring: half/end handlers continuously refill DRAM buffers and complete the OS speaker lifecycle | [`betty-registers.md`](docs/betty-registers.md) |
 | Built-in software modem | Continuous 48-word SIB telecom DMA ring drives the ROM's V.32 pump/control/FIR through a TX39 `MADD` | [`builtin-modem.md`](docs/builtin-modem.md) |
-| Magic Bus | Address assignment, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
+| Magic Bus | Address assignment and reinitialization, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core, completes TCP through rootless libslirp, renders deterministic local HTTP, carries Browser 3.5's native HTTPS Rule through a host TLS proxy, and can browse public HTTPS sites through a guarded loopback launcher | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
-| Storage cards | Blank setup, persistent remount, live Option-insert reformat, battery states and card-backed objects; authentic Simulator 1.x cards reach `Translation.pkg`'s selection UI while remaining byte-for-byte unchanged | [`developer-archives.md`](docs/developer-archives.md#storage-cards-an-exact-os-visible-contract), [`mame-bringup.md`](docs/mame-bringup.md) |
+| Storage cards | Blank setup, persistent remount, live Option-insert reformat, battery states, card-backed objects, and full built-in-storage backup/restore; authentic Simulator 1.x cards reach `Translation.pkg`'s selection UI while remaining byte-for-byte unchanged | [`developer-archives.md`](docs/developer-archives.md#storage-cards-an-exact-os-visible-contract), [`mame-bringup.md`](docs/mame-bringup.md) |
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap, including the 452K Apollo browser from the Old VCR field report | [`pclink.md`](docs/pclink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
 | IrDA / Beam | Two fresh communicators discover each other by name over SIR, the sender selects the receiver, and a name card arrives in the receiver's Inbox | [`irda.md`](docs/irda.md) |
 | Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 fetches and renders deterministic local HTTP | [`modem.md`](docs/modem.md) |
@@ -38,7 +38,7 @@ The full regression list and expected checkpoints are in
   1–60 minute idle shutoff, making both concrete acceptance targets
   ([`power-wake.md`](docs/power-wake.md#outputs-the-os-writes)).
 
-- **Finish the remaining storage-card workflows.** Erased 8 MiB images now
+- **Finish the remaining storage-card workflow.** Erased 8 MiB images now
   expose Magic Cap tuple `0xA0` as `BLNK`; the ROM sets them up and names them,
   writes its metacluster to common memory, and remounts the persisted image as
   `RAMC`. A separate fresh boot proves live Option-insert erase/setup and
@@ -49,8 +49,10 @@ The full regression list and expected checkpoints are in
   Simulator 1.x file's 12-byte Macintosh wrapper, compact CIS and common
   memory correctly; the installed CompatibilityCardServer accepts the card,
   opens the real package-selection UI and leaves the source unchanged.
-  Translating a nonempty eligible 1.x package into a new destination and
-  built-in-storage backup/restore remain
+  A separate three-process regression creates a card-resident built-in
+  backup, restores it into retained RAM, and requires the real completion
+  dialog with zero ROM Magic Bus failures. Translating a nonempty eligible
+  1.x package into a new destination remains
   ([`developer-archives.md`](docs/developer-archives.md#storage-cards-an-exact-os-visible-contract),
   [`user-guide.md`](docs/user-guide.md#developer-storage-card-specification)).
 

@@ -80,7 +80,7 @@ respectively. Both slots expose the same selector under **Machine
 Configuration**. Two more processes select **new items go here**, create and
 draw on a Notebook page, leave Notebook to commit it, then reinsert the same
 card and require the reopened page to be pixel-identical. Package translation
-and backup/restore remain separate workflows.
+and backup/restore are automated by their separate focused regressions below.
 
 The same FAQ distinguishes self-hosted custom cards from ordinary PCMCIA
 cards. An ordinary card is claimed by a separately installed `CardServer`
@@ -97,11 +97,11 @@ the contract for future archived WaveLAN, NE2000 and wireless-card work.
 | Infrared Beam | Any displayed card or page can be beamed; discovery fills the recipient, multiple peers require selection, and Magic Cap 3.1 does not interoperate with earlier versions (pp. 78–79, 133) | Two fresh 3.1 peers discover by owner name, select Bob and transfer Alice's name card | Principal workflow covered; other object types and old-version rejection are not separate tests |
 | Web access | Internet Center provider settings drive dial-up Web access and downloaded-page handling (pp. 105–120, 165–174) | PC Card modem completes Hayes/PPP and Web Browser 4.0 fetches a deterministic local page | Covered for the PC Card PPP route |
 | Telephone and built-in modem | The built-in fax modem uses a telephone line and supports tone/pulse configuration (pp. 135–163, 216) | ROM V.32 code and continuous telecom DMA execute | Internal ROM/DSP boundary covered; DAA, dial tone, carrier, remote peer, pulse dialing and fax are missing |
-| Storeroom and packages | Packages can be moved, unpacked, sent, backed up and restored through Storeroom (pp. 179–206) | PCLink installs a real package into built-in storage | Package installation covered; storage-card backup/restore is not |
-| Storage cards | A card inserted while off is offered for setup after power-on; Option-insert while running can erase/setup it; Magic Cap displays card battery state and can translate older packages (pp. 183–198, 210–215) | Erased `BLNK` setup/naming, persistent `RAMC` remount, live Option-insert reformat, Good/Low/Dead BVD states and a card-backed Notebook object pass across process boundaries; an authentic Simulator 1.x card reaches `Translation.pkg`'s package-selection UI without source writes | Format, battery signaling, user-object persistence and the translation entry path are covered; a nonempty translated package and backup/restore remain |
+| Storeroom and packages | Packages can be moved, unpacked, sent, backed up and restored through Storeroom (pp. 179–206) | PCLink installs a real package; Storeroom creates a card-resident built-in backup and restores it in a fresh process | Package installation and full built-in backup/restore covered |
+| Storage cards | A card inserted while off is offered for setup after power-on; Option-insert while running can erase/setup it; Magic Cap displays card battery state and can translate older packages (pp. 183–198, 210–215) | Erased `BLNK` setup/naming, persistent `RAMC` remount, live Option-insert reformat, Good/Low/Dead BVD states, a card-backed Notebook object, and built-in backup/restore pass across process boundaries; an authentic Simulator 1.x card reaches `Translation.pkg`'s package-selection UI without source writes | Format, battery signaling, user-object persistence, backup/restore, and the translation entry path are covered; a nonempty translated package remains |
 | Power | Main and backup batteries are displayed; AC operation recharges the main cell; automatic shutoff defaults to five minutes and is adjustable from 1–60 minutes, optionally while plugged in (pp. 209–211) | Battery ADC levels, AC/cover inputs and retained-RAM suspend/wake pass | Inputs and explicit wake covered; charging, time-varying capacity and the user-configured idle policy are not |
-| Magic Bus | The connector supports PCs, external keyboards, external modems and other accessories, commonly daisy-chained (p. 217) | One checksummed bidirectional `ATKB` keyboard is discovered and exchanges Set-2/LED traffic | Single keyboard covered; multiple devices, chaining and other accessory classes are not |
-| Persistence and privacy | Storage-card backup/restore and power-on password confirmation protect retained information (pp. 196–198, 207–208) | Battery-backed DRAM and RTC survive a two-process power cycle | Hardware retention covered; backup/restore and password UI are not automated |
+| Magic Bus | The connector supports PCs, external keyboards, external modems and other accessories, commonly daisy-chained (p. 217) | One checksummed bidirectional `ATKB` keyboard is discovered, rediscovered after bus reinitialization, and exchanges Set-2/LED traffic | Single keyboard covered; multiple devices, chaining and other accessory classes are not |
+| Persistence and privacy | Storage-card backup/restore and power-on password confirmation protect retained information (pp. 196–198, 207–208) | Battery-backed DRAM and RTC survive a two-process power cycle; a card backup restores retained RAM and reaches the success dialog | Hardware retention and backup/restore covered; password UI is not automated |
 
 ## Acceptance backlog derived from the guide
 
@@ -112,13 +112,14 @@ hardware gaps:
    stamp, record from a deterministic host source, stop, play it back and
    verify the captured samples. This is the clearest acceptance test for
    Betty/Dino sound-RX DMA and microphone input.
-2. **Remaining storage-card workflows.** Translate a nonempty eligible 1.x
-   package into a new destination, then back up and restore built-in
-   information. `BLNK` setup/naming, persistent `RAMC` remount, live
-   Option-insert reformat, all three BVD battery states and a card-backed
-   Notebook page are covered by `tools/storage_card_regression.py`; authentic
+2. **Remaining storage-card workflow.** Translate a nonempty eligible 1.x
+   package into a new destination. `BLNK` setup/naming, persistent `RAMC`
+   remount, live Option-insert reformat, all three BVD battery states and a
+   card-backed Notebook page are covered by
+   `tools/storage_card_regression.py`; authentic
    1.x card acceptance and the source-preserving selection path are covered
-   by `tools/storage_translation_regression.py`.
+   by `tools/storage_translation_regression.py`; full built-in backup/restore
+   is covered by `tools/storage_backup_regression.py`.
 3. **Power Controls policy and charging.** Verify the five-minute default,
    1–60 minute adjustment and “even when plugged in” choice. With AC attached
    and charger enable asserted, advance a modelled main-battery level and

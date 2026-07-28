@@ -22,11 +22,12 @@ between two emulated communicators, Web Browser 4.0 fetching local HTTP over
 both live PC Card PPP and the original EtherLink III driver, and deterministic
 native `https://` dispatch through Web Browser 3.5's TLS proxy Rule and Crypto
 Ancienne all work, each covered by an automated regression. Blank, formatted,
-and authentic Simulator 1.x storage cards are also recognized; the latter
-reaches the real `Translation.pkg` package-selection UI without changing its
-source image. A guarded
-loopback launcher also lets that corrected browser visit public HTTPS sites;
-see [the live-browsing instructions](docs/oldvcr-tls.md#browsing-the-live-web).
+and authentic Simulator 1.x storage cards are also recognized; full
+built-in-storage backup/restore passes, while an older card reaches the real
+`Translation.pkg` package-selection UI without changing its source image. A
+guarded loopback launcher also lets that corrected browser visit public HTTPS
+sites; see
+[the live-browsing instructions](docs/oldvcr-tls.md#browsing-the-live-web).
 The full status table and roadmap are in [`PLAN.md`](PLAN.md); the machine's
 hardware, history, and verification approach are in
 [`docs/background.md`](docs/background.md).

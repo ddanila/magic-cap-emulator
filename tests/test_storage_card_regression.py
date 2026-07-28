@@ -58,6 +58,14 @@ class StorageCardRegressionTests(unittest.TestCase):
             "9f9b02f5ee6cbef5e018c1ee424095fc21a842ea6968c0d36114b5930dab2ba1",
         )
 
+    def test_setup_can_leave_battery_state_untouched(self) -> None:
+        setup = storage_card_regression.automation_script(
+            "/tmp/card",
+            exercise_battery=False,
+        )
+        self.assertIn("STORAGE_BATTERY SKIPPED=1", setup)
+        self.assertNotIn("card_battery:set_value(1)", setup)
+
 
 if __name__ == "__main__":
     unittest.main()

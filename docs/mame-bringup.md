@@ -240,6 +240,7 @@ python3 tools/beam_regression.py
 python3 tools/tx39_regression.py
 python3 tools/pccard_regression.py
 python3 tools/storage_card_regression.py
+python3 tools/storage_backup_regression.py
 # Requires a state made by installing Translation.pkg with pclink_regression:
 python3 tools/storage_translation_regression.py \
   --nvram "$TRANSLATION_NVRAM"
@@ -351,8 +352,24 @@ phases use isolated NVRAM, every phase isolates MAME configuration, and only
 the intended state group plus card image are shared. Generated cards, logs,
 Lua and screenshots remain under
 `$MAGIC_CAP_ASSETS/runtime/storage-card-regression/`. A nonempty eligible
-package translation and backup/restore remain tracked in
+package translation remains tracked in
 [`user-guide.md`](user-guide.md).
+
+The longer companion drives the documented full-device backup and restore:
+
+```sh
+python3 tools/storage_backup_regression.py
+```
+
+It creates its own erased card and isolated retained state, skips the
+lifecycle test's battery cycling, backs up built-in storage through Storeroom,
+then restores from the card in a fresh emulator process. The gate requires
+the card bytes to contain the named backup package and `FBk` marker, retained
+RAM to change during restore, the real successful-restore dialog, and zero
+entries into the ROM's Magic Bus recovery routine. The latter also covers
+rediscovery of the attached keyboard when Magic Cap reinitializes the bus.
+Artifacts remain under
+`$MAGIC_CAP_ASSETS/runtime/storage-backup-regression/`.
 
 For a preserved Simulator 1.x card, build a disposable MAME image without
 modifying either classic-Macintosh input:
@@ -505,8 +522,8 @@ the separate serial-terminal view.
 | Persistence | 4 MiB DRAM and Dino RTC use external NVRAM files; a two-process regression proves retained-RAM power-down and on-button wake |
 | Sound output | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
 | Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 FIR code through a TX39 `MADD` |
-| Magic Bus | ROM assigns address zero, validates the checksummed `ATKB` descriptor, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures |
-| PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback and live-OS checks; blank storage setup, persistent `RAMC` remount, Option-insert reformat, Good/Low/Dead battery pins and a card-backed Notebook object also pass; an authentic Simulator 1.x card reaches `Translation.pkg`'s selection UI without source writes |
+| Magic Bus | ROM assigns and later reassigns address zero, validates the checksummed `ATKB` descriptor, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures |
+| PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback and live-OS checks; blank storage setup, persistent `RAMC` remount, Option-insert reformat, Good/Low/Dead battery pins, a card-backed Notebook object and full built-in backup/restore also pass; an authentic Simulator 1.x card reaches `Translation.pkg`'s selection UI without source writes |
 | PC Card Ethernet | The archived EtherLink driver initializes the 3C589, completes ARP/TCP through rootless libslirp, renders deterministic local HTTP, and carries Browser 3.5's native HTTPS Rule through a loopback Crypto Ancienne proxy; the absolute request, decrypted request, and rendered result are checked |
 | PCLink | The Storeroom computer installs archived `DvorakKeyboard.pkg`; the optional 452K TLS-browser package also transfers, disconnects cleanly, and records zero ROM Magic Bus failures |
 | IrDA / Beam | Two fresh peers exchange SIR discovery frames, select `bob Receiver`, and transfer `alice Sender`'s name card into the receiver's Inbox |

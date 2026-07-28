@@ -28,9 +28,42 @@ CHECKPOINT_PATTERN = re.compile(
 )
 
 
-def automation_script(card_path: Path | str) -> str:
+def automation_script(
+    card_path: Path | str,
+    *,
+    exercise_battery: bool = True,
+) -> str:
     """Return the deterministic blank-card lifecycle input sequence."""
     encoded_card_path = json.dumps(str(card_path))
+    battery_steps = (
+        """    elseif frames == 2800 then
+        battery_good = battery_pins()
+        -- Configuration fields are toggle inputs in MAME's Lua API.  Pulse
+        -- the field once for each setting instead of passing the setting's
+        -- numeric value (all non-zero values mean "pressed").
+        card_battery:set_value(1)
+    elseif frames == 2801 then
+        card_battery:set_value(0)
+    elseif frames == 2840 then
+        battery_low = battery_pins()
+        card_battery:set_value(1)
+    elseif frames == 2841 then
+        card_battery:set_value(0)
+    elseif frames == 2880 then
+        battery_dead = battery_pins()
+        card_battery:set_value(1)
+    elseif frames == 2881 then
+        card_battery:set_value(0)
+    elseif frames == 2920 then
+        print(string.format(
+            "STORAGE_BATTERY GOOD=%X LOW=%X DEAD=%X",
+            battery_good, battery_low, battery_dead))
+"""
+        if exercise_battery
+        else """    elseif frames == 2800 then
+        print("STORAGE_BATTERY SKIPPED=1")
+"""
+    )
     return f"""local machine = manager.machine
 local program = machine.devices[":maincpu"].spaces["program"]
 local ports = machine.ioport.ports
@@ -136,28 +169,7 @@ emu.register_frame_done(function()
         press(239, 145)
     elseif frames == 2770 then
         touch_button:set_value(0)
-    elseif frames == 2800 then
-        battery_good = battery_pins()
-        -- Configuration fields are toggle inputs in MAME's Lua API.  Pulse
-        -- the field once for each setting instead of passing the setting's
-        -- numeric value (all non-zero values mean "pressed").
-        card_battery:set_value(1)
-    elseif frames == 2801 then
-        card_battery:set_value(0)
-    elseif frames == 2840 then
-        battery_low = battery_pins()
-        card_battery:set_value(1)
-    elseif frames == 2841 then
-        card_battery:set_value(0)
-    elseif frames == 2880 then
-        battery_dead = battery_pins()
-        card_battery:set_value(1)
-    elseif frames == 2881 then
-        card_battery:set_value(0)
-    elseif frames == 2920 then
-        print(string.format(
-            "STORAGE_BATTERY GOOD=%X LOW=%X DEAD=%X",
-            battery_good, battery_low, battery_dead))
+{battery_steps}
     elseif frames == 3000 then
         machine:exit()
     end

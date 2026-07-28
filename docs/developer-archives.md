@@ -173,8 +173,15 @@ is raised, the version warning advances to the package-selection window, and
 the wrapper, changes file, and generated source card retain their original
 SHA-256 hashes. The preserved fixture currently contains only a data-only Help
 Books package, which produces an empty eligible-package list. Copying a
-nonempty eligible 1.x package into a new destination and built-in-storage
-backup/restore are therefore still the two remaining storage acceptances.
+nonempty eligible 1.x package into a new destination is therefore the
+remaining translation acceptance.
+
+`tools/storage_backup_regression.py` covers the other documented workflow. It
+sets up an erased card, drives Storeroom's built-in-storage backup, then starts
+a fresh process and restores that card-resident package. The gate requires
+the `MCAP` header, backup markers in the card bytes, changed retained RAM, the
+real “Successfully restored from backup” completion state, and zero entries
+into the ROM's `MagicBus_HandleMagicBusFailure`.
 
 The 114-page package guide supplies the object-runtime side: all objects live
 in clusters; ROM changes use transient and persistent shadow clusters; user
