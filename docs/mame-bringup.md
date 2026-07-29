@@ -245,6 +245,9 @@ python3 tools/telephone_line_regression.py
 python3 tools/telephone_line_regression.py --pulse
 python3 tools/builtin_modem_regression.py \
   --nvram-source /path/to/a/passing/combined-browser/run/nvram
+# Requires calibrated NVRAM that resumes at the ordinary Desk:
+python3 tools/telephone_ui_regression.py \
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
 python3 tools/battery_regression.py
 python3 tools/power_outputs_regression.py
 python3 tools/power_policy_regression.py
@@ -536,7 +539,7 @@ the separate serial-terminal view.
 | Power | LCD power blanks scanout without losing its framebuffer; Magic Bus Vcc-off drops and later rediscovers the accessory; AC plus charger enable raises the main-battery ADC; the real controls clamp 1–60 minutes and their AC-idle checkbox governs automatic `SLEE`/VCC-off shutdown |
 | Sound output | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
 | Sound input | One-shot SIB receive DMA captures deterministic tone/silence with all expected status; the real Stamper UI records a 1 kHz microphone source, stops and drains its SIB command, then plays an audible WAV segment |
-| Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 FIR code through a TX39 `MADD`; direct DAA verification covers connected/off-hook state, both Dino ring edges, deterministic 350+440 Hz dial tone, and decoding DTMF or pulse-dialed `580` |
+| Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 FIR code through a TX39 `MADD`; direct DAA verification covers connected/off-hook state, both Dino ring edges, deterministic 350+440 Hz dial tone, and decoding DTMF or pulse-dialed `580`; the visible Telephone enters `580`, reaches `Calling 580`, traverses PhoneDialer/PhoneServer and keeps both 48-word sound and telecom rings active |
 | Magic Bus | ROM assigns and later reassigns address zero, validates the checksummed `ATKB` descriptor, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures |
 | PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback and live-OS checks; blank storage setup, persistent `RAMC` remount, Option-insert reformat, Good/Low/Dead battery pins, a card-backed Notebook object and full built-in backup/restore also pass; `Translation.pkg` copies an authentic 1.x `new items` package into Built-in storage without source writes |
 | PC Card Ethernet | The archived EtherLink driver initializes the 3C589, completes ARP/TCP through rootless libslirp, renders deterministic local HTTP, and carries Browser 3.5's native HTTPS Rule through a loopback Crypto Ancienne proxy; the absolute request, decrypted request, and rendered result are checked |
@@ -546,8 +549,8 @@ the separate serial-terminal view.
 | Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
 
 The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
-still incomplete. The current gaps are the built-in modem's analog line peer,
-multi-device Magic Bus topology, and hardware fidelity beyond the
-register behavior exercised by the ROM; see
+still incomplete. The current gaps are the built-in modem's Telephone digit
+output, carrier/remote line peer, multi-device Magic Bus topology, and
+hardware fidelity beyond the register behavior exercised by the ROM; see
 [`PLAN.md`](../PLAN.md#remaining-work). Magic Bus discovery and its
 AT-keyboard traffic are functional and covered by the headless probe.

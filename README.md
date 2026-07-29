@@ -31,6 +31,8 @@ built-in-storage backup/restore passes, and `Translation.pkg` copies a real
 guarded loopback launcher also lets that corrected browser visit public HTTPS
 sites; see
 [the live-browsing instructions](docs/oldvcr-tls.md#browsing-the-live-web).
+The visible Telephone can enter `580`, reach its active call screen and drive
+the ROM's PhoneServer, DAA and dual DMA path under headless verification.
 The full status table and roadmap are in [`PLAN.md`](PLAN.md); the machine's
 hardware, history, and verification approach are in
 [`docs/background.md`](docs/background.md).

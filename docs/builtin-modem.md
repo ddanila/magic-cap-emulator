@@ -102,9 +102,50 @@ python3 tools/telephone_line_regression.py --pulse
 ```
 
 A sustained on-hook state remains a hangup and does not produce a digit. A
-product-level pass through the ROM's asynchronous
-`SoftwareModem_CheckDialTone` and normal dialer, carrier and a remote modem
+product-level pass through the Telephone is covered separately below. The
+ROM's asynchronous `SoftwareModem_CheckDialTone`, carrier and a remote modem
 remain later milestones.
+
+## Product Telephone path
+
+The normal Telephone application now has its own headless acceptance test.
+It starts from a calibrated copy of retained state, opens Desk → Telephone,
+presses `5`, `8`, `0` on the visible keypad and then presses Dial:
+
+```sh
+python3 tools/telephone_ui_regression.py \
+  --mame ../mame/datarover \
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
+```
+
+The source NVRAM is never modified. The run keeps its generated Lua, copied
+NVRAM, MAME log and `number.png` / `calling.png` screenshots in a timestamped
+directory under `$MAGIC_CAP_ASSETS/runtime/telephone-ui-regression/`.
+
+This is not just a screenshot check. Debugger counters require the shipping
+ROM to traverse:
+
+| Address | Product path |
+|---|---|
+| `0x13c3fe1c` | `PhoneDialer_DialNumber` |
+| `0x13c402e8` / `0x13c408ac` | `PhoneServer_StartCall` / `PhoneServer_DialNumber` |
+| `0x13c43080` / `0x13c43a60` | `SpeakerPhoneAudio_DialingInProgress` / `SpeakerPhoneAudioDino_StartMonitor` |
+| `0x13c438fc` / `0x13c439a8` | phone half/full DMA service |
+| `0x13c24da4` / `0x13c22ae4` | `DAAOffHook` / `SibServerTelecomOffHook` |
+| `0x13c23b3c` | private `SibCmdStartTelecom` |
+
+The final checkpoint also requires both sound and telecom directions enabled,
+48-word rings and nonzero sound-TX, telecom-TX and telecom-RX addresses. A
+passing UI shows `580` before Dial and `Calling 580` afterward.
+
+The acceptance run also identifies the boundary still missing. The product
+Telephone's telecom-TX ring remains zero while calling, and its short
+sound-TX burst is identical when the entered number is changed from `580` to
+`123`; it is therefore call-progress audio, not digit-dependent DTMF. Direct
+DMA DTMF and physical hookswitch pulse decoding remain valid exchange tests,
+but the normal Telephone's outbound digit mechanism has not yet been found
+at the analog Betty/DAA boundary. The emulator does not guess those digits
+from screen taps or ROM objects.
 
 ## Published design cross-check
 
@@ -172,14 +213,17 @@ PASS: Magic Cap opened the built-in modem, kept its 48-word telecom ring running
 This deliberately proves the ROM/Dino/DSP boundary, not an imaginary
 telephone network. Digital DAA hook, line-connect and ring behavior plus the
 exchange's dial-tone waveform, outbound DTMF decoder and hookswitch pulse
-decoder are modelled and checked separately, but normal product dialing,
-carrier acquisition and a remote modem are still missing. The test invokes
+decoder are modelled and checked separately. The normal Telephone actor,
+off-hook and DMA path is also covered, but its outbound analog digits,
+carrier acquisition and a remote modem are still missing. This test invokes
 the lower ROM boundary rather than automating the Internet Center's dial
 dialogs.
 
 The product-level target is more specific. *Using Magic Cap*, pp. 135–163 and
 216, documents the built-in fax modem on a telephone line, including selectable
-tone/pulse dialing and fax workflows. Closing this gap therefore means driving
-the real Telephone or Internet Center setup through dialing, carrier behavior
-and a remote peer—not merely making the current lower-level DSP or digital-DAA
-probes count more functions. See [`user-guide.md`](user-guide.md).
+tone/pulse dialing and fax workflows. The real Telephone now reaches its call
+screen and line hardware. Closing the remaining gap means recovering its
+digit-dependent analog output, then driving the Internet Center through
+carrier behavior and a remote peer—not merely making the current lower-level
+DSP or digital-DAA probes count more functions. See
+[`user-guide.md`](user-guide.md).

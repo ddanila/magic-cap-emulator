@@ -179,9 +179,10 @@ loopback: with it set the SIB feeds transmit straight back into the receive
 buffer, which is what the modem's own loopback diagnostics rely on. The phone
 line's digital DAA control is modelled separately: Betty IOData bit `0x0200`
 drives off-hook, while input bit `0x0100` reports a connected line and remains
-preserved across IOData writes. The analog sample peer is not yet modelled, so
-transmit samples are consumed at the programmed rate and receive delivers
-either the loopback or silence.
+preserved across IOData writes. The automatic exchange supplies a
+deterministic 350+440 Hz dial tone to receive DMA, decodes standard DTMF from
+transmit DMA and observes hookswitch pulse dialing. A silent-line option still
+delivers silence. Carrier modulation and a remote modem peer are not modelled.
 
 The driver's own clock for this channel comes from `kSibTelDivMask`, separate
 from the sound divisor, so the two channels can run at different rates.
@@ -207,6 +208,9 @@ python3 tools/telecom_regression.py --dial-tone   # exchange analog input
 python3 tools/telecom_regression.py --dtmf        # exchange tone dialing
 python3 tools/telephone_line_regression.py         # DAA hook/ring boundary
 python3 tools/telephone_line_regression.py --pulse # exchange pulse dialing
+# Product Telephone path; requires calibrated retained state:
+python3 tools/telephone_ui_regression.py \
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
 ```
 
 The loopback run requires all 64 words to arrive, the half, end and pointer
@@ -220,7 +224,10 @@ check: it opens Magic Cap's software-modem object, retains the continuous
 48-word RX/TX ring, selects V.32, and proves that the ROM reaches its
 V32ModulatorFIR and a TX39 `MADD`. See
 [`builtin-modem.md`](builtin-modem.md) for the exact symbols, input NVRAM, and
-scope.
+scope. `tools/telephone_ui_regression.py` supplies the product-level
+complement: it enters `580` in the visible Telephone, reaches `Calling 580`,
+and requires the PhoneDialer, PhoneServer, DAA off-hook and both sound and
+telecom DMA paths.
 
 ## Verifying the sound path
 
