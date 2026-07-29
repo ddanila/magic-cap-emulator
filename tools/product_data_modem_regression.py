@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -448,11 +449,16 @@ def build_http_application(
     return application
 
 
-def fetch_http_application(url: str) -> bytes:
+def fetch_http_application(
+    url: str, headers: dict[str, str] | None = None
+) -> bytes:
     """Fetch and normalize one explicitly configured host HTTP endpoint."""
+    request_headers = {"User-Agent": "magic-cap-emulator-host-bridge/1"}
+    if headers:
+        request_headers.update(headers)
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "magic-cap-emulator-host-bridge/1"},
+        headers=request_headers,
     )
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
@@ -467,18 +473,123 @@ def fetch_http_application(url: str) -> bytes:
     return build_http_application(body, status, reason, content_type)
 
 
-def tcp_peer_lua(http_application: bytes | None = None) -> str:
+def resolve_guest_http_request(
+    base_url: str, request: bytes
+) -> tuple[str, dict[str, str]]:
+    """Map the live Magic Cap GET and selected headers onto a host base URL."""
+    first, *header_lines = request.split(b"\r\n")
+    match = re.fullmatch(rb"GET ([^ ]+) HTTP/1\.[01]", first)
+    if match is None:
+        raise ValueError("guest HTTP bridge supports GET over HTTP/1.x only")
+    guest_target = match.group(1).decode("ascii", "strict")
+    guest_parts = urllib.parse.urlsplit(guest_target)
+    if guest_parts.scheme or guest_parts.netloc or not guest_parts.path.startswith(
+        "/"
+    ):
+        raise ValueError("guest HTTP request must use an origin-form target")
+    base = urllib.parse.urlsplit(base_url)
+    if base.scheme not in ("http", "https") or not base.netloc:
+        raise ValueError("HTTP upstream base must use http:// or https://")
+    if base.query or base.fragment:
+        raise ValueError("HTTP upstream base cannot contain query or fragment")
+    prefix = base.path.rstrip("/")
+    target = urllib.parse.urlunsplit(
+        (
+            base.scheme,
+            base.netloc,
+            prefix + guest_parts.path,
+            guest_parts.query,
+            "",
+        )
+    )
+    forwarded: dict[str, str] = {}
+    for line in header_lines:
+        if not line or b":" not in line:
+            continue
+        name, value = line.split(b":", 1)
+        decoded_name = name.decode("ascii", "ignore").strip()
+        if decoded_name.lower() in ("accept", "user-agent"):
+            forwarded[decoded_name] = value.decode(
+                "latin-1", "replace"
+            ).strip()
+    return target, forwarded
+
+
+class GuestHttpBridge:
+    """Forward one live guest request through an explicit host base URL."""
+
+    def __init__(
+        self,
+        base_url: str,
+        request_path: Path,
+        response_path: Path,
+        target_path: Path,
+    ) -> None:
+        self.base_url = base_url
+        self.request_path = request_path
+        self.response_path = response_path
+        self.target_path = target_path
+        self.error: str | None = None
+        self.target_url: str | None = None
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._thread.join(timeout=5)
+
+    def _run(self) -> None:
+        while not self._stop.is_set() and not self.request_path.is_file():
+            self._stop.wait(0.05)
+        if self._stop.is_set():
+            return
+        try:
+            request = self.request_path.read_bytes()
+            target, headers = resolve_guest_http_request(
+                self.base_url, request
+            )
+            application = fetch_http_application(target, headers)
+            self.target_url = target
+            self.target_path.write_text(target + "\n", encoding="utf-8")
+            temporary = self.response_path.with_suffix(".partial")
+            temporary.write_bytes(application)
+            os.replace(temporary, self.response_path)
+        except (OSError, UnicodeError, ValueError) as error:
+            self.error = str(error)
+
+
+def tcp_peer_lua(
+    http_application: bytes | None = None,
+    host_request_path: Path | None = None,
+    host_response_path: Path | None = None,
+) -> str:
     """Return Lua helpers that build a SYN-ACK from the live browser SYN."""
-    if http_application is None:
+    live_host_bridge = (
+        host_request_path is not None and host_response_path is not None
+    )
+    if (host_request_path is None) != (host_response_path is None):
+        raise ValueError("host request and response paths must be paired")
+    if http_application is None and not live_host_bridge:
         body = (
             f"<html><body>{DEFAULT_HTTP_TEXT}</body></html>\r\n".encode()
         )
         http_application = build_http_application(body)
+    if http_application is None:
+        http_application = b""
     if len(http_application) > MAX_HTTP_APPLICATION:
         raise ValueError("HTTP application exceeds the bridge limit")
     application_lua = "{ " + ", ".join(
         f"0x{byte:02x}" for byte in http_application
     ) + " }"
+    request_path_lua = (
+        _lua_path(host_request_path) if host_request_path else ""
+    )
+    response_path_lua = (
+        _lua_path(host_response_path) if host_response_path else ""
+    )
     return r"""
 local function append_bytes(target, source)
   for _, byte in ipairs(source) do table.insert(target, byte) end
@@ -623,6 +734,11 @@ local http_server_next_sequence = nil
 local http_fin_sent = false
 local http_close_ack_sent = false
 local http_application = __HTTP_APPLICATION__
+local host_bridge_enabled = __HOST_BRIDGE_ENABLED__
+local host_request_path = "__HOST_REQUEST_PATH__"
+local host_response_path = "__HOST_RESPONSE_PATH__"
+local host_response_pending = false
+local host_client_next_sequence = nil
 
 local function build_http_packet(
     sequence, acknowledgement, flags, application, identification)
@@ -660,6 +776,28 @@ local function build_http_packet(
   append_bytes(payload, ip)
   append_bytes(payload, tcp)
   return async_ppp_frame(payload)
+end
+
+local function pending_host_http_response()
+  if not host_response_pending then return nil, nil end
+  local response_file = io.open(host_response_path, "rb")
+  if response_file == nil then return nil, nil end
+  local response = response_file:read("*a")
+  response_file:close()
+  if #response == 0 or #response > __MAX_HTTP_APPLICATION__ then
+    return nil, nil
+  end
+  http_application = {}
+  for index = 1, #response do
+    http_application[index] = string.byte(response, index)
+  end
+  host_response_pending = false
+  http_server_next_sequence =
+    (0x01020305 + #http_application) & 0xffffffff
+  return build_http_packet(
+    0x01020305, host_client_next_sequence,
+    0x18, http_application, 0x1235
+  ), "response"
 end
 
 local function dynamic_http_response()
@@ -700,6 +838,18 @@ local function dynamic_http_response()
   if frame[data_start] ~= string.byte("G")
       or frame[data_start + 1] ~= string.byte("E")
       or frame[data_start + 2] ~= string.byte("T") then
+    return nil, nil
+  end
+  if host_bridge_enabled then
+    local temporary_path = host_request_path .. ".partial"
+    local request_file = assert(io.open(temporary_path, "wb"))
+    for index = data_start, data_start + client_data_length - 1 do
+      request_file:write(string.char(frame[index]))
+    end
+    request_file:close()
+    assert(os.rename(temporary_path, host_request_path))
+    host_client_next_sequence = client_next_sequence
+    host_response_pending = true
     return nil, nil
   end
   http_server_next_sequence =
@@ -755,7 +905,17 @@ local function dynamic_peer_response(kind)
   end
   return dynamic_control_response(kind)
 end
-""".replace("__HTTP_APPLICATION__", application_lua)
+""".replace(
+        "__HTTP_APPLICATION__", application_lua
+    ).replace(
+        "__HOST_BRIDGE_ENABLED__", "true" if live_host_bridge else "false"
+    ).replace(
+        "__HOST_REQUEST_PATH__", request_path_lua
+    ).replace(
+        "__HOST_RESPONSE_PATH__", response_path_lua
+    ).replace(
+        "__MAX_HTTP_APPLICATION__", str(MAX_HTTP_APPLICATION)
+    )
 
 
 def product_automation_script(
@@ -975,6 +1135,8 @@ def answer_automation_script(
     call_trigger_path: Path = Path("call.trigger"),
     result_offset: int = 2400,
     http_application: bytes | None = None,
+    host_request_path: Path | None = None,
+    host_response_path: Path | None = None,
 ) -> str:
     """Keep the retained answer peer awake while running the direct-answer ROM."""
     script = direct_answer_script(
@@ -1000,6 +1162,9 @@ def answer_automation_script(
     protocol_result_path = _lua_path(
         call_trigger_path.parent / "protocol.result-ready"
     )
+    close_result_path = _lua_path(
+        call_trigger_path.parent / "close.result-ready"
+    )
     script = script.replace(
         "local saved_state = nil\n",
         'local saved_state = nil\n'
@@ -1007,6 +1172,7 @@ def answer_automation_script(
         f'local result_path = "{result_path}"\n'
         f'local peer_result_path = "{peer_result_path}"\n'
         f'local protocol_result_path = "{protocol_result_path}"\n'
+        f'local close_result_path = "{close_result_path}"\n'
         'local ports = machine.ioport.ports\n'
         'local power_button = ports[":POWER_BUTTON"]:field(0x01)\n'
         'local touch_x = ports[":TOUCH_X"]:field(0xffff)\n'
@@ -1019,6 +1185,7 @@ def answer_automation_script(
         f"local echo_active, echo_round, echo_deliver_seen = false, 0, 0\n"
         f'local echo_phase, protocol_written = "read", false\n'
         f"local http_response_pending = false\n"
+        f"local http_close_pending, close_written = false, false\n"
         f"local echo_saved_state = nil\n"
         f"local ECHO_STUB = 0x{ECHO_STUB:08x}\n"
         f"local ECHO_WRITE_STUB = 0x{ECHO_WRITE_STUB:08x}\n"
@@ -1034,7 +1201,7 @@ def answer_automation_script(
         f"local ECHO_LOOP = 0x{echo_loop:08x}\n"
         f"local ECHO_WRITE_LOOP = 0x{write_loop:08x}\n"
         f"local ANSWER_DELIVER_COUNTER = 0x{ANSWER_DELIVER_COUNTER:08x}\n\n"
-        f"{tcp_peer_lua(http_application)}\n"
+        f"{tcp_peer_lua(http_application, host_request_path, host_response_path)}\n"
         f"local function start_echo()\n"
         f"  echo_round = echo_round + 1\n"
         f"{echo_writes}\n"
@@ -1071,6 +1238,7 @@ def answer_automation_script(
         f'  cpu.state["SR"].value = cpu.state["SR"].value & 0xfffffffc\n'
         f'  cpu.state["PC"].value = 0x{0xA000_0000 + ECHO_WRITE_STUB:08x}\n'
         f'  echo_phase = "write"\n'
+        f"  echo_active = true\n"
         f"end\n\n"
         "local function inject()\n",
         1,
@@ -1106,10 +1274,18 @@ def answer_automation_script(
         "      inject()\n"
         "    end\n"
         "  end\n"
-        f"  if restored and not echo_active and echo_round < {MAX_PEER_READS}\n"
-        "      and program:read_u32(ANSWER_DELIVER_COUNTER)\n"
-        "        > echo_deliver_seen then\n"
-        "    start_echo()\n"
+        "  if restored and not echo_active then\n"
+        "    local host_response = pending_host_http_response()\n"
+        "    if host_response ~= nil then\n"
+        '      print(string.format("PRODUCT_ANSWER_HTTP_RESPONSE bytes=%d",\n'
+        "        #host_response))\n"
+        "      http_response_pending = true\n"
+        "      start_dynamic_write(host_response)\n"
+        f"    elseif echo_round < {MAX_PEER_READS}\n"
+        "        and program:read_u32(ANSWER_DELIVER_COUNTER)\n"
+        "          > echo_deliver_seen then\n"
+        "      start_echo()\n"
+        "    end\n"
         "  end\n"
         "  if echo_active then\n"
         '    local echo_pc = cpu.state["PC"].value\n'
@@ -1131,6 +1307,13 @@ def answer_automation_script(
         "          protocol_result:close()\n"
         "          protocol_written = true\n"
         "          http_response_pending = false\n"
+        "        end\n"
+        "        if http_close_pending and not close_written then\n"
+        "          local close_result = assert(io.open(close_result_path, \"w\"))\n"
+        '          close_result:write("ready\\n")\n'
+        "          close_result:close()\n"
+        "          close_written = true\n"
+        "          http_close_pending = false\n"
         "        end\n"
         "      else\n"
         "        echo_deliver_seen = program:read_u32(ANSWER_DELIVER_COUNTER)\n"
@@ -1164,6 +1347,7 @@ def answer_automation_script(
         "            print(string.format(\n"
         '              "PRODUCT_ANSWER_HTTP_CLOSE_ACK bytes=%d",\n'
         "              #http_response))\n"
+        "            http_close_pending = true\n"
         "          end\n"
         "          start_dynamic_write(response)\n"
         "        else\n"
@@ -1495,16 +1679,24 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="start from a copied post-run Web Browser state",
     )
-    parser.add_argument(
+    upstream = parser.add_mutually_exclusive_group()
+    upstream.add_argument(
         "--http-upstream-url",
         help=(
             "fetch one bounded host HTTP(S) response and replay it through "
             "the built-in modem"
         ),
     )
+    upstream.add_argument(
+        "--http-upstream-base-url",
+        help=(
+            "forward the live guest GET path and selected headers to this "
+            "host HTTP(S) base"
+        ),
+    )
     parser.add_argument(
         "--http-expected-text",
-        help="OCR text required when --http-upstream-url is used",
+        help="OCR text required when a host HTTP upstream is used",
     )
     return parser.parse_args(argv)
 
@@ -1566,9 +1758,11 @@ def run_regression(args: argparse.Namespace) -> int:
     if not (source / args.system / "ram").is_file():
         print(f"error: NVRAM not found under {source}", file=sys.stderr)
         return 2
-    if args.http_upstream_url and not args.http_expected_text:
+    if (
+        args.http_upstream_url or args.http_upstream_base_url
+    ) and not args.http_expected_text:
         print(
-            "error: --http-upstream-url requires --http-expected-text",
+            "error: a host HTTP upstream requires --http-expected-text",
             file=sys.stderr,
         )
         return 2
@@ -1576,6 +1770,8 @@ def run_regression(args: argparse.Namespace) -> int:
         http_application = (
             fetch_http_application(args.http_upstream_url)
             if args.http_upstream_url
+            else None
+            if args.http_upstream_base_url
             else build_http_application(
                 (
                     f"<html><body>{DEFAULT_HTTP_TEXT}</body></html>\r\n"
@@ -1592,6 +1788,21 @@ def run_regression(args: argparse.Namespace) -> int:
     run_dir.mkdir(parents=True)
     if args.http_upstream_url:
         (run_dir / "host-http-response.bin").write_bytes(http_application)
+    host_request_path = run_dir / "guest-http-request.bin"
+    host_response_path = run_dir / "host-http-response.bin"
+    host_target_path = run_dir / "host-http-target.txt"
+    host_bridge = (
+        GuestHttpBridge(
+            args.http_upstream_base_url,
+            host_request_path,
+            host_response_path,
+            host_target_path,
+        )
+        if args.http_upstream_base_url
+        else None
+    )
+    if host_bridge is not None:
+        host_bridge.start()
     call_trigger = run_dir / "call.trigger"
     answer_trigger = run_dir / "answer.trigger"
     relay = CallPcmExchange(
@@ -1616,6 +1827,12 @@ def run_regression(args: argparse.Namespace) -> int:
                     answer_automation_script(
                         answer_trigger,
                         http_application=http_application,
+                        host_request_path=(
+                            host_request_path if host_bridge else None
+                        ),
+                        host_response_path=(
+                            host_response_path if host_bridge else None
+                        ),
                     )
                     if role == "answer"
                     else product_automation_script(
@@ -1680,7 +1897,7 @@ def run_regression(args: argparse.Namespace) -> int:
 
         def release_completion_hold() -> None:
             markers = (
-                run_dir / "product-http.result-ready",
+                run_dir / "close.result-ready",
                 run_dir / "product.result-ready",
             )
             answer_result_seen: float | None = None
@@ -1716,6 +1933,8 @@ def run_regression(args: argparse.Namespace) -> int:
             if process.poll() is None:
                 process.terminate()
         relay.stop()
+        if host_bridge is not None:
+            host_bridge.stop()
 
     product = parse_product_result(outputs.get("product", b""))
     answer = parse_direct_result(outputs.get("answer", b""))
@@ -1738,6 +1957,11 @@ def run_regression(args: argparse.Namespace) -> int:
         http_response_bytes or 0,
     )
     failures.extend(trigger_errors)
+    if host_bridge is not None:
+        if host_bridge.error is not None:
+            failures.append(f"live guest HTTP forwarding failed: {host_bridge.error}")
+        elif host_bridge.target_url is None:
+            failures.append("live guest HTTP request was not forwarded")
     if http_request is None or not http_request.startswith(
         b"GET / HTTP/1.0\r\nHost: 10.0.2.2:8080\r\n"
     ):

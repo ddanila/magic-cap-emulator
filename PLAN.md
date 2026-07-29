@@ -94,9 +94,14 @@ The full regression list and expected checkpoints are in
   four-way close avoids the dropped-connection notice. With
   `--http-upstream-url`, the host prefetches one explicitly configured
   HTTP(S) endpoint, normalizes a response of at most 4 KiB of application data,
-  and OCR-verifies its distinct body after the same modem path. The remaining
-  line-side target is forwarding the guest's live request and segmenting
-  larger host responses. This is
+  and OCR-verifies its distinct body after the same modem path.
+  `--http-upstream-base-url` instead waits for the request produced by Magic
+  Cap, maps its origin-form path and query onto an explicit HTTP(S) base,
+  forwards its `Accept` and `User-Agent` headers, fetches only then, and
+  returns the normalized response through the answer ROM queue. Its artifacts
+  retain the guest request, resolved target and exact normalized response.
+  The remaining line-side target is segmenting host responses larger than
+  4 KiB. This is
   separate from the working PC Card PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 

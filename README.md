@@ -61,8 +61,10 @@ Browser renders `Magic Cap built-in modem works.` and then completes the
 deterministic connection's orderly four-way TCP close. A bounded host adapter
 can instead fetch an explicitly configured HTTP(S) URL, normalize its small
 response to HTTP/1.0, and carry that host-supplied body through the same path.
-The remaining built-in-modem gap is live guest-request forwarding and
-multi-segment responses.
+It can also wait for Magic Cap's live request, map its path and query onto an
+explicit host base URL, forward its `Accept` and `User-Agent` headers, and
+return the fetched body through the modem. The remaining built-in-modem HTTP
+gap is multi-segment responses larger than 4 KiB.
 The full status table and roadmap are in [`PLAN.md`](PLAN.md); the machine's
 hardware, history, and verification approach are in
 [`docs/background.md`](docs/background.md).

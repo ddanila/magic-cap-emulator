@@ -389,8 +389,26 @@ The endpoint may use HTTP or HTTPS on the host side. Its response is fetched
 once before dialing, normalized to HTTP/1.0, limited to 4 KiB of application
 data for the enlarged single ROM-write scratch area, and saved with the run
 artifacts. The expected text is required so OCR proves that Web Browser
-rendered the host-supplied body rather than the deterministic fallback. Live
-forwarding of the guest request and multi-segment host responses remain
+rendered the host-supplied body rather than the deterministic fallback.
+
+To forward the request actually sent by Magic Cap, use a base URL instead:
+
+```sh
+python3 tools/product_data_modem_regression.py \
+  --nvram-source \
+    "$MAGIC_CAP_ASSETS/runtime/combined-browser/<provider-run>/nvram" \
+  --http-upstream-base-url https://example.com/magic-cap/ \
+  --http-expected-text "Expected page text"
+```
+
+This mode waits until the answer ROM has received and reassembled the guest
+request. It accepts an origin-form `GET` over HTTP/1.x, appends the guest path
+and query to the configured base path, and forwards only `Accept` and
+`User-Agent`; it deliberately replaces the guest `Host` header with the
+upstream host. The host fetch therefore cannot start before Magic Cap sends
+the request. `guest-http-request.bin`, `host-http-target.txt`, and the exact
+normalized `host-http-response.bin` remain in the run directory. The same
+4 KiB single-response bound applies; segmentation of larger responses remains
 future bridge work.
 
 The source is copied and never modified. One DataRover wakes from the
@@ -450,8 +468,9 @@ FIN, and returns the final ACK. Tesseract then verifies
 the final Web Browser snapshot. The product calls
 `SoftwareModem_Read`, `PPPServer_ReadPDU` and `LCP_ProcessFrame` throughout.
 This proves LCP/IPCP, bidirectional TCP and rendered HTTP across the complete
-ROM stack. A general host bridge remains separate from the already working
-PC Card PPP path.
+ROM stack. The live base-URL mode additionally proves that the browser's
+request can drive a bounded host fetch; a general multi-segment bridge remains
+separate from the already working PC Card PPP path.
 
 ROM reads are not packet-aligned: one observed 58-byte read contained an LCP
 Configure-Ack followed by an IPCP Configure-Request, while another contained
@@ -488,8 +507,10 @@ creation, and the real fax-answer and fax-origin startups have all been
 addressed or excluded. The direct carrier harness does not create an Internet
 Center connection object. The product carrier regression now creates that
 object, completes V.32 and LAPM, starts the PPP actor and delivers its first
-data unit to the answer ROM. A remote PPP consumer and network bridge remain
-distinct from proving the paired ROM data pumps. A
+data unit to the answer ROM. Its bounded HTTP peer can consume the guest
+request locally or forward it to an explicit host base URL; unrestricted
+network transport and segmented responses remain distinct from proving the
+paired ROM data pumps. A
 captured answer stream begins with the expected strong 2,100 Hz CED and then
 V.21-like FSK; replaying it through a single socket peer makes the origin run
 fax RX/TX, exchange HDLC, and call `SendFaxImageData` 71 times. This proves

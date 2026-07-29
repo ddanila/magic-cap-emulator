@@ -23,6 +23,7 @@ from tools.product_data_modem_regression import (
     parse_product_result,
     ppp_fcs,
     product_automation_script,
+    resolve_guest_http_request,
     tcp_syn_ack_response,
     tcp_peer_lua,
     validate_results,
@@ -31,6 +32,29 @@ from tools.product_data_modem_regression import (
 
 
 class ProductDataModemScriptTests(unittest.TestCase):
+    def test_live_guest_http_request_maps_to_host_base(self) -> None:
+        target, headers = resolve_guest_http_request(
+            "https://example.com/base/",
+            (
+                b"GET /folder/page?q=1 HTTP/1.0\r\n"
+                b"Host: 10.0.2.2:8080\r\n"
+                b"Accept: text/html\r\n"
+                b"User-Agent: Magic Cap\r\n\r\n"
+            ),
+        )
+
+        self.assertEqual(
+            target, "https://example.com/base/folder/page?q=1"
+        )
+        self.assertEqual(
+            headers,
+            {"Accept": "text/html", "User-Agent": "Magic Cap"},
+        )
+        with self.assertRaises(ValueError):
+            resolve_guest_http_request(
+                "https://example.com/", b"GET https://invalid/ HTTP/1.0\r\n\r\n"
+            )
+
     def test_host_http_application_is_bounded_and_embedded(self) -> None:
         application = build_http_application(
             b"<html>Host bridge works.</html>",
@@ -100,11 +124,26 @@ class ProductDataModemScriptTests(unittest.TestCase):
         self.assertIn("PRODUCT_ANSWER_HTTP_RESPONSE", script)
         self.assertIn("PRODUCT_ANSWER_HTTP_FIN", script)
         self.assertIn("PRODUCT_ANSWER_HTTP_CLOSE_ACK", script)
+        self.assertIn('close_result:write("ready\\n")', script)
         self.assertIn("local ECHO_TOTAL = 0x0030a800", script)
+        self.assertIn("local host_bridge_enabled = false", script)
         self.assertIn("PRODUCT_ANSWER_ECHO bytes=", script)
         self.assertIn("PRODUCT_ANSWER_ECHO_DATA hex=", script)
         self.assertIn("PRODUCT_ANSWER_LCP_REPLY read=", script)
         self.assertIn("local ANSWER_DELIVER_COUNTER = 0x0030304c", script)
+
+    def test_answer_peer_can_wait_for_live_host_response(self) -> None:
+        script = answer_automation_script(
+            Path("/tmp/call.trigger"),
+            host_request_path=Path("/tmp/guest-request.bin"),
+            host_response_path=Path("/tmp/host-response.bin"),
+        )
+
+        self.assertIn("local host_bridge_enabled = true", script)
+        self.assertIn('host_request_path = "/tmp/guest-request.bin"', script)
+        self.assertIn('host_request_path .. ".partial"', script)
+        self.assertIn("pending_host_http_response()", script)
+        self.assertIn('echo_phase = "write"\n  echo_active = true', script)
 
     def test_answer_echo_uses_rom_read_pending_read_and_write(self) -> None:
         words = echo_responder_words()

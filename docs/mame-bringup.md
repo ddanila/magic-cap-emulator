@@ -256,6 +256,11 @@ python3 tools/product_data_modem_regression.py \
   --nvram-source /path/to/a/provider-configured/run/nvram \
   --http-upstream-url https://example.com/magic-cap-small.html \
   --http-expected-text "Expected page text"
+# Forward Magic Cap's live GET to an explicit host base:
+python3 tools/product_data_modem_regression.py \
+  --nvram-source /path/to/a/provider-configured/run/nvram \
+  --http-upstream-base-url https://example.com/magic-cap/ \
+  --http-expected-text "Expected page text"
 # Requires calibrated NVRAM that resumes at the ordinary Desk:
 python3 tools/telephone_ui_regression.py \
   --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
@@ -398,9 +403,16 @@ HTTP(S) response. The adapter normalizes status, content type, length and
 connection headers to HTTP/1.0, caps the complete application response at
 4 KiB so it fits the enlarged single ROM-write scratch area, preserves the
 normalized bytes as `host-http-response.bin`, and requires caller-supplied
-OCR text. This is a bounded response adapter, not yet a transparent proxy:
-the fetch happens before dialing, and the remaining work is forwarding the
-live guest request and segmenting larger responses.
+OCR text. This fixed-URL mode fetches before dialing.
+
+`--http-upstream-base-url` performs the fetch only after the answer ROM
+receives and reassembles Magic Cap's origin-form `GET`. It maps the request
+path and query onto the configured base path, forwards `Accept` and
+`User-Agent`, substitutes the upstream `Host`, and returns the same bounded
+normalized response. The artifacts include `guest-http-request.bin`,
+`host-http-target.txt`, and `host-http-response.bin`, proving the live
+request-to-fetch handoff. This is still a bounded single-response adapter, not
+a transparent proxy; segmenting responses larger than 4 KiB remains.
 
 The paired-fax harness instead starts two ordinary retained-state machines,
 creates and selects `Fax Peer` through the visible origin UI, and rings the
