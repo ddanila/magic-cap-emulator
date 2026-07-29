@@ -246,6 +246,8 @@ python3 tools/telephone_line_regression.py --pulse
 python3 tools/telephone_bridge_regression.py
 python3 tools/builtin_modem_regression.py \
   --nvram-source /path/to/a/passing/combined-browser/run/nvram
+python3 tools/data_modem_pair_regression.py \
+  --nvram-source /path/to/a/passing/combined-browser/run/nvram
 # Requires calibrated NVRAM that resumes at the ordinary Desk:
 python3 tools/telephone_ui_regression.py \
   --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
@@ -363,6 +365,14 @@ NVRAM remain under
 `$MAGIC_CAP_ASSETS/runtime/telephone-bridge-regression/`. See
 [`builtin-modem.md`](builtin-modem.md#external-pcm-bridge) for the reusable
 relay and manual connection command.
+
+The data-modem pair harness copies a provider-configured state into isolated
+originating and answering peers, replays the shipping command roles and
+process-clocks their external PCM at each 96-byte half-DMA boundary. It
+requires both V.32 ROMs to lock their detectors, negotiate identical rate
+words, report status, enter data mode and retain their 48-word bidirectional
+DMA rings. Artifacts remain under
+`$MAGIC_CAP_ASSETS/runtime/data-modem-pair-regression/`.
 
 The paired-fax harness instead starts two ordinary retained-state machines,
 creates and selects `Fax Peer` through the visible origin UI, and rings the
@@ -579,7 +589,7 @@ the separate serial-terminal view.
 | Power | LCD power blanks scanout without losing its framebuffer; Magic Bus Vcc-off drops and later rediscovers the accessory; AC plus charger enable raises the main-battery ADC; the real controls clamp 1–60 minutes and their AC-idle checkbox governs automatic `SLEE`/VCC-off shutdown |
 | Sound output | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
 | Sound input | One-shot SIB receive DMA captures deterministic tone/silence with all expected status; the real Stamper UI records a 1 kHz microphone source, stops and drains its SIB command, then plays an audible WAV segment |
-| Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 and fax code through TX39 DSP extensions; direct DAA verification covers connected/off-hook and both ring edges; a held ring opens Phone Status; **receive fax** reaches live-call `AnswerModem`, both fax HDLC directions and non-silent PCM; a clocked two-DataRover product run creates a recipient, dials `5551212`, sustains image transfer, then relaunches the receiver and opens the retained In-box fax, one-page stationery and rendered page; the exchange also supplies deterministic dial tone and decodes DTMF/pulse dialing |
+| Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 and fax code through TX39 DSP extensions; paired generic roles negotiate matching rates and enter V.32 data mode; direct DAA verification covers connected/off-hook and both ring edges; a held ring opens Phone Status; **receive fax** reaches live-call `AnswerModem`, both fax HDLC directions and non-silent PCM; a clocked two-DataRover product run creates a recipient, dials `5551212`, sustains image transfer, then relaunches the receiver and opens the retained In-box fax, one-page stationery and rendered page; the exchange also supplies deterministic dial tone and decodes DTMF/pulse dialing |
 | Magic Bus | ROM assigns and later reassigns address zero, validates the checksummed `ATKB` descriptor, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures |
 | PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback and live-OS checks; blank storage setup, persistent `RAMC` remount, Option-insert reformat, Good/Low/Dead battery pins, a card-backed Notebook object and full built-in backup/restore also pass; `Translation.pkg` copies an authentic 1.x `new items` package into Built-in storage without source writes |
 | PC Card Ethernet | The archived EtherLink driver initializes the 3C589, completes ARP/TCP through rootless libslirp, renders deterministic local HTTP, and carries Browser 3.5's native HTTPS Rule through a loopback Crypto Ancienne proxy; the absolute request, decrypted request, and rendered result are checked |

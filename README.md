@@ -48,6 +48,10 @@ fax and HDLC in both directions, and sustains error-free sender/receiver image
 data while the answerer visibly shows `Receiving page 1`. Its extended
 acceptance relaunches the retained receiver, finds the new fax in the In box,
 opens its one-page stationery, and renders `Fax page 1`.
+The same half-DMA process clock also lets the shipping generic V.32
+originating and answering roles negotiate matching rates and enter data mode;
+the remaining built-in-modem gap is handing that carrier to a real Internet
+Center session.
 The full status table and roadmap are in [`PLAN.md`](PLAN.md); the machine's
 hardware, history, and verification approach are in
 [`docs/background.md`](docs/background.md).

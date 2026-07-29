@@ -339,6 +339,23 @@ required for carrier. The decisive condition is allowing enough synchronized
 training time: at ten seconds both roles are still in the complementary
 R2/R3 waits, while by fifteen seconds both have entered data mode.
 
+Reproduce that acceptance with a provider-configured retained state:
+
+```sh
+python3 tools/data_modem_pair_regression.py \
+  --nvram-source \
+    "$MAGIC_CAP_ASSETS/runtime/combined-browser/<passing-run>/nvram"
+```
+
+The harness copies the source twice, starts the answering peer first so TCP
+connection order identifies the roles, then holds both processes until the
+external PCM endpoints exist. It alternates execution at the 96-byte
+half-DMA boundary and requires matching rate words, detector lock,
+`V32DataPumpReportStatus`, `V32DataModeRxState`, both directions of the
+48-word DMA ring, at least 100 KiB per stream and no more than one half-ring of
+final skew. Generated Lua, copied NVRAM and logs remain under
+`$MAGIC_CAP_ASSETS/runtime/data-modem-pair-regression/`.
+
 The live Dino SIB control value is `0x00a79923`: telecom 16-bit mode is set
 and divisor `0x27` selects 7,200 samples/s. Telecom size `0x00bc` describes
 the expected 48-word ring. This confirms the bridge's two signed 16-bit
@@ -457,13 +474,14 @@ BUILTIN_MODEM_RESULT open=1 spawn=1 server=1 dma_start=1 half=1 full=1 init=1 re
 PASS: Magic Cap opened the built-in modem, kept its 48-word telecom ring running, selected V.32, and executed the ROM's V32ModulatorFIR through a TX39 MADD instruction
 ```
 
-This deliberately proves the ROM/Dino/DSP boundary, not an imaginary
-telephone network. Digital DAA hook, line-connect and ring behavior plus the
+This single-machine test deliberately proves the ROM/Dino/DSP boundary, not
+an imaginary telephone network; the paired regression above supplies the
+remote V.32 carrier proof. Digital DAA hook, line-connect and ring behavior plus the
 exchange's dial-tone waveform, outbound DTMF decoder and hookswitch pulse
 decoder are modelled and checked separately. The normal Telephone actor,
-generated analog digits, off-hook and DMA path are also covered, but carrier
-acquisition and a remote modem are still missing. This test invokes the lower
-ROM boundary rather than automating the Internet Center's dial dialogs.
+generated analog digits, off-hook and DMA path are also covered. This test
+invokes the lower ROM boundary rather than automating the Internet Center's
+dial dialogs.
 
 The product-level target is more specific. *Using Magic Cap*, pp. 135–163 and
 216, documents the built-in fax modem on a telephone line, including selectable
