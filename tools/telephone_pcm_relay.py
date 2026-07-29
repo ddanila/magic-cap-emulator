@@ -58,6 +58,7 @@ class PcmRelay:
                         if active[index]
                         and (
                             not active[1 - index]
+                            or min(self.forwarded) < 4_096
                             or self.forwarded[index]
                             <= self.forwarded[1 - index] + self.MAX_SKEW
                         )

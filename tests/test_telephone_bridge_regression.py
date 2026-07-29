@@ -1,3 +1,5 @@
+import socket
+import time
 import unittest
 
 from tools.telephone_bridge_regression import (
@@ -8,6 +10,7 @@ from tools.telephone_bridge_regression import (
     monitor_bridge_config,
     parse_result,
 )
+from tools.telephone_pcm_relay import PcmRelay
 
 
 class TelephoneBridgeRegressionTests(unittest.TestCase):
@@ -47,6 +50,23 @@ class TelephoneBridgeRegressionTests(unittest.TestCase):
 
     def test_missing_result_rejected(self) -> None:
         self.assertIsNone(parse_result(b"PHONE_BRIDGE_RESULT missing"))
+
+    def test_relay_allows_both_peers_to_prime_before_skew_limit(self) -> None:
+        relay = PcmRelay()
+        relay.start()
+        first = socket.create_connection((relay.host, relay.port))
+        second = socket.create_connection((relay.host, relay.port))
+        try:
+            first.sendall(b"\x00" * 4_096)
+            deadline = time.monotonic() + 2
+            while relay.forwarded[0] < 4_096 and time.monotonic() < deadline:
+                time.sleep(0.01)
+
+            self.assertEqual(relay.forwarded[0], 4_096)
+        finally:
+            first.close()
+            second.close()
+            relay.stop()
 
 
 if __name__ == "__main__":
