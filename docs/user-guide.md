@@ -93,7 +93,7 @@ the contract for future archived WaveLAN, NE2000 and wireless-card work.
 | Area | User-guide contract | Current evidence | Coverage |
 |---|---|---|---|
 | Navigation and touch | Desk, Hallway and Downtown form the main geography; Controls can rerun touch-screen alignment (pp. 3–12, 51–53) | Fresh-boot automation reaches the Desk and calibrates three points; Tab-menu touch round trips pass | Core path covered; user-requested realignment is not automated |
-| Speaker and controls | Volume and system sounds are configurable; a sound stamp can record, stop and play microphone audio (pp. 23, 51–53, 67–68) | Startup beep and continuously buffered sound-TX DMA playback pass; direct sound-RX DMA captures deterministic tone and silence with the expected interrupts | Hardware I/O covered; sound-stamp UI record/play remains |
+| Speaker and controls | Volume and system sounds are configurable; a sound stamp can record, stop and play microphone audio (pp. 23, 51–53, 67–68) | Startup beep and continuously buffered sound-TX DMA pass; direct sound-RX DMA captures tone/silence; the real Stamper UI records, stops, drains its SIB command, and plays the captured audio into a WAV | Principal sound-stamp workflow covered; volume/control UI choices are not separate tests |
 | Infrared Beam | Any displayed card or page can be beamed; discovery fills the recipient, multiple peers require selection, and Magic Cap 3.1 does not interoperate with earlier versions (pp. 78–79, 133) | Two fresh 3.1 peers discover by owner name, select Bob and transfer Alice's name card | Principal workflow covered; other object types and old-version rejection are not separate tests |
 | Web access | Internet Center provider settings drive dial-up Web access and downloaded-page handling (pp. 105–120, 165–174) | PC Card modem completes Hayes/PPP and Web Browser 4.0 fetches a deterministic local page | Covered for the PC Card PPP route |
 | Telephone and built-in modem | The built-in fax modem uses a telephone line and supports tone/pulse configuration (pp. 135–163, 216) | ROM V.32 code and continuous telecom DMA execute | Internal ROM/DSP boundary covered; DAA, dial tone, carrier, remote peer, pulse dialing and fax are missing |
@@ -108,18 +108,13 @@ the contract for future archived WaveLAN, NE2000 and wireless-card work.
 These are product-level tests, ordered by how directly they close known
 hardware gaps:
 
-1. **Sound-stamp record/play.** Open an email, add the general-drawer sound
-   stamp, record from the deterministic source, stop, play it back and verify
-   the captured samples. Direct Betty/Dino sound-RX DMA already passes; this
-   closes the remaining product-level path through the recording UI and stored
-   sound object.
-2. **Built-in line side.** Drive the real Telephone/Internet Center setup,
+1. **Built-in line side.** Drive the real Telephone/Internet Center setup,
    cover tone and pulse dialing, provide DAA/ring/carrier behavior, connect a
    peer and only then extend to fax.
-3. **Magic Bus topology.** Replace the single optional endpoint with an
+2. **Magic Bus topology.** Replace the single optional endpoint with an
    addressable collection, prove two descriptors on one bus, and cover another
    documented class such as an external modem or PC interface.
-4. **Smaller UI contracts.** Add focused checks for Controls-initiated touch
+3. **Smaller UI contracts.** Add focused checks for Controls-initiated touch
    realignment, volume changes, password-on-wake and beaming a notebook page.
 
 This backlog complements the hardware-oriented list in

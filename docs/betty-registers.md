@@ -252,15 +252,43 @@ python3 tools/sound_input_regression.py
 The regression captures 128 test-tone samples, requires the expected range
 and zero crossings, checks half/end/pointer and receive-ready interrupts, then
 switches the live source to silence and requires 128 zero samples. This covers
-the Dino/Betty receive path directly; it does not yet claim the product UI
-workflow.
+the Dino/Betty receive path directly.
 
 *Using Magic Cap*, pp. 67–68, supplies the acceptance workflow rather than
 leaving “microphone support” abstract: create an email, add the general-drawer
 sound stamp, open its recording controls, record from the DataRover microphone,
-stop early or at the configured duration, and play the same stamp back. A
-deterministic sample fed through sound-RX DMA and recovered through the
-already-working speaker path will prove the remaining end-to-end boundary.
+stop early or at the configured duration, and play the same stamp back.
+
+The production ROM exposes two additional pieces of that contract. Its
+queued `SibCmdStartSoundIn` (`0x13c23f6c`) programs receive address, size and
+sample rate, then sets Betty `SoundCfgB` bit 14. Unlike the transmit routine,
+it never writes `kSibEnSoundRxDmaMask`: microphone enable starts receive DMA
+as a Betty/Dino hardware side effect. The command then waits in SIB state 5
+until `sibSf0Status.kSibStatusAudioValid` (bit 17) says an audio slot arrived.
+Returning only the 16-bit Betty register value left that bit permanently
+clear, kept the state machine occupied and stranded the later `0x800c` stop
+command in the queue. Dino now reports audio-valid while microphone input is
+enabled. The queue can return to idle, and `SibCmdStopSoundIn`
+(`0x13c2415c`) clears Betty bit 14 and receive DMA before playback.
+
+Run the product-level acceptance with a personalized NVRAM that resumes at the
+ordinary Desk. The source is copied into an isolated run and is not modified:
+
+```sh
+python3 tools/sound_stamp_regression.py \
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
+```
+
+The harness follows Desk → new mail card → Stamper → General → sound stamp,
+opens the controls, records the deterministic microphone tone, presses Stop,
+and then presses Play. It requires a 1024-sample receive buffer near
+`-12000..12000`, the audio-valid bit, receive DMA shutdown, SIB state zero,
+equal command-queue indices, a bounded transmit-DMA interval, and an audible
+WAV segment aligned with that interval. A measured run captured 967 nonzero
+samples with 283 crossings, drained queue indices `28/28`, and played 3.15
+seconds with peak 13441. Screenshots, the copied NVRAM, Lua, log and WAV remain
+under `$MAGIC_CAP_ASSETS/runtime/sound-stamp-regression/`.
+
 The broader product coverage map is in [`user-guide.md`](user-guide.md).
 
 The complete ROM diagnostic now runs as a regression:

@@ -233,6 +233,9 @@ python3 tools/power_regression.py
 python3 tools/sound_regression.py
 python3 tools/sound_regression.py --checkpoint dma
 python3 tools/sound_input_regression.py
+# Requires a personalized NVRAM that resumes at the ordinary Desk:
+python3 tools/sound_stamp_regression.py \
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
 python3 tools/telecom_regression.py
 python3 tools/telecom_regression.py --continuous
 python3 tools/telecom_regression.py --no-loopback
@@ -528,7 +531,7 @@ the separate serial-terminal view.
 | Persistence | 4 MiB DRAM and Dino RTC use external NVRAM files; a two-process regression proves retained-RAM power-down and on-button wake |
 | Power | LCD power blanks scanout without losing its framebuffer; Magic Bus Vcc-off drops and later rediscovers the accessory; AC plus charger enable raises the main-battery ADC; the real controls clamp 1–60 minutes and their AC-idle checkbox governs automatic `SLEE`/VCC-off shutdown |
 | Sound output | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
-| Sound input | One-shot SIB receive DMA captures a deterministic 1 kHz source, raises half/end/pointer and receive-ready status, stops at the declared buffer end, and captures all zeroes after a live switch to silence |
+| Sound input | One-shot SIB receive DMA captures deterministic tone/silence with all expected status; the real Stamper UI records a 1 kHz microphone source, stops and drains its SIB command, then plays an audible WAV segment |
 | Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 FIR code through a TX39 `MADD` |
 | Magic Bus | ROM assigns and later reassigns address zero, validates the checksummed `ATKB` descriptor, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures |
 | PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback and live-OS checks; blank storage setup, persistent `RAMC` remount, Option-insert reformat, Good/Low/Dead battery pins, a card-backed Notebook object and full built-in backup/restore also pass; `Translation.pkg` copies an authentic 1.x `new items` package into Built-in storage without source writes |
@@ -540,8 +543,7 @@ the separate serial-terminal view.
 
 The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
 still incomplete. The current gaps are the built-in modem's external line
-side, product-level sound-stamp record/play acceptance, multi-device Magic Bus
-topology, and hardware fidelity beyond the register behavior
-exercised by the ROM; see
+side, multi-device Magic Bus topology, and hardware fidelity beyond the
+register behavior exercised by the ROM; see
 [`PLAN.md`](../PLAN.md#remaining-work). Magic Bus discovery and its
 AT-keyboard traffic are functional and covered by the headless probe.

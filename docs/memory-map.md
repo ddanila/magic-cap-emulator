@@ -175,10 +175,10 @@ boot, OS, and peripheral regressions:
 
 These are deliberately ROM-observed behaviors, not a claim that all Dino
 timing and interrupt semantics are complete. Sound-receive DMA accepts host
-microphone, deterministic-tone and silence inputs; its direct buffer and
-interrupt behavior passes, while the Magic Cap sound-stamp UI workflow remains
-to be automated. Power outputs without a represented consumer, such as card
-Vpp, remain outside this implemented subset.
+microphone, deterministic-tone and silence inputs; both its direct buffer
+boundary and Magic Cap's sound-stamp record/stop/play workflow pass. Power
+outputs without a represented consumer, such as card Vpp, remain outside this
+implemented subset.
 
 ## Magic Bus
 

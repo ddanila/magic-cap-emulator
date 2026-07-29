@@ -17,7 +17,7 @@ The full regression list and expected checkpoints are in
 | Persistence & power | Battery-backed DRAM + RTC as NVRAM; power-button suspend/wake across a retained-RAM relaunch | [`power-wake.md`](docs/power-wake.md) |
 | Battery & supply inputs | Both ADC channels answer within the ROM's own calibration thresholds, so the spurious backup-battery warning is gone; battery levels, AC adapter and battery cover are selectable, and removing the cover raises the IO interrupt the OS services | [`power-wake.md`](docs/power-wake.md#battery-levels) |
 | Power outputs, charging & policy | MFIO LCD power blanks scanout without destroying the framebuffer; active-high Magic Bus Vcc-off removes and rediscovers its peripheral; AC plus charger enable advances the main-battery ADC; the real Power Controls clamp 1–60 minutes and automatic AC idle shutoff follows its checkbox | [`power-wake.md`](docs/power-wake.md#outputs-the-os-writes) |
-| Sound I/O | ROM's startup tone (unbuffered hold register), the buffered SIB sound-TX DMA ring, and sound-RX DMA fed by a host microphone or deterministic test source | [`betty-registers.md`](docs/betty-registers.md) |
+| Sound I/O | ROM's startup tone (unbuffered hold register), buffered SIB sound-TX/RX DMA, host or deterministic microphone input, and Magic Cap's sound-stamp record/stop/play workflow | [`betty-registers.md`](docs/betty-registers.md) |
 | Built-in software modem | Continuous 48-word SIB telecom DMA ring drives the ROM's V.32 pump/control/FIR through a TX39 `MADD` | [`builtin-modem.md`](docs/builtin-modem.md) |
 | Magic Bus | Address assignment and reinitialization, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
@@ -36,13 +36,6 @@ The full regression list and expected checkpoints are in
   remote modem are not represented. Tone/pulse dialing and fax are documented
   product behaviors beyond that boundary. This is separate from the working
   PC Card PPP path ([`builtin-modem.md`](docs/builtin-modem.md)).
-
-- **Complete microphone/audio-input acceptance.** `sibSoundRxStart`, the
-  sound-RX DMA enable/pointer/interrupt path, and selectable host-microphone,
-  deterministic-tone and silence sources are modeled and pass a direct
-  hardware regression. The guide's email sound-stamp record/stop/play workflow
-  remains the intended end-to-end product acceptance test
-  ([`betty-registers.md`](docs/betty-registers.md#buffered-sib-sound-dma)).
 
 - **Expand Magic Bus beyond one keyboard.** The product connector supports
   PCs, external modems, keyboards and other accessories, commonly in a daisy
