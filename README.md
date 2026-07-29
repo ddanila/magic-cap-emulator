@@ -31,8 +31,9 @@ built-in-storage backup/restore passes, and `Translation.pkg` copies a real
 guarded loopback launcher also lets that corrected browser visit public HTTPS
 sites; see
 [the live-browsing instructions](docs/oldvcr-tls.md#browsing-the-live-web).
-The visible Telephone can enter `580`, reach its active call screen and drive
-the ROM's PhoneServer, DAA and dual DMA path under headless verification.
+The visible Telephone can enter `580`, reach its active call screen, drive
+the ROM's software DTMF generator, PhoneServer, DAA and dual DMA path, and
+have the automatic exchange decode its sampled output as `580`.
 The full status table and roadmap are in [`PLAN.md`](PLAN.md); the machine's
 hardware, history, and verification approach are in
 [`docs/background.md`](docs/background.md).
@@ -90,7 +91,7 @@ directory and write the asset tree as `$MAGIC_CAP_ASSETS`.
 | [`rom-layout.md`](docs/rom-layout.md) | ROM/SDK provenance, checksums, asset mirror, image format |
 | [`memory-map.md`](docs/memory-map.md) | Memory map, Dino peripheral block, Magic Bus, Glacier |
 | [`betty-registers.md`](docs/betty-registers.md) | Betty SIB ASIC registers, sound and telecom DMA |
-| [`tx39-cpu.md`](docs/tx39-cpu.md) | TX39/R3900 CPU audit and the `MADD`/`MADDU` extension |
+| [`tx39-cpu.md`](docs/tx39-cpu.md) | TX39/R3900 CPU audit and multiply/multiply-add extensions |
 | [`power-wake.md`](docs/power-wake.md) | Power, sleep/wake path, batteries, AC and cover inputs |
 | [`pclink.md`](docs/pclink.md) | Recovered PCLink wire format and package-install regression |
 | [`modem.md`](docs/modem.md) | PC Card modem, Slirp PPP, Web Browser 4.0 acceptance |

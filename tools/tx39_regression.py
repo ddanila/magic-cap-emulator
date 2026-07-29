@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute and verify the TX39 MADD/MADDU instruction extensions in MAME."""
+"""Execute and verify the TX39 multiply instruction extensions in MAME."""
 
 from __future__ import annotations
 
@@ -21,25 +21,33 @@ DEFAULT_ROMPATH = ASSETS_ROOT / "roms"
 DEFAULT_WORKDIR = ASSETS_ROOT / "runtime" / "tx39-regression"
 RESULT_PATTERN = re.compile(
     rb"MADD R10=([0-9A-F]{8}) HI=([0-9A-F]{8}) LO=([0-9A-F]{8}) "
-    rb"PC=([0-9A-F]{8}).*"
+    rb"PC=[0-9A-F]{8}.*"
     rb"MADDU R11=([0-9A-F]{8}) HI=([0-9A-F]{8}) LO=([0-9A-F]{8}) "
-    rb"PC=([0-9A-F]{8})",
+    rb"PC=[0-9A-F]{8}.*"
+    rb"MULT R12=([0-9A-F]{8}) HI=([0-9A-F]{8}) LO=([0-9A-F]{8}) "
+    rb"PC=[0-9A-F]{8}.*"
+    rb"MULTU R13=([0-9A-F]{8}) HI=([0-9A-F]{8}) LO=([0-9A-F]{8}) "
+    rb"PC=[0-9A-F]{8}",
     re.DOTALL,
 )
 EXPECTED = (
     0xFFFFFFFF,
     0xFFFFFFFF,
     0xFFFFFFFF,
-    0xA0001004,
     0xFFFFFFFF,
     0x00000001,
     0xFFFFFFFF,
-    0xA0001024,
+    0xFFFFFFFA,
+    0xFFFFFFFF,
+    0xFFFFFFFA,
+    0xFFFFFFFE,
+    0x00000001,
+    0xFFFFFFFE,
 )
 
 
 def automation_script() -> str:
-    """Return an isolated uncached-RAM test for both TX39 operations."""
+    """Return an isolated uncached-RAM test for four TX39 operations."""
     return r"""local machine = manager.machine
 local cpu = machine.devices[":maincpu"]
 local program = cpu.spaces["program"]
@@ -84,6 +92,40 @@ emu.register_frame_done(function()
         print(string.format(
             "MADDU R11=%08X HI=%08X LO=%08X PC=%08X",
             cpu.state["R11"].value,
+            cpu.state["HI"].value,
+            cpu.state["LO"].value,
+            cpu.state["PC"].value))
+
+        -- MULT r12,r8,r9: -2 * 3 = -6 in rd and HI/LO.
+        program:write_u32(0x00001040, 0x01096018)
+        program:write_u32(0x00001044, 0x1000ffff)
+        program:write_u32(0x00001048, 0x00000000)
+        cpu.state["R8"].value = 0xfffffffe
+        cpu.state["R9"].value = 3
+        cpu.state["HI"].value = 0
+        cpu.state["LO"].value = 0
+        run_at(0x00001040)
+    elseif frames == 13 then
+        print(string.format(
+            "MULT R12=%08X HI=%08X LO=%08X PC=%08X",
+            cpu.state["R12"].value,
+            cpu.state["HI"].value,
+            cpu.state["LO"].value,
+            cpu.state["PC"].value))
+
+        -- MULTU r13,r8,r9: 0xffffffff * 2 = 0x1fffffffe.
+        program:write_u32(0x00001060, 0x01096819)
+        program:write_u32(0x00001064, 0x1000ffff)
+        program:write_u32(0x00001068, 0x00000000)
+        cpu.state["R8"].value = 0xffffffff
+        cpu.state["R9"].value = 2
+        cpu.state["HI"].value = 0
+        cpu.state["LO"].value = 0
+        run_at(0x00001060)
+    elseif frames == 14 then
+        print(string.format(
+            "MULTU R13=%08X HI=%08X LO=%08X PC=%08X",
+            cpu.state["R13"].value,
             cpu.state["HI"].value,
             cpu.state["LO"].value,
             cpu.state["PC"].value))
@@ -178,7 +220,7 @@ def run_regression(args: argparse.Namespace) -> int:
         )
         return 1
 
-    print("PASS: TX39 MADD and MADDU update rd, HI, and LO correctly")
+    print("PASS: TX39 MADD, MADDU, MULT, and MULTU update rd, HI, and LO correctly")
     print(f"Artifacts: {run_dir}")
     return 0
 

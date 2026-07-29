@@ -46,6 +46,18 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('tag=":PHONE_PEER"', config)
         self.assertIn('value="1"', config)
 
+    def test_exchange_digits_parse_in_order(self) -> None:
+        output = (
+            b"Telephone exchange DTMF: 5\n"
+            b"Telephone exchange DTMF: 8\n"
+            b"Telephone exchange DTMF: 0\n"
+        )
+
+        self.assertEqual(
+            telephone_ui.DTMF_PATTERN.findall(output),
+            [b"5", b"8", b"0"],
+        )
+
 
 class ResultTests(unittest.TestCase):
     def test_complete_result_parses(self) -> None:
@@ -53,7 +65,8 @@ class ResultTests(unittest.TestCase):
             b"TELEPHONE_UI_RESULT dialer=1 start_call=1 server_dial=1 "
             b"audio_dialing=2 start_monitor=1 phone_half=2010 "
             b"phone_full=2009 daa_offhook=1 sib_offhook=1 "
-            b"telecom_start=1 sound_size=48 telecom_size=48 "
+            b"telecom_start=1 softmodem_dial=1 dialer_init=1 "
+            b"call_progress=6 block_scale=300 sound_size=48 telecom_size=48 "
             b"sound_enables=3 telecom_enables=3 sound_tx=00357348 "
             b"telecom_tx=00357288 telecom_rx=003571C8\n"
         )
@@ -64,6 +77,8 @@ class ResultTests(unittest.TestCase):
         assert result is not None
         self.assertEqual(result["dialer"], 1)
         self.assertEqual(result["phone_half"], 2010)
+        self.assertEqual(result["call_progress"], 6)
+        self.assertEqual(result["block_scale"], 300)
         self.assertEqual(result["sound_tx"], 0x0035_7348)
         self.assertEqual(result["telecom_rx"], 0x0035_71C8)
 

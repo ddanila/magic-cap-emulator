@@ -4,12 +4,10 @@
 The test starts from an already calibrated DataRover NVRAM image, opens the
 Desk and Telephone, enters 580 on the visible keypad, and presses dial.  ROM
 breakpoint counters prove that the product path reaches PhoneDialer,
-PhoneServer, SpeakerPhoneAudio, the DAA hookswitch, and Dino telecom DMA.
-
-This is a product-level actor and hardware-boundary test.  It deliberately
-does not claim that the Telephone application's outbound analog dialing audio
-has reached the automatic exchange; that remaining boundary is documented in
-docs/builtin-modem.md.
+PhoneServer, the software-modem DTMF generator and scaler,
+SpeakerPhoneAudio, the DAA hookswitch, and Dino telecom DMA.  The automatic
+exchange must decode the visible number, proving that product-generated audio
+crosses the emulated telephone boundary.
 """
 
 from __future__ import annotations
@@ -44,14 +42,21 @@ SYMBOLS = (
     (0x13C2_4DA4, "daa_offhook"),
     (0x13C2_2AE4, "sib_offhook"),
     (0x13C2_3B3C, "telecom_start"),
+    (0x13C5_A090, "softmodem_dial"),
+    (0x13E6_4F80, "dialer_init"),
+    (0x13E6_4E64, "call_progress"),
+    (0x13E6_14F0, "block_scale"),
 )
 
+DTMF_PATTERN = re.compile(rb"Telephone exchange DTMF: ([0-9A-D*#])")
 RESULT_PATTERN = re.compile(
     rb"TELEPHONE_UI_RESULT "
     rb"dialer=(\d+) start_call=(\d+) server_dial=(\d+) "
     rb"audio_dialing=(\d+) start_monitor=(\d+) "
     rb"phone_half=(\d+) phone_full=(\d+) daa_offhook=(\d+) "
     rb"sib_offhook=(\d+) telecom_start=(\d+) "
+    rb"softmodem_dial=(\d+) dialer_init=(\d+) "
+    rb"call_progress=(\d+) block_scale=(\d+) "
     rb"sound_size=(\d+) telecom_size=(\d+) "
     rb"sound_enables=(\d+) telecom_enables=(\d+) "
     rb"sound_tx=([0-9A-F]{8}) telecom_tx=([0-9A-F]{8}) "
@@ -129,6 +134,8 @@ emu.register_frame_done(function()
             .. "audio_dialing=%d start_monitor=%d "
             .. "phone_half=%d phone_full=%d daa_offhook=%d "
             .. "sib_offhook=%d telecom_start=%d "
+            .. "softmodem_dial=%d dialer_init=%d "
+            .. "call_progress=%d block_scale=%d "
             .. "sound_size=%d telecom_size=%d "
             .. "sound_enables=%d telecom_enables=%d "
             .. "sound_tx=%08X telecom_tx=%08X telecom_rx=%08X",
@@ -264,6 +271,7 @@ def run_regression(args: argparse.Namespace) -> int:
         "-debug",
         "-debugger",
         "none",
+        "-oslog",
         "-video",
         "none",
         "-sound",
@@ -289,6 +297,7 @@ def run_regression(args: argparse.Namespace) -> int:
         return 2
     output_path.write_bytes(completed.stdout)
     result = parse_result(completed.stdout)
+    digits = DTMF_PATTERN.findall(completed.stdout)
     missing = (
         []
         if result is None
@@ -311,10 +320,18 @@ def run_regression(args: argparse.Namespace) -> int:
         and calling.is_file()
         and number.read_bytes() != calling.read_bytes()
     )
-    if completed.returncode or missing or not hardware_ok or not ui_ok:
+    exchange_ok = digits == [b"5", b"8", b"0"]
+    if (
+        completed.returncode
+        or missing
+        or not hardware_ok
+        or not ui_ok
+        or not exchange_ok
+    ):
         print(
-            "FAIL: Telephone UI/actor/DMA checkpoint incomplete "
-            f"(result={result!r}, missing={missing}, ui={ui_ok}); "
+            "FAIL: Telephone UI/actor/audio/DMA checkpoint incomplete "
+            f"(result={result!r}, missing={missing}, ui={ui_ok}, "
+            f"exchange_digits={digits!r}); "
             f"see {output_path}",
             file=sys.stderr,
         )
@@ -322,8 +339,9 @@ def run_regression(args: argparse.Namespace) -> int:
 
     print(
         "PASS: Magic Cap entered 580 in the Telephone, showed the active "
-        "call screen, traversed PhoneDialer and PhoneServer, went off-hook, "
-        "and kept both 48-word sound and telecom DMA rings running"
+        "call screen, traversed PhoneDialer, PhoneServer, and the software "
+        "DTMF generator, went off-hook, kept both 48-word sound and telecom "
+        "DMA rings running, and the exchange decoded 580"
     )
     print(f"Artifacts: {run_dir}")
     return 0

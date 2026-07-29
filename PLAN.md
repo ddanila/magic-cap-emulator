@@ -18,9 +18,9 @@ The full regression list and expected checkpoints are in
 | Battery & supply inputs | Both ADC channels answer within the ROM's own calibration thresholds, so the spurious backup-battery warning is gone; battery levels, AC adapter and battery cover are selectable, and removing the cover raises the IO interrupt the OS services | [`power-wake.md`](docs/power-wake.md#battery-levels) |
 | Power outputs, charging & policy | MFIO LCD power blanks scanout without destroying the framebuffer; active-high Magic Bus Vcc-off removes and rediscovers its peripheral; AC plus charger enable advances the main-battery ADC; the real Power Controls clamp 1–60 minutes and automatic AC idle shutoff follows its checkbox | [`power-wake.md`](docs/power-wake.md#outputs-the-os-writes) |
 | Sound I/O | ROM's startup tone (unbuffered hold register), buffered SIB sound-TX/RX DMA, host or deterministic microphone input, and Magic Cap's sound-stamp record/stop/play workflow | [`betty-registers.md`](docs/betty-registers.md) |
-| Built-in software modem | Continuous 48-word SIB telecom DMA ring drives the ROM's V.32 pump/control/FIR through a TX39 `MADD`; the Betty DAA hookswitch/line input and Dino MFIO ring edges are modelled; the deterministic exchange supplies 350+440 Hz dial tone and decodes outbound DTMF or pulse dialing; the visible Telephone enters `580`, reaches its call screen and traverses PhoneDialer/PhoneServer into live sound and telecom DMA | [`builtin-modem.md`](docs/builtin-modem.md) |
+| Built-in software modem | Continuous 48-word SIB telecom DMA ring drives the ROM's V.32 pump/control/FIR through TX39 DSP extensions; the Betty DAA hookswitch/line input and Dino MFIO ring edges are modelled; the deterministic exchange supplies 350+440 Hz dial tone and decodes outbound DTMF or pulse dialing; the visible Telephone enters `580`, traverses PhoneDialer/PhoneServer and the real software-DTMF generator, and its sampled line output is decoded as `580` | [`builtin-modem.md`](docs/builtin-modem.md) |
 | Magic Bus | Address assignment and reinitialization, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
-| TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
+| TX39 extensions | `MADD`/`MADDU` plus three-operand `MULT`/`MULTU` implemented; all four verify `rd`, `HI`, and `LO`, covering 792 multiply/add and 89 destination-writing multiply uses in the SDK ELF | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core, completes TCP through rootless libslirp, renders deterministic local HTTP, carries Browser 3.5's native HTTPS Rule through a host TLS proxy, and can browse public HTTPS sites through a guarded loopback launcher | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
 | Storage cards | Blank setup, persistent remount, live Option-insert reformat, battery states, card-backed objects, full built-in-storage backup/restore, and source-preserving translation of a real 1.x `new items` package into 3.1 Built-in storage | [`developer-archives.md`](docs/developer-archives.md#storage-cards-an-exact-os-visible-contract), [`mame-bringup.md`](docs/mame-bringup.md) |
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap, including the 452K Apollo browser from the Old VCR field report | [`pclink.md`](docs/pclink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
@@ -36,10 +36,11 @@ The full regression list and expected checkpoints are in
   off-hook and ring-level/edge behavior, and its deterministic exchange now
   supplies a direct-DMA-verified North American dial tone and decodes
   tone- and pulse-dialed numbers. The normal Telephone UI/actor path now
-  enters `580`, goes off-hook and runs both 48-word DMA rings; recovering its
-  digit-dependent analog output, carrier acquisition and a remote modem are
-  not yet represented. Fax is the final documented product behavior beyond
-  that boundary. This is separate from the working PC Card PPP path
+  enters `580`, goes off-hook, runs both 48-word DMA rings, generates DTMF
+  through the ROM softmodem, and is decoded by the exchange. Carrier
+  acquisition and a remote modem are not yet represented. Fax is the final
+  documented product behavior beyond that boundary. This is separate from
+  the working PC Card PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 
 - **Expand Magic Bus beyond one keyboard.** The product connector supports

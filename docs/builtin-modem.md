@@ -22,6 +22,7 @@ The Apollo ELF from the Icras SDK names the complete path in the shipping USA
 | `0x13e49b40` | V.32 control |
 | `0x13e518e0` | `V32ModulatorFIR` |
 | `0x13e51974` | first TX39 `MADD` in that FIR |
+| `0x13e614f0` | `BlockShortScale`, using TX39 three-operand `MULT` |
 
 The ROM allocates 192-byte receive and transmit buffers, or 48 32-bit words
 each, at runtime addresses `0x0000c778` and `0x0000c838`. Its start command
@@ -133,19 +134,40 @@ ROM to traverse:
 | `0x13c438fc` / `0x13c439a8` | phone half/full DMA service |
 | `0x13c24da4` / `0x13c22ae4` | `DAAOffHook` / `SibServerTelecomOffHook` |
 | `0x13c23b3c` | private `SibCmdStartTelecom` |
+| `0x13c5a090` | `SoftwareModem_DialNumberWithResultCode` |
+| `0x13e64f80` | `DialerInit` |
+| `0x13e64e64` | `CallProgressGenerator` |
+| `0x13e614f0` | `BlockShortScale` |
 
 The final checkpoint also requires both sound and telecom directions enabled,
-48-word rings and nonzero sound-TX, telecom-TX and telecom-RX addresses. A
-passing UI shows `580` before Dial and `Calling 580` afterward.
+48-word rings, nonzero sound-TX, telecom-TX and telecom-RX addresses, and the
+automatic exchange to decode exactly `580`. A passing UI shows `580` before
+Dial and `Calling 580` afterward.
 
-The acceptance run also identifies the boundary still missing. The product
-Telephone's telecom-TX ring remains zero while calling, and its short
-sound-TX burst is identical when the entered number is changed from `580` to
-`123`; it is therefore call-progress audio, not digit-dependent DTMF. Direct
-DMA DTMF and physical hookswitch pulse decoding remain valid exchange tests,
-but the normal Telephone's outbound digit mechanism has not yet been found
-at the analog Betty/DAA boundary. The emulator does not guess those digits
-from screen taps or ROM objects.
+The recovered product call chain is
+`PhoneDialer_DialNumber` → `ModemDialer_DialNumberCommon` →
+`SoftwareModem_DialNumberWithResultCode`. Its soft-modem command carries
+`T580`; `DialerInit` parses all three digits and
+`CallProgressGenerator` produces each tone and gap.
+
+This path exposed a CPU-core bug rather than a missing DAA route.
+`BlockShortScale` contains eight TX39 `MULT rd,rs,rt` instructions. The old
+baseline MIPS-I interpretation updated only `HI:LO` and left `rd` unchanged,
+so the following Q12 right shift reduced a healthy oscillator to about ±6.
+The R3900 core now also writes the low product to `rd`, as the Toshiba manual
+specifies. The resulting waveform crosses the existing telecom-TX and DAA
+path and is decoded from samples; the emulator never infers digits from UI
+taps or ROM objects.
+
+A representative passing checkpoint is:
+
+```text
+Telephone exchange DTMF: 5
+Telephone exchange DTMF: 8
+Telephone exchange DTMF: 0
+TELEPHONE_UI_RESULT dialer=1 start_call=1 server_dial=1 audio_dialing=2 start_monitor=1 phone_half=677 phone_full=676 daa_offhook=1 sib_offhook=1 telecom_start=1 softmodem_dial=1 dialer_init=1 call_progress=90 block_scale=1598 sound_size=48 telecom_size=48 sound_enables=3 telecom_enables=3 sound_tx=40357348 telecom_tx=40357288 telecom_rx=40357108
+PASS: Magic Cap entered 580 in the Telephone, showed the active call screen, traversed PhoneDialer, PhoneServer, and the software DTMF generator, went off-hook, kept both 48-word sound and telecom DMA rings running, and the exchange decoded 580
+```
 
 ## Published design cross-check
 
@@ -214,16 +236,15 @@ This deliberately proves the ROM/Dino/DSP boundary, not an imaginary
 telephone network. Digital DAA hook, line-connect and ring behavior plus the
 exchange's dial-tone waveform, outbound DTMF decoder and hookswitch pulse
 decoder are modelled and checked separately. The normal Telephone actor,
-off-hook and DMA path is also covered, but its outbound analog digits,
-carrier acquisition and a remote modem are still missing. This test invokes
-the lower ROM boundary rather than automating the Internet Center's dial
-dialogs.
+generated analog digits, off-hook and DMA path are also covered, but carrier
+acquisition and a remote modem are still missing. This test invokes the lower
+ROM boundary rather than automating the Internet Center's dial dialogs.
 
 The product-level target is more specific. *Using Magic Cap*, pp. 135–163 and
 216, documents the built-in fax modem on a telephone line, including selectable
 tone/pulse dialing and fax workflows. The real Telephone now reaches its call
-screen and line hardware. Closing the remaining gap means recovering its
-digit-dependent analog output, then driving the Internet Center through
-carrier behavior and a remote peer—not merely making the current lower-level
-DSP or digital-DAA probes count more functions. See
+screen, generates its tone-dialed number and crosses the line hardware.
+Closing the remaining gap means driving the Internet Center through carrier
+behavior and a remote peer, then covering fax—not merely making the current
+lower-level DSP or digital-DAA probes count more functions. See
 [`user-guide.md`](user-guide.md).

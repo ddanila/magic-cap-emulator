@@ -56,8 +56,9 @@ Key facts established by analysis:
 Build it as a **MAME driver** (in a fork, upstreamable later) rather than a
 standalone emulator. MAME supplies the mature
 [`mips1` CPU core](https://github.com/mamedev/mame/tree/master/src/devices/cpu/mips)
-(the R3900 is R3000A-compatible; the fork adds the TX39 `MADD`/`MADDU`
-extension), plus LCD rendering, touch/pointer input, PCMCIA slots,
+(the R3900 is R3000A-compatible; the fork adds TX39 three-operand
+`MULT`/`MULTU` and `MADD`/`MADDU`), plus LCD rendering, touch/pointer input,
+PCMCIA slots,
 serial/modem and RTC devices, save states, and a debugger with MIPS
 disassembly — most of an emulator's boring 80% — and it is fully OSS
 (BSD-3/GPL-2). A minimal standalone C/Rust harness was the fallback plan but

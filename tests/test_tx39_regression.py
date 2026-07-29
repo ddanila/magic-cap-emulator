@@ -8,6 +8,8 @@ class Tx39RegressionTests(unittest.TestCase):
         output = (
             b"MADD R10=FFFFFFFF HI=FFFFFFFF LO=FFFFFFFF PC=A0001004\n"
             b"MADDU R11=FFFFFFFF HI=00000001 LO=FFFFFFFF PC=A0001024\n"
+            b"MULT R12=FFFFFFFA HI=FFFFFFFF LO=FFFFFFFA PC=A0001044\n"
+            b"MULTU R13=FFFFFFFE HI=00000001 LO=FFFFFFFE PC=A0001064\n"
         )
         self.assertEqual(parse_results(output), EXPECTED)
 
@@ -18,6 +20,8 @@ class Tx39RegressionTests(unittest.TestCase):
         script = automation_script()
         self.assertIn("0x71095000", script)
         self.assertIn("0x71095801", script)
+        self.assertIn("0x01096018", script)
+        self.assertIn("0x01096819", script)
         self.assertIn('cpu.state["HI"]', script)
         self.assertIn('cpu.state["LO"]', script)
 

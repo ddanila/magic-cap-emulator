@@ -25,11 +25,14 @@ The same 246-page document is also scanned on archive.org as
 [manualzilla-id-7260633](https://archive.org/details/manualzilla-id-7260633),
 a fallback if the Bitsavers copy moves.
 
-The July 1995 manual defines `MADD` and `MADDU` under primary opcode `0x1c`,
-function values 0 and 1. Both add a signed or unsigned 32×32 product to the
+The July 1995 manual defines three-operand `MULT rd,rs,rt` and
+`MULTU rd,rs,rt` as TX39 extensions to the normal SPECIAL encodings. They
+write the product's low word to both `rd` and `LO`, and its high word to
+`HI`; omitting `rd` encodes register zero and retains the familiar MIPS-I
+spelling. It also defines `MADD` and `MADDU` under primary opcode `0x1c`,
+function values 0 and 1. Those add a signed or unsigned 32×32 product to the
 existing `HI:LO` accumulator, write the 64-bit result back to `HI:LO`, and
-also write its low word to `rd`. An omitted assembly-language `rd` encodes
-register zero.
+also write its low word to `rd`.
 
 ## ROM audit
 
@@ -53,6 +56,20 @@ words as raw data when disassembling an ELF marked for the baseline R3000;
 the encoding and surrounding multiply/shift sequences match the Toshiba
 manual.
 
+The same audit finds 89 signed `MULT` words with a nonzero `rd`, spread
+through 19 modem helpers. `V32ModulatorFIR` has 12; `BlockShortScale`,
+`V32NonlinearDecoder`, `V32NonlinearEncoder`, and `V32TrellisSearch` have
+eight each. There are another 536 conventional `MULT` and 303 `MULTU`
+encodings with `rd=0`, but no three-operand `MULTU` in this ELF.
+
+The nonzero destination is architecturally significant. The Telephone's
+software DTMF path calls `BlockShortScale`, whose eight unrecognized words
+multiply Q12 oscillator samples before shifting them right by 12. Treating
+the words as ordinary two-operand MIPS-I `MULT` updates only `HI:LO`, leaves
+the input registers unscaled, and reduces the transmitted waveform to
+roughly ±6. Implementing the TX39 destination write restores the intended
+16-bit DTMF amplitude.
+
 The boot code also reads and writes TX39 CP0 registers 3 (configuration) and
 7 (cache lock) and issues cache operations 0, 5, and 17. The R3900 device
 keeps the two CP0 values as read/write shadows and already models the three
@@ -61,10 +78,12 @@ cycle-exact cache locking and clock division are not claimed.
 
 ## Emulator behavior and regression
 
-The MAME fork gives only the `R3900` device the `MADD`/`MADDU` execution
-extension. Other MIPS-I devices still raise Reserved Instruction for primary
-opcode `0x1c`. MAME's shared MIPS-I disassembler recognizes both encodings so
-debug traces name them.
+The MAME fork gives only the `R3900` device the three-operand
+`MULT`/`MULTU` behavior and the `MADD`/`MADDU` execution extension. Other
+MIPS-I devices retain their original two-operand multiply behavior and still
+raise Reserved Instruction for primary opcode `0x1c`. The R3900
+disassembler shows a nonzero destination explicitly, while other MIPS-I
+devices retain the conventional spelling.
 
 Run the isolated arithmetic regression with:
 
@@ -72,8 +91,10 @@ Run the isolated arithmetic regression with:
 python3 tools/tx39_regression.py
 ```
 
-It writes two tiny uncached-RAM programs into the running DataRover machine.
-The signed case proves `5 + (-2 × 3) = -1`; the unsigned case proves
-`1 + (0xffffffff × 2) = 0x1ffffffff`. Both verify `rd`, `HI`, and `LO`.
+It writes four tiny uncached-RAM programs into the running DataRover machine.
+The multiply/add cases prove `5 + (-2 × 3) = -1` and
+`1 + (0xffffffff × 2) = 0x1ffffffff`; the multiply cases prove
+`-2 × 3 = -6` and `0xffffffff × 2 = 0x1fffffffe`. All four verify `rd`,
+`HI`, and `LO`.
 Generated Lua, NVRAM, and logs stay under
 `$MAGIC_CAP_ASSETS/runtime/tx39-regression/`.
