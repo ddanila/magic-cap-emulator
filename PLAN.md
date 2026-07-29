@@ -42,11 +42,12 @@ The full regression list and expected checkpoints are in
   independent DataRovers and bounds unequal host scheduling. Exploratory
   paired runs now verify the ROM's exact command-6 options, command-2
   originating/answering roles, active V.32 receive/transmit paths, and
-  non-silent PCM in both directions; simple polarity is excluded. Carrier
-  acquisition through the product call sequence or a subtler Betty
-  codec/line behavior is the next missing layer. Fax is the final documented
-  product behavior beyond that boundary. This is separate from the working
-  PC Card PPP path
+  non-silent PCM in both directions; simple polarity and Dino's 16-bit sample
+  framing are excluded. The high-level answer method still needs a genuine
+  live call object, not just a hardware ring edge. Carrier acquisition
+  through that product call sequence or a subtler analog-line behavior is
+  the next missing layer. Fax is the final documented product behavior
+  beyond that boundary. This is separate from the working PC Card PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 
 - **Expand Magic Bus beyond one keyboard.** The product connector supports

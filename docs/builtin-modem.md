@@ -236,11 +236,19 @@ pump/control/FIR path, clean return from debugger-injected setup, and command
 16-bit PCM polarity in both directions does not change the ROM's no-carrier
 result.
 
+The live Dino SIB control value is `0x00a79923`: telecom 16-bit mode is set
+and divisor `0x27` selects 7,200 samples/s. Telecom size `0x00bc` describes
+the expected 48-word ring. This confirms the bridge's two signed 16-bit
+samples per big-endian word; 8-bit packing is not an unresolved codec guess.
+Calling the high-level `SoftwareModem_AnswerModem` method without a live
+phone-call object reaches the method but deliberately stops before command 6
+or telecom DMA. Hardware ring pulses alone do not create that object context.
+
 This narrows the remaining failure: raw full-duplex transport, scheduler
 skew, silent DSP output, answer-role selection, and simple line polarity have
-all been excluded. Product call sequencing/state or a subtler Betty
-codec/analog-line behavior remains to be found. Carrier, data transfer, and
-fax are still unclaimed.
+all been excluded. Product call-object sequencing/state or a subtler analog
+line behavior remains to be found. Carrier, data transfer, and fax are still
+unclaimed.
 
 ## Published design cross-check
 
