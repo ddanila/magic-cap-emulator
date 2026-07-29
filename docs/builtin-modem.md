@@ -48,11 +48,14 @@ sits around the sample stream:
   numbers 95 and 127 and uses the edge cadence to qualify a real ring.
 
 The driver now implements this boundary. **Phone line** selects the connected
-input and **Incoming telephone ring** drives the MFIO level and both edge
-interrupts. Ring is intentionally a level input rather than a one-shot event,
-so an automation harness or UI operator can supply the cadence expected by
-the ROM. **Telephone exchange** selects either a silent line or the automatic
-test exchange.
+input. **Incoming telephone ring** is the ringing envelope a user or
+automation holds active; while held, MAME produces the external DAA
+detector's 20 ms half-period waveform on MFIO0 and latches both edge
+interrupts. This distinction matters: one envelope edge cannot pass the ROM's
+ring qualifier. `RingInterrupt` groups four detector edges, accepts a
+12–100 ms total, requires four valid groups, and then schedules the
+one-second completion action. **Telephone exchange** selects either a silent
+line or the automatic test exchange.
 
 The direct regression runs without personalized NVRAM:
 
@@ -63,6 +66,22 @@ python3 tools/telephone_line_regression.py --mame ../mame/datarover
 It verifies that off-hook/on-hook writes preserve a connected line, and that
 asserting and releasing ring change MFIO input bit 0 and latch the correct
 interrupt banks.
+
+The product-level incoming regression requires a calibrated retained state:
+
+```sh
+python3 tools/incoming_call_regression.py \
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
+```
+
+It holds the ring envelope once; the harness does not synthesize detector
+edges. Breakpoint counters require `RingInterrupt`, its completion callback,
+`LandLineCircuit_ContinueRingAction`, client dispatch,
+`LandLinePhoneServer_RingAction`, and `FaxReceive_RingAction`. The final
+screenshot must differ from the pre-ring scene. The accepted result is the
+documented Phone Status window—“You have a telephone call.”—with
+**receive fax** and **answer**. This adopts the incoming-call and fax workflow
+from *Using Magic Cap*, pp. 94–95 and 156.
 
 The automatic exchange supplies the North American continuous dial tone,
 350 Hz plus 440 Hz, only while the line is connected and Betty is off-hook.
@@ -244,13 +263,18 @@ the expected 48-word ring. This confirms the bridge's two signed 16-bit
 samples per big-endian word; 8-bit packing is not an unresolved codec guess.
 Calling the high-level `SoftwareModem_AnswerModem` method without a live
 phone-call object reaches the method but deliberately stops before command 6
-or telecom DMA. Hardware ring pulses alone do not create that object context.
+or telecom DMA. Isolated envelope edges also fail because the ROM expects a
+physical detector cadence. That cadence is now modelled: a qualified ring
+creates the real Phone Status context and offers **receive fax** and
+**answer**. The remaining paired experiment must select the appropriate
+product button before invoking the answering modem.
 
 This narrows the remaining failure: raw full-duplex transport, scheduler
-skew, silent DSP output, answer-role selection, simple polarity, and a broad
-direct-to-attenuated gain range have all been excluded. Product call-object
-sequencing/state or more complex analog-line behavior remains to be found.
-Carrier, data transfer, and fax are still unclaimed.
+skew, silent DSP output, answer-role selection, simple polarity, a broad
+direct-to-attenuated gain range, and incoming call-object creation have all
+been addressed or excluded. Selecting the real answer/fax path and any more
+complex analog-line behavior remain to be tested. Carrier, data transfer, and
+fax are still unclaimed.
 
 ## Published design cross-check
 

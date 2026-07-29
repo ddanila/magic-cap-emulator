@@ -249,6 +249,8 @@ python3 tools/builtin_modem_regression.py \
 # Requires calibrated NVRAM that resumes at the ordinary Desk:
 python3 tools/telephone_ui_regression.py \
   --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
+python3 tools/incoming_call_regression.py \
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
 python3 tools/battery_regression.py
 python3 tools/power_outputs_regression.py
 python3 tools/power_policy_regression.py
@@ -552,7 +554,7 @@ the separate serial-terminal view.
 | Power | LCD power blanks scanout without losing its framebuffer; Magic Bus Vcc-off drops and later rediscovers the accessory; AC plus charger enable raises the main-battery ADC; the real controls clamp 1–60 minutes and their AC-idle checkbox governs automatic `SLEE`/VCC-off shutdown |
 | Sound output | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
 | Sound input | One-shot SIB receive DMA captures deterministic tone/silence with all expected status; the real Stamper UI records a 1 kHz microphone source, stops and drains its SIB command, then plays an audible WAV segment |
-| Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 FIR code through TX39 DSP extensions; direct DAA verification covers connected/off-hook state, both Dino ring edges, deterministic 350+440 Hz dial tone, and decoding DTMF or pulse-dialed `580`; the visible Telephone's sampled output decodes as `580`; two independent DataRovers exchange every word of their continuous telecom DMA rings through the external PCM bridge |
+| Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 FIR code through TX39 DSP extensions; direct DAA verification covers connected/off-hook state and both Dino ring edges; a held ring envelope qualifies through the ROM and opens Phone Status after notifying PhoneServer and FaxReceive; the exchange supplies deterministic 350+440 Hz dial tone and decodes DTMF or pulse-dialed `580`; the visible Telephone's sampled output decodes as `580`; two independent DataRovers exchange every word of their continuous telecom DMA rings through the external PCM bridge |
 | Magic Bus | ROM assigns and later reassigns address zero, validates the checksummed `ATKB` descriptor, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures |
 | PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback and live-OS checks; blank storage setup, persistent `RAMC` remount, Option-insert reformat, Good/Low/Dead battery pins, a card-backed Notebook object and full built-in backup/restore also pass; `Translation.pkg` copies an authentic 1.x `new items` package into Built-in storage without source writes |
 | PC Card Ethernet | The archived EtherLink driver initializes the 3C589, completes ARP/TCP through rootless libslirp, renders deterministic local HTTP, and carries Browser 3.5's native HTTPS Rule through a loopback Crypto Ancienne proxy; the absolute request, decrypted request, and rendered result are checked |

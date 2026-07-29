@@ -33,9 +33,12 @@ sites; see
 [the live-browsing instructions](docs/oldvcr-tls.md#browsing-the-live-web).
 The visible Telephone can enter `580`, reach its active call screen, drive
 the ROM's software DTMF generator, PhoneServer, DAA and dual DMA path, and
-have the automatic exchange decode its sampled output as `580`. A full-duplex
-PCM bridge also carries both telecom DMA streams between two independent
-DataRover processes, ready for originating/answering carrier work.
+have the automatic exchange decode its sampled output as `580`. The incoming
+side also qualifies a held ring envelope through the real ROM detector,
+notifies the phone and fax clients, and opens Phone Status with its
+**receive fax** and **answer** choices. A full-duplex PCM bridge carries both
+telecom DMA streams between two independent DataRover processes, ready for
+originating/answering carrier work.
 The full status table and roadmap are in [`PLAN.md`](PLAN.md); the machine's
 hardware, history, and verification approach are in
 [`docs/background.md`](docs/background.md).

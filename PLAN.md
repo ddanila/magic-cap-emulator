@@ -18,7 +18,7 @@ The full regression list and expected checkpoints are in
 | Battery & supply inputs | Both ADC channels answer within the ROM's own calibration thresholds, so the spurious backup-battery warning is gone; battery levels, AC adapter and battery cover are selectable, and removing the cover raises the IO interrupt the OS services | [`power-wake.md`](docs/power-wake.md#battery-levels) |
 | Power outputs, charging & policy | MFIO LCD power blanks scanout without destroying the framebuffer; active-high Magic Bus Vcc-off removes and rediscovers its peripheral; AC plus charger enable advances the main-battery ADC; the real Power Controls clamp 1–60 minutes and automatic AC idle shutoff follows its checkbox | [`power-wake.md`](docs/power-wake.md#outputs-the-os-writes) |
 | Sound I/O | ROM's startup tone (unbuffered hold register), buffered SIB sound-TX/RX DMA, host or deterministic microphone input, and Magic Cap's sound-stamp record/stop/play workflow | [`betty-registers.md`](docs/betty-registers.md) |
-| Built-in software modem | Continuous 48-word SIB telecom DMA ring drives the ROM's V.32 pump/control/FIR through TX39 DSP extensions; the Betty DAA hookswitch/line input and Dino MFIO ring edges are modelled; the deterministic exchange supplies 350+440 Hz dial tone and decodes outbound DTMF or pulse dialing; the visible Telephone's real software-DTMF output is decoded as `580`; a full-duplex PCM bridge exchanges every telecom word between two independent DataRovers | [`builtin-modem.md`](docs/builtin-modem.md) |
+| Built-in software modem | Continuous 48-word SIB telecom DMA ring drives the ROM's V.32 pump/control/FIR through TX39 DSP extensions; the Betty DAA hookswitch/line input and Dino MFIO ring detector are modelled; a held ring envelope qualifies through the ROM and opens the incoming Phone Status window; the deterministic exchange supplies 350+440 Hz dial tone and decodes outbound DTMF or pulse dialing; the visible Telephone's real software-DTMF output is decoded as `580`; a full-duplex PCM bridge exchanges every telecom word between two independent DataRovers | [`builtin-modem.md`](docs/builtin-modem.md) |
 | Magic Bus | Address assignment and reinitialization, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | TX39 extensions | `MADD`/`MADDU` plus three-operand `MULT`/`MULTU` implemented; all four verify `rd`, `HI`, and `LO`, covering 792 multiply/add and 89 destination-writing multiply uses in the SDK ELF | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core, completes TCP through rootless libslirp, renders deterministic local HTTP, carries Browser 3.5's native HTTPS Rule through a host TLS proxy, and can browse public HTTPS sites through a guarded loopback launcher | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
@@ -43,13 +43,15 @@ The full regression list and expected checkpoints are in
   paired runs now verify the ROM's exact command-6 options, command-2
   originating/answering roles, active V.32 receive/transmit paths, and
   non-silent PCM in both directions; Dino's 16-bit sample framing is
-  confirmed. The high-level answer method still needs a genuine live call
-  object, not just a hardware ring edge. Word-aligned tests also exclude
-  simple polarity and direct through 12 dB-attenuated line gain. Carrier
-  acquisition through the product call sequence or more complex analog-line
-  behavior is the next missing layer. Fax is the final documented product
-  behavior beyond that boundary. This is separate from the working PC Card
-  PPP path
+  confirmed. A held incoming-ring envelope now becomes the detector-edge
+  cadence expected by the ROM, reaches both PhoneServer and FaxReceive, and
+  opens Phone Status with **receive fax** and **answer**. The next paired run
+  must select that real receive path so `AnswerModem` receives its live call
+  context. Word-aligned tests also exclude simple polarity and direct through
+  12 dB-attenuated line gain. Carrier acquisition through that product call
+  sequence or more complex analog-line behavior is the next missing layer;
+  completed fax transfer remains beyond it. This is separate from the working
+  PC Card PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 
 - **Expand Magic Bus beyond one keyboard.** The product connector supports

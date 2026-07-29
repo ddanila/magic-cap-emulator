@@ -211,6 +211,9 @@ python3 tools/telephone_line_regression.py --pulse # exchange pulse dialing
 # Product Telephone path; requires calibrated retained state:
 python3 tools/telephone_ui_regression.py \
   --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
+# Product incoming-call path; same retained-state requirement:
+python3 tools/incoming_call_regression.py \
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
 ```
 
 The loopback run requires all 64 words to arrive, the half, end and pointer
@@ -227,7 +230,9 @@ V32ModulatorFIR and a TX39 `MADD`. See
 scope. `tools/telephone_ui_regression.py` supplies the product-level
 complement: it enters `580` in the visible Telephone, reaches `Calling 580`,
 and requires the PhoneDialer, PhoneServer, DAA off-hook and both sound and
-telecom DMA paths.
+telecom DMA paths. `tools/incoming_call_regression.py` holds one ring envelope
+and requires MAME's DAA detector waveform to qualify through the ROM, notify
+both PhoneServer and FaxReceive, and open the incoming Phone Status window.
 
 ## Verifying the sound path
 
