@@ -89,9 +89,10 @@ The full regression list and expected checkpoints are in
   request across ROM reads, returns a checksum-valid `HTTP/1.0 200 OK` with a
   deterministic HTML body, and waits until the product PPP reader consumes
   it. OCR verifies that Web Browser renders `Magic Cap built-in modem works.`;
-  its current one-segment FIN produces the browser's dropped-connection
-  notice after rendering. The remaining line-side target is a general host
-  endpoint bridge and graceful TCP close. This is
+  the peer then waits for Magic Cap's ACK, sends a separate FIN, and
+  acknowledges Magic Cap's FIN. The clean final screen proves that the
+  four-way close avoids the dropped-connection notice. The remaining
+  line-side target is a general host endpoint bridge. This is
   separate from the working PC Card PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 

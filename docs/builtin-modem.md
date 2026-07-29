@@ -424,12 +424,11 @@ Magic Cap accepts the SYN-ACK and sends `GET / HTTP/1.0` with
 reads, derives the acknowledgement from the complete TCP payload, and returns
 a checksum-valid `HTTP/1.0 200 OK` response with a deterministic HTML body.
 The harness keeps both modem processes on the same PCM clock until the
-product's own PPP-read counter confirms receipt. Tesseract then verifies
-`Magic Cap built-in modem works.` in the final Web Browser snapshot. The
-current combined data/FIN segment also causes the browser's
-`The connection was unexpectedly dropped.` notice after the body renders;
-graceful close sequencing remains part of the general bridge work. The
-product calls
+product's own PPP-read counter confirms receipt. After the product
+acknowledges the data, the peer sends FIN separately, waits for Magic Cap's
+FIN, and returns the final ACK. Tesseract then verifies
+`Magic Cap built-in modem works.` and rejects the dropped-connection text in
+the final Web Browser snapshot. The product calls
 `SoftwareModem_Read`, `PPPServer_ReadPDU` and `LCP_ProcessFrame` throughout.
 This proves LCP/IPCP, bidirectional TCP and rendered HTTP across the complete
 ROM stack. A general host bridge remains separate from the already working
@@ -583,8 +582,7 @@ screen, generates its tone-dialed number and crosses the line hardware.
 The product regression now drives the Internet Center through carrier, LAPM,
 LCP/IPCP, TCP and a rendered deterministic HTTP response, and the fax pair
 covers the complete send/receive workflow. Closing the remaining gap means
-connecting the protocol-aware PPP peer to a general host-network endpoint and
-performing graceful TCP teardown—not merely making the lower-level DSP or
-digital-DAA probes count more functions.
+connecting the protocol-aware PPP peer to a general host-network endpoint—not
+merely making the lower-level DSP or digital-DAA probes count more functions.
 See
 [`user-guide.md`](user-guide.md).

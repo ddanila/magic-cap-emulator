@@ -70,6 +70,10 @@ PEER_ROUND_PATTERN = re.compile(
 HTTP_RESPONSE_PATTERN = re.compile(
     rb"PRODUCT_ANSWER_HTTP_RESPONSE bytes=(\d+)"
 )
+HTTP_FIN_PATTERN = re.compile(rb"PRODUCT_ANSWER_HTTP_FIN bytes=(\d+)")
+HTTP_CLOSE_ACK_PATTERN = re.compile(
+    rb"PRODUCT_ANSWER_HTTP_CLOSE_ACK bytes=(\d+)"
+)
 
 PRODUCT_SYMBOLS = (
     (0x13D4_DD08, "new_dialup_link"),
@@ -102,7 +106,7 @@ PRODUCT_PPP_READ_COUNTER = COUNTERS + next(
     if name == "ppp_read"
 )
 CALL_SETTLE_FRAMES = 240
-MAX_PEER_READS = 12
+MAX_PEER_READS = 20
 PRODUCT_PATTERN = re.compile(
     rb"PRODUCT_DATA_MODEM_RESULT "
     + rb" ".join(name.encode() + rb"=(\d+)" for _, name in PRODUCT_SYMBOLS)
@@ -565,48 +569,33 @@ local function collect_http_frame()
   return nil
 end
 
-local function dynamic_http_response()
-  local frame = collect_http_frame()
-  if frame == nil then return nil end
-  local ip_header = (frame[5] & 0x0f) * 4
-  local tcp_start = 5 + ip_header
-  local tcp_header = (frame[tcp_start + 12] >> 4) * 4
-  local data_start = tcp_start + tcp_header
-  if frame[data_start] ~= string.byte("G")
-      or frame[data_start + 1] ~= string.byte("E")
-      or frame[data_start + 2] ~= string.byte("T") then
-    return nil
-  end
-  local client_sequence =
-    ((frame[tcp_start + 4] * 256 + frame[tcp_start + 5]) * 256
-      + frame[tcp_start + 6]) * 256 + frame[tcp_start + 7]
-  local ip_length = frame[7] * 256 + frame[8]
-  local client_data_length = ip_length - ip_header - tcp_header
-  local acknowledgement =
-    (client_sequence + client_data_length) & 0xffffffff
-  local body = "<html><body>Magic Cap built-in modem works.</body></html>\r\n"
-  local headers =
-    "HTTP/1.0 200 OK\r\n"
-    .. "Content-Type: text/html\r\n"
-    .. "Content-Length: " .. #body .. "\r\n"
-    .. "Connection: close\r\n\r\n"
-  local application = string_bytes(headers .. body)
+local http_server_next_sequence = nil
+local http_fin_sent = false
+local http_close_ack_sent = false
+
+local function build_http_packet(
+    sequence, acknowledgement, flags, application, identification)
   local tcp_length = 20 + #application
   local ip_length_out = 20 + tcp_length
   local ip = {
     0x45, 0x00, (ip_length_out >> 8) & 0xff, ip_length_out & 0xff,
-    0x12, 0x35, 0x00, 0x00, 0x40, 0x06, 0x00, 0x00,
+    (identification >> 8) & 0xff, identification & 0xff,
+    0x00, 0x00, 0x40, 0x06, 0x00, 0x00,
     0x0a, 0x00, 0x02, 0x02, 0x0a, 0x00, 0x02, 0x0f
   }
   local ip_checksum = internet_checksum(ip)
   ip[11], ip[12] = (ip_checksum >> 8) & 0xff, ip_checksum & 0xff
   local tcp = {
-    0x1f, 0x90, 0x04, 0x00, 0x01, 0x02, 0x03, 0x05,
+    0x1f, 0x90, 0x04, 0x00,
+    (sequence >> 24) & 0xff,
+    (sequence >> 16) & 0xff,
+    (sequence >> 8) & 0xff,
+    sequence & 0xff,
     (acknowledgement >> 24) & 0xff,
     (acknowledgement >> 16) & 0xff,
     (acknowledgement >> 8) & 0xff,
     acknowledgement & 0xff,
-    0x50, 0x19, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00
+    0x50, flags, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00
   }
   append_bytes(tcp, application)
   local pseudo = {
@@ -620,6 +609,59 @@ local function dynamic_http_response()
   append_bytes(payload, ip)
   append_bytes(payload, tcp)
   return async_ppp_frame(payload)
+end
+
+local function dynamic_http_response()
+  local frame = collect_http_frame()
+  if frame == nil then return nil, nil end
+  local ip_header = (frame[5] & 0x0f) * 4
+  local tcp_start = 5 + ip_header
+  local tcp_header = (frame[tcp_start + 12] >> 4) * 4
+  local data_start = tcp_start + tcp_header
+  local client_sequence =
+    ((frame[tcp_start + 4] * 256 + frame[tcp_start + 5]) * 256
+      + frame[tcp_start + 6]) * 256 + frame[tcp_start + 7]
+  local client_acknowledgement =
+    ((frame[tcp_start + 8] * 256 + frame[tcp_start + 9]) * 256
+      + frame[tcp_start + 10]) * 256 + frame[tcp_start + 11]
+  local ip_length = frame[7] * 256 + frame[8]
+  local client_data_length = ip_length - ip_header - tcp_header
+  local flags = frame[tcp_start + 13]
+  local client_next_sequence =
+    (client_sequence + client_data_length
+      + (((flags & 0x03) ~= 0) and 1 or 0)) & 0xffffffff
+  if http_fin_sent and not http_close_ack_sent
+      and (flags & 0x01) ~= 0 then
+    http_close_ack_sent = true
+    return build_http_packet(
+      (http_server_next_sequence + 1) & 0xffffffff,
+      client_next_sequence, 0x10, {}, 0x1237
+    ), "close_ack"
+  end
+  if http_server_next_sequence ~= nil and not http_fin_sent
+      and (flags & 0x10) ~= 0
+      and client_acknowledgement == http_server_next_sequence then
+    http_fin_sent = true
+    return build_http_packet(
+      http_server_next_sequence, client_next_sequence, 0x11, {}, 0x1236
+    ), "fin"
+  end
+  if frame[data_start] ~= string.byte("G")
+      or frame[data_start + 1] ~= string.byte("E")
+      or frame[data_start + 2] ~= string.byte("T") then
+    return nil, nil
+  end
+  local body = "<html><body>Magic Cap built-in modem works.</body></html>\r\n"
+  local headers =
+    "HTTP/1.0 200 OK\r\n"
+    .. "Content-Type: text/html\r\n"
+    .. "Content-Length: " .. #body .. "\r\n"
+    .. "Connection: close\r\n\r\n"
+  local application = string_bytes(headers .. body)
+  http_server_next_sequence = (0x01020305 + #application) & 0xffffffff
+  return build_http_packet(
+    0x01020305, client_next_sequence, 0x18, application, 0x1235
+  ), "response"
 end
 
 local function join_frames(first, second)
@@ -842,7 +884,7 @@ emu.register_frame_done(function()
     result_written = true
   end
   if not http_result_written
-      and program:read_u32(PRODUCT_PPP_READ_COUNTER) >= 6 then
+      and program:read_u32(PRODUCT_PPP_READ_COUNTER) >= 8 then
     local http_result = assert(io.open(http_result_path, "w"))
     http_result:write("received\\n")
     http_result:close()
@@ -1057,7 +1099,7 @@ def answer_automation_script(
         "          echo_round, program:read_u32(ECHO_RESPONSE_KIND),\n"
         "          echo_read_total, program:read_u32(ECHO_TOTAL),\n"
         "          table.concat(echo_hex)))\n"
-        "        local http_response = dynamic_http_response()\n"
+        "        local http_response, http_kind = dynamic_http_response()\n"
         "        local response = http_response\n"
         "        local response_kind = program:read_u32(ECHO_RESPONSE_KIND)\n"
         "        if response == nil and (response_kind ~= 4\n"
@@ -1065,10 +1107,17 @@ def answer_automation_script(
         "          response = dynamic_peer_response(response_kind)\n"
         "        end\n"
         "        if response ~= nil then\n"
-        "          if http_response ~= nil then\n"
+        '          if http_kind == "response" then\n'
         '            print(string.format("PRODUCT_ANSWER_HTTP_RESPONSE bytes=%d",\n'
         "              #http_response))\n"
         "            http_response_pending = true\n"
+        '          elseif http_kind == "fin" then\n'
+        '            print(string.format("PRODUCT_ANSWER_HTTP_FIN bytes=%d",\n'
+        "              #http_response))\n"
+        '          elseif http_kind == "close_ack" then\n'
+        "            print(string.format(\n"
+        '              "PRODUCT_ANSWER_HTTP_CLOSE_ACK bytes=%d",\n'
+        "              #http_response))\n"
         "          end\n"
         "          start_dynamic_write(response)\n"
         "        else\n"
@@ -1236,6 +1285,18 @@ def parse_http_response_result(output: bytes) -> int | None:
     return int(match.group(1)) if match is not None else None
 
 
+def parse_http_fin_result(output: bytes) -> int | None:
+    """Return the escaped byte count of the generated TCP FIN frame."""
+    match = HTTP_FIN_PATTERN.search(output)
+    return int(match.group(1)) if match is not None else None
+
+
+def parse_http_close_ack_result(output: bytes) -> int | None:
+    """Return the escaped byte count of the final TCP close ACK."""
+    match = HTTP_CLOSE_ACK_PATTERN.search(output)
+    return int(match.group(1)) if match is not None else None
+
+
 def verify_rendered_http(run_dir: Path) -> tuple[bool, str]:
     """OCR the final Web Browser screen for the deterministic response body."""
     image = run_dir / "product" / "snapshots" / "product-result.png"
@@ -1261,6 +1322,8 @@ def verify_rendered_http(run_dir: Path) -> tuple[bool, str]:
     text = " ".join(completed.stdout.lower().split())
     if completed.returncode or "magic cap built-in modem works." not in text:
         return False, f"Web Browser did not render the HTTP body: {text!r}"
+    if "connection was unexpectedly dropped" in text:
+        return False, "Web Browser reported an unexpected TCP disconnect"
     return True, "deterministic HTTP body rendered"
 
 
@@ -1578,6 +1641,10 @@ def run_regression(args: argparse.Namespace) -> int:
     http_response_bytes = parse_http_response_result(
         outputs.get("answer", b"")
     )
+    http_fin_bytes = parse_http_fin_result(outputs.get("answer", b""))
+    http_close_ack_bytes = parse_http_close_ack_result(
+        outputs.get("answer", b"")
+    )
     failures = validate_results(
         product,
         answer,
@@ -1593,7 +1660,11 @@ def run_regression(args: argparse.Namespace) -> int:
         failures.append("browser HTTP request did not reach the answer peer")
     if http_response_bytes is None or http_response_bytes <= 0:
         failures.append("answer peer did not write its HTTP response")
-    if product is not None and http_response_bytes and product["ppp_read"] < 6:
+    if http_fin_bytes is None or http_fin_bytes <= 0:
+        failures.append("answer peer did not complete orderly TCP close")
+    if http_close_ack_bytes is None or http_close_ack_bytes <= 0:
+        failures.append("answer peer did not acknowledge the product TCP FIN")
+    if product is not None and http_close_ack_bytes and product["ppp_read"] < 8:
         failures.append("product did not receive the HTTP response")
     rendered, render_detail = verify_rendered_http(run_dir)
     if not rendered:

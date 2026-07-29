@@ -14,6 +14,8 @@ from tools.product_data_modem_regression import (
     initial_ipcp_response,
     machine_config,
     parse_echo_result,
+    parse_http_close_ack_result,
+    parse_http_fin_result,
     parse_http_request,
     parse_http_response_result,
     parse_peer_data,
@@ -45,7 +47,7 @@ class ProductDataModemScriptTests(unittest.TestCase):
         self.assertIn("answer.result-ready", script)
         self.assertIn("PRODUCT_DATA_MODEM_RESULT", script)
         self.assertIn('screen:snapshot("product-result.png")', script)
-        self.assertIn("PRODUCT_PPP_READ_COUNTER) >= 6", script)
+        self.assertIn("PRODUCT_PPP_READ_COUNTER) >= 8", script)
         self.assertNotIn("0x13c29434", script)
 
     def test_configs_select_exchange_for_product_and_bridge_for_answer(self) -> None:
@@ -76,9 +78,12 @@ class ProductDataModemScriptTests(unittest.TestCase):
         self.assertIn("PRODUCT_ANSWER_PEER_DATA", script)
         self.assertIn("dynamic_syn_ack", script)
         self.assertIn("dynamic_control_response", script)
-        self.assertIn("0x50, 0x19", script)
+        self.assertIn("0x18, application, 0x1235", script)
+        self.assertIn("0x11, {}, 0x1236", script)
         self.assertIn("PRODUCT_ANSWER_DYNAMIC_WRITE_RETURN", script)
         self.assertIn("PRODUCT_ANSWER_HTTP_RESPONSE", script)
+        self.assertIn("PRODUCT_ANSWER_HTTP_FIN", script)
+        self.assertIn("PRODUCT_ANSWER_HTTP_CLOSE_ACK", script)
         self.assertIn("PRODUCT_ANSWER_ECHO bytes=", script)
         self.assertIn("PRODUCT_ANSWER_ECHO_DATA hex=", script)
         self.assertIn("PRODUCT_ANSWER_LCP_REPLY read=", script)
@@ -355,6 +360,16 @@ class ProductDataModemResultTests(unittest.TestCase):
                 b"PRODUCT_ANSWER_HTTP_RESPONSE bytes=231\n"
             ),
             231,
+        )
+        self.assertEqual(
+            parse_http_fin_result(b"PRODUCT_ANSWER_HTTP_FIN bytes=53\n"),
+            53,
+        )
+        self.assertEqual(
+            parse_http_close_ack_result(
+                b"PRODUCT_ANSWER_HTTP_CLOSE_ACK bytes=52\n"
+            ),
+            52,
         )
 
 

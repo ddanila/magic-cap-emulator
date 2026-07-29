@@ -613,8 +613,8 @@ the separate serial-terminal view.
 | Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
 
 The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
-still incomplete. The current gaps include a general host bridge and graceful
-TCP close for the now-connected built-in dial-up path, multi-device
+still incomplete. The current gaps include a general host bridge for the
+now-connected built-in dial-up path, multi-device
 Magic Bus topology, and hardware fidelity beyond the register behavior
 exercised by the ROM; see
 [`PLAN.md`](../PLAN.md#remaining-work). Magic Bus discovery and its
