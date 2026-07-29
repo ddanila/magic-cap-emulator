@@ -214,6 +214,9 @@ python3 tools/telephone_ui_regression.py \
 # Product incoming-call path; same retained-state requirement:
 python3 tools/incoming_call_regression.py \
   --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
+# Product fax-answer path; same retained-state requirement:
+python3 tools/fax_receive_regression.py \
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
 ```
 
 The loopback run requires all 64 words to arrive, the half, end and pointer
@@ -233,6 +236,10 @@ and requires the PhoneDialer, PhoneServer, DAA off-hook and both sound and
 telecom DMA paths. `tools/incoming_call_regression.py` holds one ring envelope
 and requires MAME's DAA detector waveform to qualify through the ROM, notify
 both PhoneServer and FaxReceive, and open the incoming Phone Status window.
+`tools/fax_receive_regression.py` presses the real **receive fax** choice and
+requires the live-call `AnswerModem`, softmodem command/line handlers, fax
+modem receive/transmit, both HDLC directions, 48-word bidirectional DMA, a
+non-silent external PCM capture, and the Receiving fax progress window.
 
 ## Verifying the sound path
 

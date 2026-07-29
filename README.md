@@ -36,9 +36,11 @@ the ROM's software DTMF generator, PhoneServer, DAA and dual DMA path, and
 have the automatic exchange decode its sampled output as `580`. The incoming
 side also qualifies a held ring envelope through the real ROM detector,
 notifies the phone and fax clients, and opens Phone Status with its
-**receive fax** and **answer** choices. A full-duplex PCM bridge carries both
-telecom DMA streams between two independent DataRover processes, ready for
-originating/answering carrier work.
+**receive fax** and **answer** choices. Selecting **receive fax** now uses that
+live call context, opens the Receiving fax progress window, runs the ROM's fax
+modem and HDLC paths, and emits non-silent line PCM. A full-duplex PCM bridge
+carries both telecom DMA streams between two independent DataRover processes,
+ready for matched fax-originating/answering work.
 The full status table and roadmap are in [`PLAN.md`](PLAN.md); the machine's
 hardware, history, and verification approach are in
 [`docs/background.md`](docs/background.md).

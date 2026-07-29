@@ -83,6 +83,22 @@ documented Phone Status window—“You have a telephone call.”—with
 **receive fax** and **answer**. This adopts the incoming-call and fax workflow
 from *Using Magic Cap*, pp. 94–95 and 156.
 
+The next product action is independently covered:
+
+```sh
+python3 tools/fax_receive_regression.py \
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
+```
+
+This presses **receive fax** in Phone Status. It proves the qualified call
+supplies the context that `SoftwareModem_AnswerModem` previously lacked,
+checks the softmodem command and line handlers, `FaxModemInit`,
+`FaxModemRcv`, `FaxModemXmt`, and both fax HDLC directions. It also requires
+the 48-word RX/TX DMA ring, a non-silent external PCM capture, and the visible
+Receiving fax progress window. Its line input is intentionally silent, so
+this claims the complete local answer startup—not remote negotiation or a
+received page.
+
 The automatic exchange supplies the North American continuous dial tone,
 350 Hz plus 440 Hz, only while the line is connected and Betty is off-hook.
 It uses phase accumulators at Dino's programmed telecom rate, so its samples
@@ -264,17 +280,19 @@ samples per big-endian word; 8-bit packing is not an unresolved codec guess.
 Calling the high-level `SoftwareModem_AnswerModem` method without a live
 phone-call object reaches the method but deliberately stops before command 6
 or telecom DMA. Isolated envelope edges also fail because the ROM expects a
-physical detector cadence. That cadence is now modelled: a qualified ring
-creates the real Phone Status context and offers **receive fax** and
-**answer**. The remaining paired experiment must select the appropriate
-product button before invoking the answering modem.
+physical detector cadence. That cadence is now modelled, and the qualified
+Phone Status **receive fax** action supplies the missing call object. It
+reaches `AnswerModem`, issues 24 softmodem commands during the observed
+interval, installs `SoftModemLineHandler`, runs both `FaxModemRcv` and
+`FaxModemXmt`, exercises HDLC receive/send, and produces non-silent PCM.
 
 This narrows the remaining failure: raw full-duplex transport, scheduler
 skew, silent DSP output, answer-role selection, simple polarity, a broad
-direct-to-attenuated gain range, and incoming call-object creation have all
-been addressed or excluded. Selecting the real answer/fax path and any more
-complex analog-line behavior remain to be tested. Carrier, data transfer, and
-fax are still unclaimed.
+direct-to-attenuated gain range, incoming call-object creation, and the real
+fax-answer startup have all been addressed or excluded. The missing peer is a
+matched product-level fax originator; after that, any remaining negotiation
+failure can be separated from analog-line behavior. Carrier, data transfer,
+and completed fax-page transfer are still unclaimed.
 
 ## Published design cross-check
 
