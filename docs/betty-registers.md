@@ -251,8 +251,9 @@ workflow, creates and selects a fax recipient, requires the exchange to decode
 `5551212`, and checks fax initialization plus the 48-word RX/TX DMA ring.
 `tools/fax_pair_regression.py` runs those visible origin actions beside the
 real incoming-call/**receive fax** workflow. Its byte-gated, clocked exchange
-requires fax receive/transmit and HDLC in both ROMs, sender image data,
-receiver image-data entry, and non-silent PCM in both directions.
+requires fax receive/transmit and HDLC in both ROMs, at least 64 sender and
+receiver image callbacks without a protocol error, and non-silent PCM in both
+directions.
 
 ## Verifying the sound path
 

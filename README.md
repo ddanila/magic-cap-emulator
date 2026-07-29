@@ -44,8 +44,8 @@ workflow creates and selects a recipient, renders the current screen, dials
 bridge carries both streams between independent DataRovers; its combined test
 exchange mode supplies central-office dial tone before joining peer PCM. A
 clocked two-DataRover regression now runs both visible Fax workflows, exchanges
-fax and HDLC in both directions, sends image data, and enters the receiver's
-image-data path.
+fax and HDLC in both directions, and sustains error-free sender/receiver image
+data while the answerer visibly shows `Receiving page 1`.
 The full status table and roadmap are in [`PLAN.md`](PLAN.md); the machine's
 hardware, history, and verification approach are in
 [`docs/background.md`](docs/background.md).

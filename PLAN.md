@@ -56,10 +56,12 @@ The full regression list and expected checkpoints are in
   then peer PCM. The maintained paired regression consumes equal-duration
   setup silence, triggers the physical ring after 300,000 caller PCM bytes,
   pauses the caller while the real answer UI reaches modem mode, and then
-  bounds both line clocks to one 4 KiB block. Both product roles initialize
-  fax, exchange HDLC, run fax RX/TX, and exercise sender and receiver image
-  callbacks. Persisting and visibly rendering the received page remains the
-  next missing layer. This is separate from the working PC Card PPP path
+  OS-pauses whichever emulator leads the shared PCM timeline until its peer
+  catches up. Both product roles initialize fax, exchange HDLC, run fax RX/TX,
+  sustain more than 64 sender/receiver image callbacks with no ROM protocol
+  error, and visibly show `Receiving page 1`. Persisting and visibly rendering
+  the received page remains the next missing layer. This is separate from the
+  working PC Card PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 
 - **Expand Magic Bus beyond one keyboard.** The product connector supports

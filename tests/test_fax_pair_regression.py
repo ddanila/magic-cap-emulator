@@ -48,6 +48,9 @@ class ScriptTests(unittest.TestCase):
                 self.assertIn(f"0x{address:08x}", script)
             self.assertIn("program:read_u32(0x10c00060)", script)
             self.assertIn("program:read_u32(0x10c00090)", script)
+            self.assertIn("0x13e8b010", script)
+            self.assertIn("0x13c5bd30", script)
+            self.assertIn("0x13e8bc8c", script)
             self.assertIn(f"/tmp/{role}.result-ready", script)
             self.assertIn("if result_written then", script)
 
@@ -62,7 +65,10 @@ class ResultTests(unittest.TestCase):
             f"{name}={index + 1}" for index, (_, name) in enumerate(fax_pair.SYMBOLS)
         )
         output = (
-            f"FAX_PAIR_RESULT role=origin {values} telecom_words=48 telecom_enables=0\n"
+            f"FAX_PAIR_RESULT role=origin {values} "
+            "telecom_words=48 telecom_enables=0 "
+            "protocol_errors=2 last_error=10 last_detail=1 "
+            "image_zero_reads=3 image_failures=4 image_pages=5\n"
         ).encode()
 
         result = fax_pair.parse_result(output, "origin")
@@ -72,6 +78,8 @@ class ResultTests(unittest.TestCase):
         self.assertEqual(result["connect_number"], 1)
         self.assertEqual(result["send_image"], 13)
         self.assertEqual(result["telecom_words"], 48)
+        self.assertEqual(result["last_error"], 10)
+        self.assertEqual(result["image_pages"], 5)
         self.assertIsNone(fax_pair.parse_result(output, "answer"))
 
 
@@ -95,10 +103,49 @@ class ExchangeTests(unittest.TestCase):
             answer.sendall(b"CED!")
             self.assertEqual(caller.recv(4), b"CED!")
             self.assertTrue(exchange.answer_ready.wait(timeout=2))
+            exchange.release_call()
 
             caller.sendall(b"CNG!")
             self.assertEqual(answer.recv(4), b"CNG!")
             self.assertGreater(sum(exchange.call_forwarded), 0)
+        finally:
+            caller.close()
+            answer.close()
+            exchange.stop()
+
+    def test_process_controller_alternates_pcm_leader(self) -> None:
+        exchange = fax_pair.CallPcmExchange()
+        controls: list[tuple[int, bool]] = []
+        exchange.set_process_controller(
+            lambda index, paused: controls.append((index, paused))
+        )
+        exchange.start()
+        caller = socket.create_connection(("127.0.0.1", exchange.port))
+        answer = socket.create_connection(("127.0.0.1", exchange.port))
+        caller.settimeout(2)
+        answer.settimeout(2)
+        try:
+            caller.sendall(b"CALL")
+            self.assertEqual(caller.recv(4), b"\0\0\0\0")
+            deadline = time.monotonic() + 2
+            while max(exchange.forwarded) < 4 and time.monotonic() < deadline:
+                time.sleep(0.01)
+            caller_index = exchange.forwarded.index(max(exchange.forwarded))
+            answer_index = 1 - caller_index
+            exchange.arm(caller_index)
+            self.assertIn((caller_index, True), controls)
+
+            answer.sendall(b"CED!")
+            self.assertEqual(caller.recv(4), b"CED!")
+            self.assertTrue(exchange.answer_ready.wait(timeout=2))
+            self.assertIn((answer_index, True), controls)
+
+            exchange.release_call()
+            caller.sendall(b"CNG!")
+            self.assertEqual(answer.recv(4), b"CNG!")
+            exchange.disable_process_control()
+            self.assertIn((caller_index, False), controls)
+            self.assertIn((answer_index, False), controls)
         finally:
             caller.close()
             answer.close()

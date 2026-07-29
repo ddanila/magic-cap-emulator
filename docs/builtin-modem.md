@@ -128,8 +128,10 @@ waits at the ordinary Desk. A central-office relay returns equal-duration
 silence during dialing instead of queuing stale caller audio at the answerer.
 After 300,000 caller PCM bytes it holds the caller, rings the answerer, waits
 for the real **receive fax** workflow to emit its first modem samples, then
-exchanges both streams with at most one 4 KiB block of skew. Result markers
-keep each emulator alive until both have recorded their counters.
+OS-pauses whichever process leads the call's PCM byte count until its peer
+catches up. This prevents a virtual modem from advancing its timers through
+bytes still buffered in the host socket. Result markers release clock control
+and keep each emulator alive until both have recorded their counters.
 
 The automatic exchange supplies the North American continuous dial tone,
 350 Hz plus 440 Hz, only while the line is connected and Betty is off-hook.
@@ -339,18 +341,23 @@ answer generation, bridge framing, and origin detection independently.
 The maintained paired result closes that timing layer. Independent video-frame
 schedules were unsuitable before both telecom streams existed: one machine
 could accumulate stale audio or advance its modem timeout while the other UI
-was still answering. The byte-gated relay instead creates one line timeline
-with setup silence, caller hold, and bounded post-answer skew. A representative
-passing run decoded `5551212`; initialized fax nine times on each ROM; ran
-fax receive/transmit and 4/4 origin plus 2/4 answer HDLC calls; reached two
-origin `SendFaxImageData`, two answer `StartReceiveFaxImageData`, and five
-answer `ReceiveFaxImageData` calls; and retained 827,888 bytes of non-silent
-bidirectional PCM. Both visible progress windows changed during the call.
+was still answering. A read-side skew bound alone was also insufficient
+because the leading emulator could continue into the host socket buffer. The
+byte-gated exchange instead creates one line timeline with setup silence,
+caller hold, and active process scheduling at each PCM lead change.
 
-This proves real product-to-product negotiation through receiver image mode.
-It does not yet claim that Magic Cap committed the completed fax object to
-storage or rendered the received page after reopening it; that persisted-page
-check is the next fax acceptance layer.
+A representative passing run decoded `5551212`; ran fax receive/transmit and
+HDLC in both ROMs; reached 109 origin `SendFaxImageData` and 163 answer
+`ReceiveFaxImageData` calls; retained 1,752,829 bytes of non-silent
+bidirectional PCM; and recorded no protocol error or image-helper failure.
+The answer UI remained in `Receiving page 1` instead of showing the earlier
+“technical difficulties” dialog. The regression now requires at least 64
+image callbacks in each direction plus those zero-error conditions.
+
+This proves sustained real product-to-product transfer through receiver image
+mode. It does not yet claim that Magic Cap committed the completed fax object
+to storage or rendered the received page after reopening it; that
+persisted-page check is the next fax acceptance layer.
 
 ## Published design cross-check
 

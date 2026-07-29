@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,6 +29,7 @@ DEFAULT_WORKDIR = ASSETS_ROOT / "runtime" / "fax-pair-regression"
 COUNTERS = 0x0031_3000
 RING_TRIGGER_BYTES = 300_000
 CHUNK_SIZE = 4_096
+MIN_IMAGE_CALLS = 64
 
 # Shipping DataRover 840 ROM entry points, recovered against the SDK ELF.
 SYMBOLS = (
@@ -52,6 +54,16 @@ RESULT_PATTERN = re.compile(
     rb"FAX_PAIR_RESULT role=(origin|answer) "
     + rb" ".join(name.encode() + rb"=(\d+)" for _, name in SYMBOLS)
     + rb" telecom_words=(\d+) telecom_enables=(\d+)"
+    + rb" protocol_errors=(\d+) last_error=(\d+) last_detail=(\d+)"
+    + rb" image_zero_reads=(\d+) image_failures=(\d+) image_pages=(\d+)"
+)
+DIAGNOSTIC_NAMES = (
+    "protocol_errors",
+    "last_error",
+    "last_detail",
+    "image_zero_reads",
+    "image_failures",
+    "image_pages",
 )
 REQUIRED = {
     "origin": (
@@ -107,6 +119,11 @@ class CallPcmExchange:
         self.answer_ready = threading.Event()
         self.error: Exception | None = None
         self._caller_index: int | None = None
+        self._connected = False
+        self._call_released = False
+        self._clock_control_enabled = False
+        self._paused = [False, False]
+        self._process_controller: Callable[[int, bool], None] | None = None
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
 
@@ -117,11 +134,53 @@ class CallPcmExchange:
         if caller_index not in (0, 1):
             raise ValueError(f"invalid caller index: {caller_index}")
         self._caller_index = caller_index
+        if self._clock_control_enabled:
+            self._set_paused(caller_index, True)
+
+    def set_process_controller(self, controller: Callable[[int, bool], None]) -> None:
+        self._process_controller = controller
+        self._clock_control_enabled = True
+
+    def disable_process_control(self) -> None:
+        self._clock_control_enabled = False
+        self._set_paused(0, False)
+        self._set_paused(1, False)
+        self._process_controller = None
+
+    def release_call(self) -> None:
+        self._call_released = True
+        self._rebalance_processes()
 
     def stop(self) -> None:
         self._stop.set()
         self.listener.close()
         self._thread.join(timeout=5)
+        self.disable_process_control()
+
+    def _set_paused(self, index: int, paused: bool) -> None:
+        if self._paused[index] == paused:
+            return
+        self._paused[index] = paused
+        if self._process_controller is not None:
+            self._process_controller(index, paused)
+
+    def _rebalance_processes(self) -> None:
+        if (
+            not self._clock_control_enabled
+            or not self._connected
+            or not self._call_released
+        ):
+            return
+        difference = self.call_forwarded[0] - self.call_forwarded[1]
+        if difference > 0:
+            self._set_paused(0, True)
+            self._set_paused(1, False)
+        elif difference < 0:
+            self._set_paused(0, False)
+            self._set_paused(1, True)
+        else:
+            self._set_paused(0, False)
+            self._set_paused(1, False)
 
     @staticmethod
     def _send(peer: socket.socket, data: bytes) -> None:
@@ -136,7 +195,6 @@ class CallPcmExchange:
 
     def _run(self) -> None:
         peers: list[socket.socket] = []
-        connected = False
         try:
             while len(peers) < 2 and not self._stop.is_set():
                 peer, _ = self.listener.accept()
@@ -149,7 +207,9 @@ class CallPcmExchange:
                 for index, peer in enumerate(peers):
                     if not active[index]:
                         continue
-                    if connected and (
+                    if self._paused[index]:
+                        continue
+                    if self._connected and (
                         self.call_forwarded[index]
                         > self.call_forwarded[1 - index] + CHUNK_SIZE
                     ):
@@ -180,24 +240,28 @@ class CallPcmExchange:
                     if caller_index is None:
                         self._send(source, bytes(len(data)))
                         continue
-                    if not connected and index == caller_index:
+                    if not self._connected and index == caller_index:
                         self._send(source, bytes(len(data)))
                         continue
-                    if not connected:
-                        connected = True
+                    if not self._connected:
+                        self._connected = True
                         self.call_forwarded[index] += len(data)
                         self._send(peers[caller_index], data)
+                        if self._clock_control_enabled:
+                            self._set_paused(index, True)
                         self.answer_ready.set()
                         continue
 
                     self.call_forwarded[index] += len(data)
                     self._send(peers[1 - index], data)
+                    self._rebalance_processes()
         except (BrokenPipeError, ConnectionResetError):
             pass
         except (OSError, ValueError) as error:
             if not self._stop.is_set():
                 self.error = error
         finally:
+            self.disable_process_control()
             for peer in peers:
                 peer.close()
 
@@ -306,6 +370,7 @@ local ring_trigger_path = "{trigger}"
 local result_path = "{result_path}"
 local peer_result_path = "{peer_result_path}"
 local COUNTERS = 0x{COUNTERS:08x}
+local DIAGNOSTICS = COUNTERS + 0x100
 local addresses = {{
     {addresses}
 }}
@@ -332,6 +397,31 @@ for index, address in ipairs(addresses) do
     string.format(
       "do d@0x%08x=d@0x%08x+1; g", counter, counter))
 end
+for index = 0, 5 do
+  program:write_u32(DIAGNOSTICS + index * 4, 0)
+end
+cpu.debug:bpset(
+  0x13e8b010, "",
+  string.format(
+    "do d@0x%08x=d@0x%08x+1; "
+    .. "do d@0x%08x=R5; do d@0x%08x=R6; g",
+    DIAGNOSTICS, DIAGNOSTICS,
+    DIAGNOSTICS + 4, DIAGNOSTICS + 8))
+cpu.debug:bpset(
+  0x13c5bd30, "R2==0",
+  string.format(
+    "do d@0x%08x=d@0x%08x+1; g",
+    DIAGNOSTICS + 12, DIAGNOSTICS + 12))
+cpu.debug:bpset(
+  0x13e8bc8c, "R2==1",
+  string.format(
+    "do d@0x%08x=d@0x%08x+1; g",
+    DIAGNOSTICS + 16, DIAGNOSTICS + 16))
+cpu.debug:bpset(
+  0x13e8bc8c, "R2==2",
+  string.format(
+    "do d@0x%08x=d@0x%08x+1; g",
+    DIAGNOSTICS + 20, DIAGNOSTICS + 20))
 cpu.debug:go()
 
 emu.register_frame_done(function()
@@ -342,9 +432,17 @@ emu.register_frame_done(function()
     local dma = program:read_u32(0x10c00090)
     print(string.format(
       "FAX_PAIR_RESULT role={role} {fields} "
-      .. "telecom_words=%d telecom_enables=%d",
+      .. "telecom_words=%d telecom_enables=%d "
+      .. "protocol_errors=%d last_error=%d last_detail=%d "
+      .. "image_zero_reads=%d image_failures=%d image_pages=%d",
       {reads},
-      ((size & 0x00003ffc) >> 2) + 1, dma & 3))
+      ((size & 0x00003ffc) >> 2) + 1, dma & 3,
+      program:read_u32(DIAGNOSTICS),
+      program:read_u32(DIAGNOSTICS + 4),
+      program:read_u32(DIAGNOSTICS + 8),
+      program:read_u32(DIAGNOSTICS + 12),
+      program:read_u32(DIAGNOSTICS + 16),
+      program:read_u32(DIAGNOSTICS + 20)))
     local result_file = assert(io.open(result_path, "w"))
     result_file:write("ready\\n")
     result_file:close()
@@ -388,6 +486,7 @@ def parse_result(output: bytes, role: str) -> dict[str, int] | None:
             *(name for _, name in SYMBOLS),
             "telecom_words",
             "telecom_enables",
+            *DIAGNOSTIC_NAMES,
         )
         return {
             name: int(value)
@@ -499,7 +598,6 @@ def run_regression(args: argparse.Namespace) -> int:
     trigger_state: list[int] = []
     ready_state: list[int] = []
     trigger_error: list[str] = []
-    origin_stopped = threading.Event()
     heartbeat_stop = threading.Event()
 
     try:
@@ -534,11 +632,22 @@ def run_regression(args: argparse.Namespace) -> int:
                 if origin_bytes >= args.ring_trigger_bytes:
                     origin_index = exchange.forwarded.index(origin_bytes)
                     answer_index = 1 - origin_index
+                    process_by_index = {
+                        origin_index: processes["origin"],
+                        answer_index: processes["answer"],
+                    }
+
+                    def control_process(index: int, paused: bool) -> None:
+                        process = process_by_index[index]
+                        if process.poll() is None:
+                            process.send_signal(
+                                signal.SIGSTOP if paused else signal.SIGCONT
+                            )
+
+                    exchange.set_process_controller(control_process)
                     exchange.arm(origin_index)
                     trigger_state.append(origin_bytes)
                     try:
-                        origin.send_signal(signal.SIGSTOP)
-                        origin_stopped.set()
                         ring_trigger.write_text("ring\n", encoding="ascii")
                         if not exchange.answer_ready.wait(timeout=90):
                             trigger_error.append(
@@ -546,19 +655,30 @@ def run_regression(args: argparse.Namespace) -> int:
                             )
                         ready_state.append(exchange.forwarded[answer_index])
                     finally:
-                        if origin.poll() is None:
-                            origin.send_signal(signal.SIGCONT)
-                        origin_stopped.clear()
+                        exchange.release_call()
                     return
                 if origin.poll() is not None:
                     trigger_error.append("origin exited before the PCM ring threshold")
                     return
                 time.sleep(0.01)
 
+        def release_clock_control() -> None:
+            result_markers = (
+                run_dir / "origin.result-ready",
+                run_dir / "answer.result-ready",
+            )
+            while not heartbeat_stop.is_set():
+                if any(marker.is_file() for marker in result_markers):
+                    exchange.disable_process_control()
+                    return
+                time.sleep(0.05)
+
         heartbeat_thread = threading.Thread(target=heartbeat, daemon=True)
         trigger_thread = threading.Thread(target=trigger_answer, daemon=True)
+        completion_thread = threading.Thread(target=release_clock_control, daemon=True)
         heartbeat_thread.start()
         trigger_thread.start()
+        completion_thread.start()
 
         for role, process in processes.items():
             try:
@@ -571,10 +691,8 @@ def run_regression(args: argparse.Namespace) -> int:
             (run_dir / role / "mame-output.txt").write_bytes(output)
 
         heartbeat_stop.set()
-        if origin_stopped.is_set() and processes["origin"].poll() is None:
-            processes["origin"].send_signal(signal.SIGCONT)
-            origin_stopped.clear()
         trigger_thread.join(timeout=2)
+        completion_thread.join(timeout=2)
         heartbeat_thread.join(timeout=2)
     except OSError as error:
         print(
@@ -584,10 +702,6 @@ def run_regression(args: argparse.Namespace) -> int:
         return 2
     finally:
         heartbeat_stop.set()
-        if origin_stopped.is_set():
-            origin = processes.get("origin")
-            if origin is not None and origin.poll() is None:
-                origin.send_signal(signal.SIGCONT)
         for process in processes.values():
             if process.poll() is None:
                 process.kill()
@@ -615,6 +729,18 @@ def run_regression(args: argparse.Namespace) -> int:
         result is not None and result["telecom_words"] == 48
         for result in results.values()
     )
+    protocol_ok = all(
+        result is not None
+        and result["protocol_errors"] == 0
+        and result["image_failures"] == 0
+        for result in results.values()
+    )
+    sustained_image_ok = (
+        results.get("origin") is not None
+        and results.get("answer") is not None
+        and results["origin"]["send_image"] >= MIN_IMAGE_CALLS
+        and results["answer"]["receive_image"] >= MIN_IMAGE_CALLS
+    )
     pcm_ok = all(pcm and any(pcm) for pcm in exchange.captured)
     origin_snapshots = run_dir / "origin" / "snapshots"
     answer_snapshots = run_dir / "answer" / "snapshots"
@@ -639,6 +765,8 @@ def run_regression(args: argparse.Namespace) -> int:
         or any(missing.values())
         or digits[:7] != "5551212"
         or not dma_ok
+        or not protocol_ok
+        or not sustained_image_ok
         or not pcm_ok
         or not ui_ok
         or not trigger_state
@@ -650,7 +778,9 @@ def run_regression(args: argparse.Namespace) -> int:
             "FAIL: paired fax path incomplete "
             f"(results={results!r}, missing={missing!r}, "
             f"digits={digits!r}, dma_ok={dma_ok}, pcm_ok={pcm_ok}, "
-            f"ui_ok={ui_ok}, trigger={trigger_state!r}, "
+            f"protocol_ok={protocol_ok}, "
+            f"sustained_image_ok={sustained_image_ok}, ui_ok={ui_ok}, "
+            f"trigger={trigger_state!r}, "
             f"ready={ready_state!r}, trigger_error={trigger_error!r}, "
             f"relay_error={exchange.error!r}); artifacts: {run_dir}",
             file=sys.stderr,
@@ -659,8 +789,8 @@ def run_regression(args: argparse.Namespace) -> int:
 
     print(
         "PASS: two visible Magic Cap Fax workflows dialed 555-1212, "
-        "negotiated bidirectional fax/HDLC, sent image data, and entered "
-        "the receiver image path"
+        "negotiated bidirectional fax/HDLC, and sustained error-free sender "
+        "and receiver image transfer"
     )
     print(f"Artifacts: {run_dir}")
     return 0
