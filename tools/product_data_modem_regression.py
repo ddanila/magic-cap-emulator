@@ -46,13 +46,16 @@ V32_POINTER = COUNTERS + 0x100
 STATUS_EVENT = COUNTERS + 0x200
 INIT_ARGS = COUNTERS + 0x300
 ECHO_STUB = 0x0030_6000
+ECHO_WRITE_STUB = ECHO_STUB + 0x400
 ECHO_BUFFER = 0x0030_6800
 ECHO_RESPONSE = 0x0030_6C00
+DYNAMIC_RESPONSE = ECHO_RESPONSE + 0x800
 ECHO_TOTAL = 0x0030_7800
 ECHO_DONE = ECHO_TOTAL + 4
 ECHO_READ_TOTAL = ECHO_TOTAL + 8
 ECHO_RESPONSE_KIND = ECHO_TOTAL + 12
 ECHO_IP_READS = ECHO_TOTAL + 16
+ECHO_WRITE_LENGTH = ECHO_TOTAL + 20
 ANSWER_DELIVER_COUNTER = ANSWER_COUNTERS + next(
     index * 4
     for index, (_, name) in enumerate(MODEM_SYMBOLS)
@@ -190,13 +193,15 @@ def internet_checksum(payload: bytes) -> int:
     return total ^ 0xFFFF
 
 
-def tcp_syn_ack_response() -> bytes:
+def tcp_syn_ack_response(client_sequence: int = 0x3F99_9B00) -> bytes:
     """Answer the deterministic browser SYN at the negotiated peer address."""
     source_ip = bytes.fromhex("0a000202")
     destination_ip = bytes.fromhex("0a00020f")
     tcp = bytearray.fromhex(
-        "1f900400010203043f999b01601210000000000002040218"
+        "1f9004000102030400000000601210000000000002040218"
     )
+    acknowledgement = (client_sequence + 1) & 0xFFFF_FFFF
+    tcp[8:12] = acknowledgement.to_bytes(4, "big")
     pseudo_header = (
         source_ip
         + destination_ip
@@ -213,21 +218,6 @@ def tcp_syn_ack_response() -> bytes:
 
 def echo_responder_words() -> list[int]:
     """Read one answer data unit and dispatch its protocol-specific reply."""
-    response_addresses = (
-        ECHO_RESPONSE,
-        ECHO_RESPONSE + 0x200,
-        ECHO_RESPONSE + 0x400,
-        ECHO_RESPONSE + 0x600,
-    )
-    response_lengths = tuple(
-        len(response)
-        for response in (
-            initial_lcp_response(),
-            initial_ipcp_response(),
-            final_ipcp_response(),
-            tcp_syn_ack_response(),
-        )
-    )
     words = [
         *load_address(8, 0xA030_0800),
         op(0x23, rs=8, rt=23, immediate=0),
@@ -254,6 +244,7 @@ def echo_responder_words() -> list[int]:
         op(0x09, rs=12, rt=12, immediate=-2),
         op(0x0D, rt=13, immediate=0),
         op(0x0D, rt=14, immediate=0),
+        op(0x0D, rt=15, immediate=0),
     ]
     branches: list[tuple[int, str]] = []
     labels: dict[str, int] = {}
@@ -286,6 +277,8 @@ def echo_responder_words() -> list[int]:
     jump("scan")
 
     labels["check_ip"] = len(words)
+    words += [op(0x0D, rt=10, immediate=0x2A)]
+    branch(0x04, 9, 10, "check_guest_address")
     words += [op(0x0D, rt=10, immediate=0x20)]
     branch(0x05, 9, 10, "advance_scan")
     words += [
@@ -293,6 +286,23 @@ def echo_responder_words() -> list[int]:
         op(0x0D, rt=10, immediate=0x21),
     ]
     branch(0x04, 8, 10, "ip")
+    jump("advance_scan")
+
+    labels["check_guest_address"] = len(words)
+    for offset, expected in (
+        (2, 0x7D),
+        (3, 0x20),
+        (4, 0x7D),
+        (5, 0x22),
+        (6, 0x7D),
+        (7, 0x2F),
+    ):
+        words += [
+            op(0x24, rs=11, rt=8, immediate=offset),
+            op(0x0D, rt=10, immediate=expected),
+        ]
+        branch(0x05, 8, 10, "advance_scan")
+    words += [op(0x0D, rt=15, immediate=1)]
     jump("advance_scan")
 
     labels["record_ipcp"] = len(words)
@@ -313,32 +323,16 @@ def echo_responder_words() -> list[int]:
     jump("write")
 
     labels["lcp"] = len(words)
-    words += [
-        op(0x0D, rt=4, immediate=response_lengths[0]),
-        *load_address(5, 0xA000_0000 + response_addresses[0]),
-        op(0x0D, rt=9, immediate=1),
-    ]
+    words += [op(0x0D, rt=9, immediate=1)]
     jump("write")
 
     labels["ipcp"] = len(words)
-    words += [
-        op(0x24, rs=13, rt=8, immediate=4),
-        op(0x0D, rt=10, immediate=0x20),
-    ]
-    branch(0x04, 8, 10, "initial_ipcp")
-    words += [
-        op(0x0D, rt=4, immediate=response_lengths[2]),
-        *load_address(5, 0xA000_0000 + response_addresses[2]),
-        op(0x0D, rt=9, immediate=3),
-    ]
+    branch(0x04, 15, 0, "initial_ipcp")
+    words += [op(0x0D, rt=9, immediate=3)]
     jump("write")
 
     labels["initial_ipcp"] = len(words)
-    words += [
-        op(0x0D, rt=4, immediate=response_lengths[1]),
-        *load_address(5, 0xA000_0000 + response_addresses[1]),
-        op(0x0D, rt=9, immediate=2),
-    ]
+    words += [op(0x0D, rt=9, immediate=2)]
     jump("write")
 
     labels["ip"] = len(words)
@@ -348,13 +342,8 @@ def echo_responder_words() -> list[int]:
         op(0x23, rs=10, rt=8, immediate=0),
         op(0x09, rs=8, rt=8, immediate=1),
         op(0x2B, rs=10, rt=8, immediate=0),
-        op(0x0D, rt=10, immediate=1),
     ]
-    branch(0x05, 8, 10, "write")
-    words += [
-        op(0x0D, rt=4, immediate=response_lengths[3]),
-        *load_address(5, 0xA000_0000 + response_addresses[3]),
-    ]
+    jump("write")
 
     labels["write"] = len(words)
     words += [
@@ -392,9 +381,195 @@ def echo_responder_words() -> list[int]:
     return words
 
 
+def write_responder_words() -> list[int]:
+    """Write one Lua-generated response through the answer ROM queue."""
+    words = [
+        *load_address(8, 0xA000_0000 + ECHO_WRITE_LENGTH),
+        op(0x23, rs=8, rt=4, immediate=0),
+    ]
+    empty = len(words)
+    words += [0, 0]
+    words += [
+        *load_address(5, 0xA000_0000 + DYNAMIC_RESPONSE),
+        *call(0x13E4_2C80),
+        *load_address(8, 0xA000_0000 + ECHO_TOTAL),
+        op(0x23, rs=8, rt=9, immediate=0),
+        r(rs=9, rt=2, rd=9, function=0x21),
+        op(0x2B, rs=8, rt=9, immediate=0),
+    ]
+    done = len(words)
+    words += [
+        *load_address(8, 0xA000_0000 + ECHO_DONE),
+        op(0x0D, rt=9, immediate=1),
+        op(0x2B, rs=8, rt=9, immediate=0),
+        0x1000_FFFF,
+        0,
+    ]
+    words[empty] = op(0x06, rs=4, immediate=done - (empty + 1))
+    return words
+
+
+def tcp_peer_lua() -> str:
+    """Return Lua helpers that build a SYN-ACK from the live browser SYN."""
+    return r"""
+local function append_bytes(target, source)
+  for _, byte in ipairs(source) do table.insert(target, byte) end
+end
+
+local function internet_checksum(bytes)
+  local total = 0
+  for index = 1, #bytes, 2 do
+    total = total + bytes[index] * 256 + (bytes[index + 1] or 0)
+    total = (total & 0xffff) + (total >> 16)
+  end
+  while total > 0xffff do
+    total = (total & 0xffff) + (total >> 16)
+  end
+  return (~total) & 0xffff
+end
+
+local function async_ppp_frame(payload)
+  local fcs = 0xffff
+  for _, byte in ipairs(payload) do
+    fcs = fcs ~ byte
+    for _ = 1, 8 do
+      if (fcs & 1) ~= 0 then
+        fcs = (fcs >> 1) ~ 0x8408
+      else
+        fcs = fcs >> 1
+      end
+    end
+  end
+  fcs = fcs ~ 0xffff
+  local framed = {}
+  append_bytes(framed, payload)
+  table.insert(framed, fcs & 0xff)
+  table.insert(framed, (fcs >> 8) & 0xff)
+  local escaped = { 0x7e }
+  for _, byte in ipairs(framed) do
+    if byte < 0x20 or byte == 0x7d or byte == 0x7e then
+      table.insert(escaped, 0x7d)
+      table.insert(escaped, byte ~ 0x20)
+    else
+      table.insert(escaped, byte)
+    end
+  end
+  table.insert(escaped, 0x7e)
+  return escaped
+end
+
+local function read_ppp_frames()
+  local frames, frame, escaped = {}, {}, false
+  for offset = 0, program:read_u32(ECHO_READ_TOTAL) - 1 do
+    local byte = program:read_u8(ECHO_BUFFER + offset)
+    if byte == 0x7e then
+      if #frame > 0 then table.insert(frames, frame) end
+      frame, escaped = {}, false
+    elseif escaped then
+      table.insert(frame, byte ~ 0x20)
+      escaped = false
+    elseif byte == 0x7d then
+      escaped = true
+    else
+      table.insert(frame, byte)
+    end
+  end
+  return frames
+end
+
+local function dynamic_syn_ack()
+  for _, frame in ipairs(read_ppp_frames()) do
+    if #frame >= 44 and frame[1] == 0xff and frame[2] == 0x03
+        and frame[3] == 0x00 and frame[4] == 0x21
+        and frame[5] == 0x45 and (frame[38] & 0x02) ~= 0 then
+      local sequence =
+        ((frame[29] * 256 + frame[30]) * 256 + frame[31]) * 256 + frame[32]
+      local acknowledgement = (sequence + 1) & 0xffffffff
+      local ip = {
+        0x45, 0x00, 0x00, 0x2c, 0x12, 0x34, 0x00, 0x00,
+        0x40, 0x06, 0x00, 0x00, 0x0a, 0x00, 0x02, 0x02,
+        0x0a, 0x00, 0x02, 0x0f
+      }
+      local ip_checksum = internet_checksum(ip)
+      ip[11], ip[12] = (ip_checksum >> 8) & 0xff, ip_checksum & 0xff
+      local tcp = {
+        0x1f, 0x90, 0x04, 0x00, 0x01, 0x02, 0x03, 0x04,
+        (acknowledgement >> 24) & 0xff,
+        (acknowledgement >> 16) & 0xff,
+        (acknowledgement >> 8) & 0xff,
+        acknowledgement & 0xff,
+        0x60, 0x12, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x02, 0x04, 0x02, 0x18
+      }
+      local pseudo = {
+        0x0a, 0x00, 0x02, 0x02, 0x0a, 0x00, 0x02, 0x0f,
+        0x00, 0x06, 0x00, #tcp
+      }
+      append_bytes(pseudo, tcp)
+      local tcp_checksum = internet_checksum(pseudo)
+      tcp[17], tcp[18] = (tcp_checksum >> 8) & 0xff, tcp_checksum & 0xff
+      local payload = { 0xff, 0x03, 0x00, 0x21 }
+      append_bytes(payload, ip)
+      append_bytes(payload, tcp)
+      return async_ppp_frame(payload)
+    end
+  end
+  return nil
+end
+
+local function join_frames(first, second)
+  local joined = {}
+  append_bytes(joined, first)
+  append_bytes(joined, second)
+  return joined
+end
+
+local function control_ack(frame)
+  local length = frame[7] * 256 + frame[8]
+  local acknowledge = {}
+  for index = 1, 4 + length do acknowledge[index] = frame[index] end
+  acknowledge[5] = 0x02
+  return async_ppp_frame(acknowledge)
+end
+
+local function dynamic_control_response(kind)
+  for _, frame in ipairs(read_ppp_frames()) do
+    if #frame >= 10 and frame[5] == 0x01 then
+      if kind == 1 and frame[3] == 0xc0 and frame[4] == 0x21 then
+        local peer_request =
+          async_ppp_frame({ 0xff, 0x03, 0xc0, 0x21, 0x01, 0x01, 0x00, 0x04 })
+        return join_frames(control_ack(frame), peer_request)
+      elseif kind == 2 and frame[3] == 0x80 and frame[4] == 0x21 then
+        local negative_acknowledge = async_ppp_frame({
+          0xff, 0x03, 0x80, 0x21, 0x03, frame[6], 0x00, 0x0a,
+          0x03, 0x06, 0x0a, 0x00, 0x02, 0x0f
+        })
+        local peer_request = async_ppp_frame({
+          0xff, 0x03, 0x80, 0x21, 0x01, 0x02, 0x00, 0x0a,
+          0x03, 0x06, 0x0a, 0x00, 0x02, 0x02
+        })
+        return join_frames(negative_acknowledge, peer_request)
+      elseif kind == 3 and frame[3] == 0x80 and frame[4] == 0x21 then
+        return control_ack(frame)
+      end
+    end
+  end
+  return nil
+end
+
+local function dynamic_peer_response(kind)
+  if kind == 4 then
+    return dynamic_syn_ack()
+  end
+  return dynamic_control_response(kind)
+end
+"""
+
+
 def product_automation_script(
     call_trigger_path: Path = Path("call.trigger"),
     result_frame: int = 7600,
+    reload_only: bool = False,
 ) -> str:
     """Drive the retained Internet Center provider through Web Browser reload."""
     addresses = ", ".join(f"0x{address:08x}" for address, _ in PRODUCT_SYMBOLS)
@@ -406,7 +581,7 @@ def product_automation_script(
     trigger = _lua_path(call_trigger_path)
     result_path = _lua_path(call_trigger_path.parent / "product.result-ready")
     peer_result_path = _lua_path(call_trigger_path.parent / "answer.result-ready")
-    return f"""local machine = manager.machine
+    script = f"""local machine = manager.machine
 local cpu = machine.devices[":maincpu"]
 local program = cpu.spaces["program"]
 local ports = machine.ioport.ports
@@ -574,6 +749,19 @@ emu.register_frame_done(function()
   end
 end)
 """
+    if reload_only:
+        script = re.sub(
+            r"  -- Internet Center -> Downtown -> Hallway -> Desk\.\n"
+            r".*?"
+            r"  elseif frames == 4720 then release\(\)\n\n",
+            "  -- A copied post-run state is already in Web Browser.\n"
+            "  elseif frames == 1250 then press(450, 250)\n"
+            "  elseif frames == 1270 then release()\n\n",
+            script,
+            count=1,
+            flags=re.DOTALL,
+        )
+    return script
 
 
 def answer_automation_script(
@@ -584,23 +772,19 @@ def answer_automation_script(
     script = direct_answer_script(
         "answer", start_frame=999999, result_offset=result_offset
     )
-    responses = (
-        initial_lcp_response(),
-        initial_ipcp_response(),
-        final_ipcp_response(),
-        tcp_syn_ack_response(),
-    )
     echo_words = echo_responder_words()
+    write_words = write_responder_words()
     echo_loop = 0xA000_0000 + ECHO_STUB + (len(echo_words) - 2) * 4
+    write_loop = (
+        0xA000_0000 + ECHO_WRITE_STUB + (len(write_words) - 2) * 4
+    )
     echo_writes = "\n".join(
         f"  program:write_u32(ECHO_STUB + {index * 4}, 0x{word:08x})"
         for index, word in enumerate(echo_words)
     )
-    response_writes = "\n".join(
-        f"  program:write_u8(ECHO_RESPONSE + 0x{response_index * 0x200:03x}"
-        f" + {index}, 0x{byte:02x})"
-        for response_index, response in enumerate(responses)
-        for index, byte in enumerate(response)
+    write_writes = "\n".join(
+        f"  program:write_u32(ECHO_WRITE_STUB + {index * 4}, 0x{word:08x})"
+        for index, word in enumerate(write_words)
     )
     trigger = _lua_path(call_trigger_path)
     result_path = _lua_path(call_trigger_path.parent / "answer.result-ready")
@@ -625,22 +809,27 @@ def answer_automation_script(
     script = script.replace(
         "local function inject()\n",
         f"local echo_active, echo_round, echo_deliver_seen = false, 0, 0\n"
-        f"local protocol_written = false\n"
+        f'local echo_phase, protocol_written = "read", false\n'
         f"local echo_saved_state = nil\n"
         f"local ECHO_STUB = 0x{ECHO_STUB:08x}\n"
+        f"local ECHO_WRITE_STUB = 0x{ECHO_WRITE_STUB:08x}\n"
         f"local ECHO_BUFFER = 0x{ECHO_BUFFER:08x}\n"
         f"local ECHO_RESPONSE = 0x{ECHO_RESPONSE:08x}\n"
+        f"local DYNAMIC_RESPONSE = 0x{DYNAMIC_RESPONSE:08x}\n"
         f"local ECHO_TOTAL = 0x{ECHO_TOTAL:08x}\n"
         f"local ECHO_DONE = 0x{ECHO_DONE:08x}\n"
         f"local ECHO_READ_TOTAL = 0x{ECHO_READ_TOTAL:08x}\n"
         f"local ECHO_RESPONSE_KIND = 0x{ECHO_RESPONSE_KIND:08x}\n"
         f"local ECHO_IP_READS = 0x{ECHO_IP_READS:08x}\n"
+        f"local ECHO_WRITE_LENGTH = 0x{ECHO_WRITE_LENGTH:08x}\n"
         f"local ECHO_LOOP = 0x{echo_loop:08x}\n"
+        f"local ECHO_WRITE_LOOP = 0x{write_loop:08x}\n"
         f"local ANSWER_DELIVER_COUNTER = 0x{ANSWER_DELIVER_COUNTER:08x}\n\n"
+        f"{tcp_peer_lua()}\n"
         f"local function start_echo()\n"
         f"  echo_round = echo_round + 1\n"
         f"{echo_writes}\n"
-        f"{response_writes}\n"
+        f"{write_writes}\n"
         f"  if echo_round == 1 then\n"
         f"    program:write_u32(ECHO_TOTAL, 0)\n"
         f"    program:write_u32(ECHO_IP_READS, 0)\n"
@@ -648,6 +837,7 @@ def answer_automation_script(
         f"  program:write_u32(ECHO_DONE, 0)\n"
         f"  program:write_u32(ECHO_READ_TOTAL, 0)\n"
         f"  program:write_u32(ECHO_RESPONSE_KIND, 0)\n"
+        f'  echo_phase = "read"\n'
         f'  echo_saved_state = {{ PC = cpu.state["PC"].value }}\n'
         f"  for _,name in ipairs(register_names) do\n"
         f"    echo_saved_state[name] = cpu.state[name].value\n"
@@ -657,6 +847,21 @@ def answer_automation_script(
         f'  cpu.state["PC"].value = 0x{0xA000_0000 + ECHO_STUB:08x}\n'
         f"  echo_active = true\n"
         f'  print(string.format("PRODUCT_ANSWER_ECHO_START round=%d", echo_round))\n'
+        f"end\n\n"
+        f"local function start_dynamic_write(response)\n"
+        f"  for index, byte in ipairs(response) do\n"
+        f"    program:write_u8(DYNAMIC_RESPONSE + index - 1, byte)\n"
+        f"  end\n"
+        f"  program:write_u32(ECHO_WRITE_LENGTH, #response)\n"
+        f"  program:write_u32(ECHO_DONE, 0)\n"
+        f'  echo_saved_state = {{ PC = cpu.state["PC"].value }}\n'
+        f"  for _,name in ipairs(register_names) do\n"
+        f"    echo_saved_state[name] = cpu.state[name].value\n"
+        f"  end\n"
+        f'  machine.debugger:command("resume :maincpu")\n'
+        f'  cpu.state["SR"].value = cpu.state["SR"].value & 0xfffffffc\n'
+        f'  cpu.state["PC"].value = 0x{0xA000_0000 + ECHO_WRITE_STUB:08x}\n'
+        f'  echo_phase = "write"\n'
         f"end\n\n"
         "local function inject()\n",
         1,
@@ -700,31 +905,48 @@ def answer_automation_script(
         "  if echo_active then\n"
         '    local echo_pc = cpu.state["PC"].value\n'
         "    if program:read_u32(ECHO_DONE) == 1\n"
-        "        or echo_pc == ECHO_LOOP or echo_pc == ECHO_LOOP + 4 then\n"
+        "        or echo_pc == ECHO_LOOP or echo_pc == ECHO_LOOP + 4\n"
+        "        or echo_pc == ECHO_WRITE_LOOP\n"
+        "        or echo_pc == ECHO_WRITE_LOOP + 4 then\n"
         "      for _,name in ipairs(register_names) do\n"
         "        cpu.state[name].value = echo_saved_state[name]\n"
         "      end\n"
         '      cpu.state["PC"].value = echo_saved_state.PC\n'
-        "      echo_active = false\n"
-        "      echo_deliver_seen = program:read_u32(ANSWER_DELIVER_COUNTER)\n"
-        "      local echo_read_total = program:read_u32(ECHO_READ_TOTAL)\n"
-        "      local echo_hex = {}\n"
-        "      for offset = 0, echo_read_total - 1 do\n"
-        "        table.insert(echo_hex,\n"
-        '          string.format("%02X", program:read_u8(ECHO_BUFFER + offset)))\n'
-        "      end\n"
-        '      print(string.format("PRODUCT_ANSWER_PEER_DATA "\n'
-        '        .. "round=%d kind=%d read=%d wrote=%d hex=%s",\n'
-        "        echo_round, program:read_u32(ECHO_RESPONSE_KIND),\n"
-        "        echo_read_total, program:read_u32(ECHO_TOTAL),\n"
-        "        table.concat(echo_hex)))\n"
-        "      if program:read_u32(ECHO_IP_READS) >= 2\n"
-        "          and not protocol_written then\n"
-        "        local protocol_result = assert(io.open(\n"
-        '          protocol_result_path, "w"))\n'
-        '        protocol_result:write("ready\\n")\n'
-        "        protocol_result:close()\n"
-        "        protocol_written = true\n"
+        '      if echo_phase == "write" then\n'
+        "        echo_active = false\n"
+        '        print("PRODUCT_ANSWER_DYNAMIC_WRITE_RETURN")\n'
+        "      else\n"
+        "        echo_deliver_seen = program:read_u32(ANSWER_DELIVER_COUNTER)\n"
+        "        local echo_read_total = program:read_u32(ECHO_READ_TOTAL)\n"
+        "        local echo_hex = {}\n"
+        "        for offset = 0, echo_read_total - 1 do\n"
+        "          table.insert(echo_hex,\n"
+        '            string.format("%02X", program:read_u8(ECHO_BUFFER + offset)))\n'
+        "        end\n"
+        '        print(string.format("PRODUCT_ANSWER_PEER_DATA "\n'
+        '          .. "round=%d kind=%d read=%d wrote=%d hex=%s",\n'
+        "          echo_round, program:read_u32(ECHO_RESPONSE_KIND),\n"
+        "          echo_read_total, program:read_u32(ECHO_TOTAL),\n"
+        "          table.concat(echo_hex)))\n"
+        "        local response = nil\n"
+        "        local response_kind = program:read_u32(ECHO_RESPONSE_KIND)\n"
+        "        if response_kind ~= 4\n"
+        "            or program:read_u32(ECHO_IP_READS) == 1 then\n"
+        "          response = dynamic_peer_response(response_kind)\n"
+        "        end\n"
+        "        if response ~= nil then\n"
+        "          start_dynamic_write(response)\n"
+        "        else\n"
+        "          echo_active = false\n"
+        "        end\n"
+        "        if program:read_u32(ECHO_IP_READS) >= 2\n"
+        "            and not protocol_written then\n"
+        "          local protocol_result = assert(io.open(\n"
+        '            protocol_result_path, "w"))\n'
+        '          protocol_result:write("ready\\n")\n'
+        "          protocol_result:close()\n"
+        "          protocol_written = true\n"
+        "        end\n"
         "      end\n"
         "    end\n"
         "  end\n"
@@ -850,6 +1072,37 @@ def parse_peer_data(output: bytes) -> bytes | None:
     return None
 
 
+def parse_http_request(output: bytes) -> bytes | None:
+    """Return the HTTP bytes carried by the first post-handshake TCP packet."""
+    for kind, encoded in PEER_ROUND_PATTERN.findall(output):
+        if kind != b"4":
+            continue
+        framed = bytes.fromhex(encoded.decode())
+        payload = bytearray()
+        escaped = False
+        for byte in framed[1:] if framed[:1] == b"\x7e" else framed:
+            if byte == 0x7E:
+                break
+            if escaped:
+                payload.append(byte ^ 0x20)
+                escaped = False
+            elif byte == 0x7D:
+                escaped = True
+            else:
+                payload.append(byte)
+        if not payload.startswith(bytes.fromhex("ff03002145")):
+            continue
+        ip_header = (payload[4] & 0x0F) * 4
+        tcp_start = 4 + ip_header
+        if len(payload) < tcp_start + 13:
+            continue
+        tcp_header = (payload[tcp_start + 12] >> 4) * 4
+        application = bytes(payload[tcp_start + tcp_header :])
+        if application.startswith(b"GET "):
+            return application
+    return None
+
+
 def validate_results(
     product: dict[str, int | tuple[int, ...]] | None,
     answer: dict[str, int | str] | None,
@@ -962,6 +1215,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--workdir", type=Path, default=DEFAULT_WORKDIR)
     parser.add_argument("--nvram-source", type=Path, required=True)
     parser.add_argument("--system", default="datarover840")
+    parser.add_argument(
+        "--reload-only",
+        action="store_true",
+        help="start from a copied post-run Web Browser state",
+    )
     return parser.parse_args(argv)
 
 
@@ -1049,7 +1307,11 @@ def run_regression(args: argparse.Namespace) -> int:
                 (
                     answer_automation_script(answer_trigger)
                     if role == "answer"
-                    else product_automation_script(call_trigger)
+                    else product_automation_script(
+                        call_trigger,
+                        result_frame=6200 if args.reload_only else 7600,
+                        reload_only=args.reload_only,
+                    )
                 ),
                 encoding="utf-8",
             )
@@ -1148,6 +1410,7 @@ def run_regression(args: argparse.Namespace) -> int:
     answer = parse_direct_result(outputs.get("answer", b""))
     echoed = parse_echo_result(outputs.get("answer", b""))
     peer_data = parse_peer_data(outputs.get("answer", b""))
+    http_request = parse_http_request(outputs.get("answer", b""))
     failures = validate_results(
         product,
         answer,
@@ -1156,6 +1419,10 @@ def run_regression(args: argparse.Namespace) -> int:
         peer_data,
     )
     failures.extend(trigger_errors)
+    if http_request is None or not http_request.startswith(
+        b"GET / HTTP/1.0\r\nHost: 10.0.2.2:8080\r\n"
+    ):
+        failures.append("browser HTTP request did not reach the answer peer")
     if relay.error is not None:
         failures.append(f"PCM relay failed: {relay.error}")
     if failures:
@@ -1169,8 +1436,7 @@ def run_regression(args: argparse.Namespace) -> int:
     print(
         "PASS: Web Browser selected its Internet Center PPP dial-up provider, "
         "dialed through the built-in software modem, completed paired "
-        "V.32/LAPM and LCP/IPCP, then emitted IPv4/TCP "
-        "10.0.2.15:1024 -> 10.0.2.2:8080 "
+        "V.32/LAPM, LCP/IPCP and TCP, then sent GET / HTTP/1.0 "
         f"(peer-bytes={echoed}, "
         f"rates={','.join(f'{rate:04x}' for rate in rates)}, "
         f"PCM={tuple(relay.call_forwarded)})"

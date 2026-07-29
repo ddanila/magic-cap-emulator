@@ -13,6 +13,7 @@ from tools.product_data_modem_regression import (
     initial_ipcp_response,
     machine_config,
     parse_echo_result,
+    parse_http_request,
     parse_peer_data,
     parse_product_result,
     ppp_fcs,
@@ -45,6 +46,13 @@ class ProductDataModemScriptTests(unittest.TestCase):
         self.assertIn('value="3"', machine_config("product"))
         self.assertIn('value="2"', machine_config("answer"))
 
+    def test_reload_only_script_skips_internet_center_navigation(self) -> None:
+        script = product_automation_script(reload_only=True)
+
+        self.assertIn("copied post-run state", script)
+        self.assertIn("frames == 1250 then press(450, 250)", script)
+        self.assertNotIn("frames == 4700", script)
+
     def test_answer_peer_wakes_before_direct_answer_injection(self) -> None:
         script = answer_automation_script()
 
@@ -60,6 +68,9 @@ class ProductDataModemScriptTests(unittest.TestCase):
         self.assertIn("protocol.result-ready", script)
         self.assertIn("PRODUCT_ANSWER_ECHO_START", script)
         self.assertIn("PRODUCT_ANSWER_PEER_DATA", script)
+        self.assertIn("dynamic_syn_ack", script)
+        self.assertIn("dynamic_control_response", script)
+        self.assertIn("PRODUCT_ANSWER_DYNAMIC_WRITE_RETURN", script)
         self.assertIn("PRODUCT_ANSWER_ECHO bytes=", script)
         self.assertIn("PRODUCT_ANSWER_ECHO_DATA hex=", script)
         self.assertIn("PRODUCT_ANSWER_LCP_REPLY read=", script)
@@ -103,6 +114,9 @@ class ProductDataModemScriptTests(unittest.TestCase):
         syn_ack = tcp_syn_ack_response()
         self.assertIn(bytes.fromhex("7d2a7d207d227d22"), syn_ack)
         self.assertEqual(syn_ack.count(0x7E), 2)
+        varied_syn_ack = tcp_syn_ack_response(0x775F_5E00)
+        self.assertNotEqual(varied_syn_ack, syn_ack)
+        self.assertIn(bytes.fromhex("775f5e7d21"), varied_syn_ack)
 
 
 class ProductDataModemResultTests(unittest.TestCase):
@@ -306,6 +320,22 @@ class ProductDataModemResultTests(unittest.TestCase):
         )
 
         self.assertEqual(parse_peer_data(output), self.PEER_IP_DATA)
+
+    def test_post_handshake_packet_parses_http_request(self) -> None:
+        output = (
+            b"PRODUCT_ANSWER_PEER_DATA round=5 kind=4 read=128 wrote=239 hex="
+            b"7EFF7D237D2021457D207D20F896727D207D20407D26CB7D5D"
+            b"7D2A7D207D227D2F7D2A7D207D227D227D247D207D3F90A440"
+            b"7D207D217D217D227D237D2550187D264886927D207D20474554"
+            b"202F20485454502F312E307D2D7D2A486F73743A2031302E302E"
+            b"322E323A383038307D2D7D2A4163636570743A20746578742F"
+        )
+
+        request = parse_http_request(output)
+        self.assertIsNotNone(request)
+        assert request is not None
+        self.assertTrue(request.startswith(b"GET / HTTP/1.0\r\n"))
+        self.assertIn(b"Host: 10.0.2.2:8080\r\n", request)
 
 
 if __name__ == "__main__":

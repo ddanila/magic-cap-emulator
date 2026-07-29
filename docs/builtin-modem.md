@@ -417,7 +417,10 @@ sends its own request. Magic Cap accepts both, starts IPCP with address
 `10.0.2.2`, and retries with the assigned address plus VJ compression. The
 peer acknowledges the corrected request, completing IPCP. Magic Cap
 immediately sends PPP protocol `0x0021`: an IPv4/TCP SYN from
-`10.0.2.15:1024` to `10.0.2.2:8080`. The product calls
+`10.0.2.15:1024` to `10.0.2.2:8080`. The peer derives its acknowledgement
+from the randomized sequence and computes fresh IP/TCP checksums and PPP FCS.
+Magic Cap accepts the SYN-ACK and sends `GET / HTTP/1.0` with
+`Host: 10.0.2.2:8080`. The product calls
 `SoftwareModem_Read`, `PPPServer_ReadPDU` and `LCP_ProcessFrame` throughout.
 This proves LCP/IPCP and the first IP packet across the complete ROM stack.
 Answering and bridging IP remain separate from the already working PC Card
@@ -428,11 +431,12 @@ Configure-Ack followed by an IPCP Configure-Request, while another contained
 several retransmitted LCP requests. The answer probe therefore scans the
 whole read and prioritizes IP, IPCP, then LCP rather than advancing a scripted
 round number. Per-read logs record the selected protocol kind, exact escaped
-bytes and cumulative reply count. A diagnostic SYN-ACK reaches Magic Cap, but
-its fixed acknowledgement intentionally demonstrates the final TCP gap:
-Magic Cap randomizes the client sequence and returns RST when that value is
-wrong. The next peer must derive the ACK, TCP checksum and PPP FCS from the
-live SYN before an HTTP response or host bridge can be valid.
+bytes and cumulative reply count. All responses are generated from the
+decoded live frame: retransmitted control IDs remain matched, IPCP is NAKed
+until the guest address really changes, and the TCP acknowledgement follows
+the randomized SYN. The captured HTTP request is split across ROM reads, so
+the next peer stage must reassemble it and return a deterministic response
+before a general host bridge is added.
 
 The live Dino SIB control value is `0x00a79923`: telecom 16-bit mode is set
 and divisor `0x27` selects 7,200 samples/s. Telecom size `0x00bc` describes
