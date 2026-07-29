@@ -31,6 +31,38 @@ two-half ring. Only an explicit `kSibTelDmaOnceMask` transfer stops at the end;
 the register-level behavior is covered separately in
 [`betty-registers.md`](betty-registers.md#sib-telecom-dma).
 
+## Telephone DAA control
+
+The SDK's unstripped Apollo ELF exposes the digital line-side contract that
+sits around the sample stream:
+
+- `DAAOffHook` calls `SibServerTelecomOffHook(..., true)`, which updates
+  Betty IOData bit `0x0200`; `DAAOnHook` clears it.
+- Betty IOData bit `0x0100` is the independently sampled connected-line
+  input. Writes preserve this input while changing the hookswitch output.
+- Apollo maps the telephone ring detector to Dino MFIO input pin 0. Its
+  positive and negative edges latch bit 0 in interrupt banks 3 and 4.
+- `HardwareSetRingEvents` clears those two status bits and gates both
+  interrupt enables. The ROM installs `RingInterrupt` for Dino interrupt
+  numbers 95 and 127 and uses the edge cadence to qualify a real ring.
+
+The driver now implements this boundary. **Phone line** selects the connected
+input and **Incoming telephone ring** drives the MFIO level and both edge
+interrupts. Ring is intentionally a level input rather than a one-shot event,
+so an automation harness or UI operator can supply the cadence expected by
+the ROM.
+
+The direct regression runs without personalized NVRAM:
+
+```sh
+python3 tools/telephone_line_regression.py --mame ../mame/datarover
+```
+
+It verifies that off-hook/on-hook writes preserve a connected line, and that
+asserting and releasing ring change MFIO input bit 0 and latch the correct
+interrupt banks. This closes the digital DAA control boundary; it does not
+yet synthesize dial tone or put remote-modem audio into telecom RX DMA.
+
 ## Published design cross-check
 
 General Magic's preserved
@@ -94,14 +126,15 @@ BUILTIN_MODEM_RESULT open=1 spawn=1 server=1 dma_start=1 half=1 full=1 init=1 re
 PASS: Magic Cap opened the built-in modem, kept its 48-word telecom ring running, selected V.32, and executed the ROM's V32ModulatorFIR through a TX39 MADD instruction
 ```
 
-This deliberately proves the missing ROM/Dino/DSP boundary, not an imaginary
-telephone network. The external DAA, carrier acquisition, and remote modem are
-still not modelled, and the test invokes the lower ROM boundary rather than
-automating the Internet Center's dial dialogs.
+This deliberately proves the ROM/Dino/DSP boundary, not an imaginary
+telephone network. Digital DAA hook, line-connect and ring behavior is
+modelled and checked separately, but dial tone, carrier acquisition and a
+remote modem are still missing. The test invokes the lower ROM boundary
+rather than automating the Internet Center's dial dialogs.
 
 The product-level target is more specific. *Using Magic Cap*, pp. 135–163 and
 216, documents the built-in fax modem on a telephone line, including selectable
 tone/pulse dialing and fax workflows. Closing this gap therefore means driving
-the real Telephone or Internet Center setup through dialing, DAA/ring/carrier
-behavior and a remote peer—not merely making the current lower-level DSP probe
-count more functions. See [`user-guide.md`](user-guide.md).
+the real Telephone or Internet Center setup through dialing, carrier behavior
+and a remote peer—not merely making the current lower-level DSP or digital-DAA
+probes count more functions. See [`user-guide.md`](user-guide.md).

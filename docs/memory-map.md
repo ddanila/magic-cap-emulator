@@ -155,6 +155,9 @@ boot, OS, and peripheral regressions:
   continuously serviced sound-transmit DMA ring used by the boot chime.
 - Telecom RX/TX DMA, one-shot and continuous rings, loopback/silence receive,
   and independent telecom sample timing for the built-in software modem.
+- Telephone DAA digital control: Betty's connected input and hookswitch
+  output, plus Dino MFIO input pin 0 and interrupt-bank-3/4 positive/negative
+  ring-detector edges.
 - A battery-backed 32,768 Hz RTC counter, alarm and rollover interrupts,
   freeze/clear controls, and a separate persistent clock record.
 - Read-only power-good/on-button inputs plus cold-start/VCC power state.

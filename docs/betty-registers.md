@@ -177,8 +177,11 @@ end; without it, the 48-word two-half ring used by the software modem wraps
 continuously. And `kSibLoopModeMask` (`sibControl` bit 3) is a hardware
 loopback: with it set the SIB feeds transmit straight back into the receive
 buffer, which is what the modem's own loopback diagnostics rely on. The phone
-line and DAA are not modelled, so transmit samples are consumed at the
-programmed rate and receive delivers either the loopback or silence.
+line's digital DAA control is modelled separately: Betty IOData bit `0x0200`
+drives off-hook, while input bit `0x0100` reports a connected line and remains
+preserved across IOData writes. The analog sample peer is not yet modelled, so
+transmit samples are consumed at the programmed rate and receive delivers
+either the loopback or silence.
 
 The driver's own clock for this channel comes from `kSibTelDivMask`, separate
 from the sound divisor, so the two channels can run at different rates.
@@ -200,6 +203,7 @@ the SIB at the same time:
 python3 tools/telecom_regression.py               # loopback
 python3 tools/telecom_regression.py --continuous  # ROM modem ring
 python3 tools/telecom_regression.py --no-loopback # control
+python3 tools/telephone_line_regression.py         # DAA hook/ring boundary
 ```
 
 The loopback run requires all 64 words to arrive, the half, end and pointer
