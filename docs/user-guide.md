@@ -108,11 +108,11 @@ the contract for future archived WaveLAN, NE2000 and wireless-card work.
 These are product-level tests, ordered by how directly they close known
 hardware gaps:
 
-1. **Built-in line side.** Connect the now-working product Fax originator to
-   **receive fax** only after all origin digits have reached the combined test
-   exchange, acquire carrier, and complete a page transfer. Both product
-   startups, the incoming call object, digit-dependent analog output, and
-   remote transport are now covered.
+1. **Built-in line side.** Determine why the product originator does not
+   recognize the late-ring answerer's non-silent fax/HDLC signal, then acquire
+   carrier and complete a page transfer. Both product startups, post-dial
+   switch sequencing, the incoming call object, digit-dependent analog
+   output, and remote transport are now covered.
 2. **Magic Bus topology.** Replace the single optional endpoint with an
    addressable collection, prove two descriptors on one bus, and cover another
    documented class such as an external modem or PC interface.

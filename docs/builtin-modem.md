@@ -315,10 +315,14 @@ direct-to-attenuated gain range, incoming call-object creation, and the real
 fax-answer and fax-origin startups have all been addressed or excluded. A
 paired product run also proves seven origin digits plus non-silent PCM in both
 directions, while the answer side repeatedly runs fax receive/transmit and
-both HDLC directions. The remaining switch sequencing must delay answering
-until origin digit collection is complete; after that, any negotiation
-failure can be separated from analog-line behavior. Carrier, data transfer,
-and completed fax-page transfer are still unclaimed.
+both HDLC directions. A second run delays the physical ring until origin digit
+collection and selects **receive fax** immediately while its live call object
+is valid. The answerer enters `AnswerModem` and fax DSP as expected, but the
+originator remains in `Dialing` and never reaches `FaxModemInit`. This excludes
+switch sequencing and isolates answer-signal recognition across the digital
+line—likely framing, gain, echo, or another analog-line property—as the next
+boundary. Carrier, data transfer, and completed fax-page transfer are still
+unclaimed.
 
 ## Published design cross-check
 
