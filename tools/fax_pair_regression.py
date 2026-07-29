@@ -107,13 +107,20 @@ class CallPcmExchange:
     to the paused origin and subsequent chunks are exchanged with bounded skew.
     """
 
-    def __init__(self, capture_limit: int = 2_000_000) -> None:
+    def __init__(
+        self,
+        capture_limit: int = 2_000_000,
+        chunk_size: int = CHUNK_SIZE,
+    ) -> None:
+        if chunk_size <= 0:
+            raise ValueError(f"invalid chunk size: {chunk_size}")
         self.listener = socket.socket()
         self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.listener.bind(("127.0.0.1", 0))
         self.listener.listen(2)
         self.port = self.listener.getsockname()[1]
         self.capture_limit = capture_limit
+        self.chunk_size = chunk_size
         self.forwarded = [0, 0]
         self.call_forwarded = [0, 0]
         self.started_at_peer_bytes: list[int | None] = [None, None]
@@ -200,7 +207,9 @@ class CallPcmExchange:
         try:
             while len(peers) < 2 and not self._stop.is_set():
                 peer, _ = self.listener.accept()
-                peer.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, CHUNK_SIZE)
+                peer.setsockopt(
+                    socket.SOL_SOCKET, socket.SO_RCVBUF, self.chunk_size
+                )
                 peer.setblocking(False)
                 peers.append(peer)
             active = [True, True]
@@ -213,7 +222,7 @@ class CallPcmExchange:
                         continue
                     if self._connected and (
                         self.call_forwarded[index]
-                        > self.call_forwarded[1 - index] + CHUNK_SIZE
+                        > self.call_forwarded[1 - index] + self.chunk_size
                     ):
                         continue
                     candidates.append(peer)
@@ -223,7 +232,7 @@ class CallPcmExchange:
                 for source in readable:
                     index = peers.index(source)
                     try:
-                        data = source.recv(CHUNK_SIZE)
+                        data = source.recv(self.chunk_size)
                     except BlockingIOError:
                         continue
                     except ConnectionResetError:

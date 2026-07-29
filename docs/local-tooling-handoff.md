@@ -20,6 +20,31 @@ installation without relying on a machine-specific directory:
 command -v ghidra ghidra-analyze-headless magic-cap-python magic-cap-pip
 ```
 
+The host also has the optional native tools used by the repository's build,
+debugging, media and protocol workflows:
+
+- build and C/C++ analysis: `ccache`, `clang`, `clangd`, `clang-format`,
+  `clang-tidy`, `bear`, Universal Ctags, `lcov` and `gcovr`;
+- MIPS/debugging: GNU MIPS cross-binutils, `gdb-multiarch`, `qemu-mips`,
+  radare2, Valgrind, `perf`, `strace` and `rr`;
+- shell and automation: `shellcheck`, `shfmt`, SDL, Slirp, Xvfb and the full
+  MAME build/runtime dependency set;
+- binary, filesystem and archive inspection: Binwalk, Sleuth Kit, HFS
+  utilities, SRecord, `cabextract`, `unar`, `unshield`, MuPDF and Tesseract;
+- serial, network and media inspection: `tshark`, `socat`, `picocom`, FFmpeg
+  and SoX.
+
+Check the command-facing subset without depending on installation paths:
+
+```sh
+command -v \
+  clang-format clang-tidy bear ctags lcov gcovr \
+  shellcheck shfmt srec_cat cabextract rr \
+  mips-linux-gnu-objdump gdb-multiarch qemu-mips \
+  r2 valgrind perf strace binwalk fls hformat \
+  mutool tesseract tshark socat picocom unar unshield ffmpeg sox
+```
+
 ## Ghidra
 
 The installed release is the official

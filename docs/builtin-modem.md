@@ -356,6 +356,53 @@ half-DMA boundary and requires matching rate words, detector lock,
 final skew. Generated Lua, copied NVRAM and logs remain under
 `$MAGIC_CAP_ASSETS/runtime/data-modem-pair-regression/`.
 
+## Product Internet Center carrier
+
+The lower-level pair is now connected to a real Web Browser session. Prepare
+a retained state in the Internet Center by opening the provider on the
+Internet Providers sign, selecting its **locations** tab, choosing the `home`
+location, assigning **PPP dialup**, accepting the chooser, and leaving the
+provider editor so the change is committed. This is the location-based
+connection selection described by *Using Magic Cap*, pp. 165–174.
+
+Then run:
+
+```sh
+python3 tools/product_data_modem_regression.py \
+  --nvram-source \
+    "$MAGIC_CAP_ASSETS/runtime/combined-browser/<provider-run>/nvram"
+```
+
+The source is copied and never modified. One DataRover wakes from the
+Internet Center, returns through Downtown and Hallway to the Desk, opens Web
+Browser, selects the retained provider and reloads. The visible product
+workflow displays `Dialing 555-1212` and reaches
+`SoftwareModem_ConnectToNumber`, `SoftwareModem_OpenModemPort`,
+`SoftwareModem_StartDataModem`, the ROM V.32 pump and continuous telecom DMA.
+
+The other DataRover uses the exact direct-answer command sequence verified by
+the generic pair. A call-aware exchange returns silence before the call
+instead of queuing dial tone and DTMF into the answerer's receive socket.
+After the product writes its dial-complete marker, the exchange identifies
+the caller from observed pre-call PCM, pauses it, starts the answerer, sends
+the first answer carrier block, and releases both processes on a shared
+96-byte clock. Result markers keep both peers alive until their counters have
+been sampled.
+
+A passing run requires the product's real connect/open/start path, both ROMs'
+receive/transmit/pump/status paths, V.32 data-mode entry, matching low 12-bit
+rate payloads, live 48-word RX/TX DMA, at least 100 KiB of call PCM per side
+and no more than one half-ring of final skew. The product's detector byte may
+clear after the sticky data-mode transition; the answer detector and both
+data-mode counters preserve the carrier evidence.
+
+This closes product selection, dialing and carrier acquisition. The next
+boundary is narrower: the observed product run does not yet call
+`DataModemReportModemSignal` or
+`SoftwareModemStatusHandlerCallback`, so Internet Center has not started PPP
+over the carrier. That application-status handoff remains separate from the
+already working PC Card PPP path.
+
 The live Dino SIB control value is `0x00a79923`: telecom 16-bit mode is set
 and divisor `0x27` selects 7,200 samples/s. Telecom size `0x00bc` describes
 the expected 48-word ring. This confirms the bridge's two signed 16-bit
@@ -369,16 +416,16 @@ reaches `AnswerModem`, issues 24 softmodem commands during the observed
 interval, installs `SoftModemLineHandler`, runs both `FaxModemRcv` and
 `FaxModemXmt`, exercises HDLC receive/send, and produces non-silent PCM.
 
-This narrows the remaining product-level gap: raw full-duplex transport,
+This narrows the remaining application-level gap: raw full-duplex transport,
 scheduler skew, silent DSP output, answer-role selection, simple polarity, a
 broad direct-to-attenuated gain range, V.32 carrier, incoming call-object
 creation, and the real fax-answer and fax-origin startups have all been
 addressed or excluded. The direct carrier harness does not create an Internet
-Center connection object, so its successful DSP status report does not call
+Center connection object. The product carrier regression now does create that
+object and reaches V.32 data mode, but it still does not call
 `DataModemReportModemSignal` or
-`SoftwareModemStatusHandlerCallback`. Driving a real application session
-through that already-working carrier handoff remains distinct from proving
-the paired ROM data pumps. A
+`SoftwareModemStatusHandlerCallback`. Diagnosing that final status transition
+remains distinct from proving the paired ROM data pumps. A
 captured answer stream begins with the expected strong 2,100 Hz CED and then
 V.21-like FSK; replaying it through a single socket peer makes the origin run
 fax RX/TX, exchange HDLC, and call `SendFaxImageData` 71 times. This proves
@@ -487,7 +534,9 @@ The product-level target is more specific. *Using Magic Cap*, pp. 135–163 and
 216, documents the built-in fax modem on a telephone line, including selectable
 tone/pulse dialing and fax workflows. The real Telephone now reaches its call
 screen, generates its tone-dialed number and crosses the line hardware.
-Closing the remaining gap means driving the Internet Center through carrier
-behavior and a remote peer, then covering fax—not merely making the current
-lower-level DSP or digital-DAA probes count more functions. See
+The product regression now drives the Internet Center through carrier
+behavior and a remote peer, and the fax pair covers the complete send/receive
+workflow. Closing the remaining gap means delivering the successful carrier
+status to Internet Center's PPP actor—not merely making the lower-level DSP
+or digital-DAA probes count more functions. See
 [`user-guide.md`](user-guide.md).
