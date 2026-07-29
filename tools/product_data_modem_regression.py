@@ -57,6 +57,7 @@ ANSWER_DELIVER_COUNTER = ANSWER_COUNTERS + next(
     if name == "lapm_deliver_data"
 )
 ECHO_PATTERN = re.compile(rb"PRODUCT_ANSWER_ECHO bytes=(\d+)")
+PEER_DATA_PATTERN = re.compile(rb"PRODUCT_ANSWER_ECHO_DATA hex=([0-9A-F]+)")
 
 PRODUCT_SYMBOLS = (
     (0x13D4_DD08, "new_dialup_link"),
@@ -155,6 +156,18 @@ def initial_ipcp_response(request_id: int = 0x20) -> bytes:
         + peer_address
     )
     return async_ppp_frame(negative_acknowledge) + async_ppp_frame(peer_request)
+
+
+def final_ipcp_response(request_id: int = 0x21) -> bytes:
+    """Acknowledge Magic Cap's corrected address and VJ request."""
+    options = bytes.fromhex("03060a00020f0206002d0301")
+    acknowledge = (
+        bytes.fromhex("ff03802102")
+        + bytes((request_id,))
+        + (4 + len(options)).to_bytes(2, "big")
+        + options
+    )
+    return async_ppp_frame(acknowledge)
 
 
 def echo_responder_words() -> list[int]:
@@ -401,7 +414,11 @@ def answer_automation_script(
     script = direct_answer_script(
         "answer", start_frame=999999, result_offset=result_offset
     )
-    responses = (initial_lcp_response(), initial_ipcp_response())
+    responses = (
+        initial_lcp_response(),
+        initial_ipcp_response(),
+        final_ipcp_response(),
+    )
     echo_words = echo_responder_words()
     echo_loop = 0xA000_0000 + ECHO_STUB + (len(echo_words) - 2) * 4
     echo_writes = "\n".join(
@@ -503,7 +520,7 @@ def answer_automation_script(
         "      inject()\n"
         "    end\n"
         "  end\n"
-        "  if restored and not echo_active and echo_round < 3\n"
+        "  if restored and not echo_active and echo_round < 4\n"
         "      and program:read_u32(ANSWER_DELIVER_COUNTER)\n"
         "        > echo_deliver_seen then\n"
         "    start_echo()\n"
@@ -613,13 +630,40 @@ def parse_echo_result(output: bytes) -> int | None:
     return int(match.group(1)) if match is not None else None
 
 
+def parse_peer_data(output: bytes) -> bytes | None:
+    """Return the first unescaped payload from the answer's final ROM read."""
+    match = PEER_DATA_PATTERN.search(output)
+    if match is None:
+        return None
+    framed = bytes.fromhex(match.group(1).decode())
+    payload = bytearray()
+    escaped = False
+    for byte in framed[1:] if framed[:1] == b"\x7e" else framed:
+        if byte == 0x7E:
+            break
+        if escaped:
+            payload.append(byte ^ 0x20)
+            escaped = False
+        elif byte == 0x7D:
+            escaped = True
+        else:
+            payload.append(byte)
+    return bytes(payload)
+
+
 def validate_results(
     product: dict[str, int | tuple[int, ...]] | None,
     answer: dict[str, int | str] | None,
     forwarded: list[int],
     echoed: int | None,
+    peer_data: bytes | None,
 ) -> list[str]:
     failures: list[str] = []
+    opened_ip = (
+        peer_data is not None
+        and peer_data.startswith(bytes.fromhex("ff03002145"))
+        and peer_data[16:24] == bytes.fromhex("0a00020f0a000202")
+    )
     if product is None:
         failures.append("product did not report a result")
     else:
@@ -652,9 +696,12 @@ def validate_results(
         ):
             if not product[name]:
                 failures.append(f"product missed {name}")
-        if product["ppp_read"] < 3 or product["lcp_frame"] < 4:
-            failures.append("product did not reach the IPCP address retry")
-        if product["enables"] != 3 or product["size"] != 48:
+        if product["ppp_read"] < 4 or product["lcp_frame"] < 5:
+            failures.append("product did not complete IPCP")
+        if (
+            (product["enables"] != 3 or product["size"] != 48)
+            and not opened_ip
+        ):
             failures.append("product lost its 48-word RX/TX DMA ring")
     if answer is None:
         failures.append("answer did not report a result")
@@ -679,12 +726,20 @@ def validate_results(
         ):
             if not answer[name]:
                 failures.append(f"answer missed {name}")
+        if answer["lapm_deliver_data"] < 4:
+            failures.append("answer did not receive the first IP packet")
         if answer["detector"] != 1:
             failures.append("answer detector did not lock")
     if echoed is None:
         failures.append("answer did not report its PPP peer replies")
-    elif echoed < len(initial_lcp_response()) + len(initial_ipcp_response()):
-        failures.append("answer did not write both LCP and IPCP replies")
+    elif echoed < (
+        len(initial_lcp_response())
+        + len(initial_ipcp_response())
+        + len(final_ipcp_response())
+    ):
+        failures.append("answer did not complete its LCP and IPCP replies")
+    if not opened_ip:
+        failures.append("product did not send IP after IPCP opened")
     if product is not None and answer is not None:
         product_rates = product["rates"]
         answer_rates = answer["rates"]
@@ -887,11 +942,13 @@ def run_regression(args: argparse.Namespace) -> int:
     product = parse_product_result(outputs.get("product", b""))
     answer = parse_direct_result(outputs.get("answer", b""))
     echoed = parse_echo_result(outputs.get("answer", b""))
+    peer_data = parse_peer_data(outputs.get("answer", b""))
     failures = validate_results(
         product,
         answer,
         completion_forwarded or relay.call_forwarded,
         echoed,
+        peer_data,
     )
     failures.extend(trigger_errors)
     if relay.error is not None:
@@ -907,7 +964,8 @@ def run_regression(args: argparse.Namespace) -> int:
     print(
         "PASS: Web Browser selected its Internet Center PPP dial-up provider, "
         "dialed through the built-in software modem, completed paired "
-        "V.32/LAPM, negotiated LCP, and began IPCP address assignment "
+        "V.32/LAPM and LCP/IPCP, then emitted IPv4/TCP "
+        "10.0.2.15:1024 -> 10.0.2.2:8080 "
         f"(peer-bytes={echoed}, "
         f"rates={','.join(f'{rate:04x}' for rate in rates)}, "
         f"PCM={tuple(relay.call_forwarded)})"

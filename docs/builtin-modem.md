@@ -391,7 +391,8 @@ the first answer carrier block, and releases both processes on a shared
 been sampled.
 
 A passing run requires the product's real dial-up-link, PPP start/write/read,
-LCP negotiation, IPCP start, connect/open/start and connection-monitor paths; both ROMs'
+LCP/IPCP negotiation, first IPv4 packet, connect/open/start and
+connection-monitor paths; both ROMs'
 receive/transmit/pump/status paths; V.32 data-mode entry; matching low 12-bit
 payloads in the three stable rate samples; HDLC-framer initialization; LAPM
 SABME/UA and connect reporting; answer-side delivery of the product data
@@ -414,10 +415,13 @@ task transmits them. It acknowledges Magic Cap's LCP Configure-Request and
 sends its own request. Magic Cap accepts both, starts IPCP with address
 `0.0.0.0`, accepts a NAK assigning `10.0.2.15`, acknowledges peer address
 `10.0.2.2`, and retries with the assigned address plus VJ compression. The
-product calls `SoftwareModem_Read`, `PPPServer_ReadPDU` and
-`LCP_ProcessFrame` throughout. This proves protocol-aware LCP negotiation and
-the first IPCP transition across the complete ROM stack. IPCP completion and
-an IP bridge remain separate from the already working PC Card PPP path.
+peer acknowledges the corrected request, completing IPCP. Magic Cap
+immediately sends PPP protocol `0x0021`: an IPv4/TCP SYN from
+`10.0.2.15:1024` to `10.0.2.2:8080`. The product calls
+`SoftwareModem_Read`, `PPPServer_ReadPDU` and `LCP_ProcessFrame` throughout.
+This proves LCP/IPCP and the first IP packet across the complete ROM stack.
+Answering and bridging IP remain separate from the already working PC Card
+PPP path.
 
 The live Dino SIB control value is `0x00a79923`: telecom 16-bit mode is set
 and divisor `0x27` selects 7,200 samples/s. Telecom size `0x00bc` describes

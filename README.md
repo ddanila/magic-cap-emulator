@@ -53,8 +53,9 @@ originating and answering roles negotiate matching rates, enter HDLC mode and
 complete the LAPM SABME/UA handshake. The real Internet Center dial-up actor
 also receives that LAPM-connect status, sends its first PPP bytes through the
 ROM modem, negotiates LCP with an answer-side peer, accepts an IPCP peer
-address, and retries with its assigned `10.0.2.15` guest address. The remaining
-built-in-modem gap is completing IPCP and supplying a host network endpoint.
+address, completes IPCP with its assigned `10.0.2.15` guest address, and sends
+an IPv4/TCP SYN to `10.0.2.2:8080`. The remaining built-in-modem gap is
+answering and bridging that IP traffic to a host network endpoint.
 The full status table and roadmap are in [`PLAN.md`](PLAN.md); the machine's
 hardware, history, and verification approach are in
 [`docs/background.md`](docs/background.md).

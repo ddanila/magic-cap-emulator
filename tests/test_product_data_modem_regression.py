@@ -7,10 +7,12 @@ from tools.product_data_modem_regression import (
     answer_automation_script,
     async_ppp_frame,
     echo_responder_words,
+    final_ipcp_response,
     initial_lcp_response,
     initial_ipcp_response,
     machine_config,
     parse_echo_result,
+    parse_peer_data,
     parse_product_result,
     ppp_fcs,
     product_automation_script,
@@ -88,13 +90,24 @@ class ProductDataModemScriptTests(unittest.TestCase):
         self.assertIn(bytes.fromhex("7d2a7d207d227d2f"), ipcp)
         self.assertIn(bytes.fromhex("7d2a7d207d227d22"), ipcp)
         self.assertEqual(ipcp.count(0x7E), 4)
+        final_ipcp = final_ipcp_response()
+        self.assertIn(
+            bytes.fromhex("7d2a7d207d227d2f7d227d267d202d7d237d21"),
+            final_ipcp,
+        )
+        self.assertEqual(final_ipcp.count(0x7E), 2)
 
 
 class ProductDataModemResultTests(unittest.TestCase):
+    PEER_IP_DATA = bytes.fromhex(
+        "ff0300214500002c7c7300004006e648"
+        "0a00020f0a00020204001f903f999b"
+    )
+
     @staticmethod
     def product_output() -> bytes:
         counters = " ".join(
-            f"{name}={4 if name == 'lcp_frame' else 3 if name == 'ppp_read' else 1}"
+            f"{name}={5 if name == 'lcp_frame' else 4 if name == 'ppp_read' else 1}"
             for _, name in PRODUCT_SYMBOLS
         )
         return (
@@ -125,7 +138,7 @@ class ProductDataModemResultTests(unittest.TestCase):
             "lapm_main": 1,
             "lapm_report_connect": 1,
             "lapm_process_sabme": 1,
-            "lapm_deliver_data": 1,
+            "lapm_deliver_data": 4,
             "status_callback": 1,
             "data_mode": 1,
             "returned": 1,
@@ -150,7 +163,10 @@ class ProductDataModemResultTests(unittest.TestCase):
                 product,
                 self.answer_result(),
                 [MIN_PCM_BYTES, MIN_PCM_BYTES + HALF_DMA_BYTES],
-                len(initial_lcp_response()) + len(initial_ipcp_response()),
+                len(initial_lcp_response())
+                + len(initial_ipcp_response())
+                + len(final_ipcp_response()),
+                self.PEER_IP_DATA,
             ),
             [],
         )
@@ -167,7 +183,10 @@ class ProductDataModemResultTests(unittest.TestCase):
             product,
             self.answer_result(),
             [MIN_PCM_BYTES, MIN_PCM_BYTES],
-            len(initial_lcp_response()) + len(initial_ipcp_response()),
+            len(initial_lcp_response())
+            + len(initial_ipcp_response())
+            + len(final_ipcp_response()),
+            self.PEER_IP_DATA,
         )
 
         self.assertIn("product missed data_mode", failures)
@@ -181,7 +200,10 @@ class ProductDataModemResultTests(unittest.TestCase):
             product,
             self.answer_result(),
             [MIN_PCM_BYTES, MIN_PCM_BYTES],
-            len(initial_lcp_response()) + len(initial_ipcp_response()),
+            len(initial_lcp_response())
+            + len(initial_ipcp_response())
+            + len(final_ipcp_response()),
+            self.PEER_IP_DATA,
         )
 
         self.assertIn("product missed ppp_write", failures)
@@ -195,7 +217,10 @@ class ProductDataModemResultTests(unittest.TestCase):
             product,
             self.answer_result(),
             [MIN_PCM_BYTES, MIN_PCM_BYTES],
-            len(initial_lcp_response()) + len(initial_ipcp_response()),
+            len(initial_lcp_response())
+            + len(initial_ipcp_response())
+            + len(final_ipcp_response()),
+            self.PEER_IP_DATA,
         )
 
         self.assertNotIn("the peers negotiated different rate words", failures)
@@ -209,7 +234,10 @@ class ProductDataModemResultTests(unittest.TestCase):
             product,
             self.answer_result(),
             [MIN_PCM_BYTES, MIN_PCM_BYTES],
-            len(initial_lcp_response()) + len(initial_ipcp_response()),
+            len(initial_lcp_response())
+            + len(initial_ipcp_response())
+            + len(final_ipcp_response()),
+            self.PEER_IP_DATA,
         )
 
         self.assertIn("the peers negotiated different rate words", failures)
@@ -223,7 +251,10 @@ class ProductDataModemResultTests(unittest.TestCase):
             product,
             self.answer_result(),
             [MIN_PCM_BYTES, MIN_PCM_BYTES],
-            len(initial_lcp_response()) + len(initial_ipcp_response()),
+            len(initial_lcp_response())
+            + len(initial_ipcp_response())
+            + len(final_ipcp_response()),
+            self.PEER_IP_DATA,
         )
 
         self.assertEqual(failures, [])
@@ -237,9 +268,19 @@ class ProductDataModemResultTests(unittest.TestCase):
             self.answer_result(),
             [MIN_PCM_BYTES, MIN_PCM_BYTES],
             None,
+            self.PEER_IP_DATA,
         )
 
         self.assertIn("answer did not report its PPP peer replies", failures)
+
+    def test_final_answer_read_parses_first_ip_packet(self) -> None:
+        output = (
+            b"PRODUCT_ANSWER_ECHO_DATA hex="
+            b"7EFF7D237D2021457D207D202C7C737D207D20407D26E648"
+            b"7D2A7D207D227D2F7D2A7D207D227D227D247D207D3F903F999B\n"
+        )
+
+        self.assertEqual(parse_peer_data(output), self.PEER_IP_DATA)
 
 
 if __name__ == "__main__":
