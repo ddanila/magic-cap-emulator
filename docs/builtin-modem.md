@@ -232,9 +232,7 @@ The trace confirms both data receive/transmit callbacks, the V.32
 pump/control/FIR path, clean return from debugger-injected setup, and command
 2 with role `1`. A representative 20-second training window forwards roughly
 135–159 KiB per direction. Both streams are non-silent, with peaks around
-10,400 and 15,800 and RMS levels around 6,900 and 7,800. Reversing signed
-16-bit PCM polarity in both directions does not change the ROM's no-carrier
-result.
+10,400 and 15,800 and RMS levels around 6,900 and 7,800.
 
 The live Dino SIB control value is `0x00a79923`: telecom 16-bit mode is set
 and divisor `0x27` selects 7,200 samples/s. Telecom size `0x00bc` describes
@@ -245,10 +243,9 @@ phone-call object reaches the method but deliberately stops before command 6
 or telecom DMA. Hardware ring pulses alone do not create that object context.
 
 This narrows the remaining failure: raw full-duplex transport, scheduler
-skew, silent DSP output, answer-role selection, and simple line polarity have
-all been excluded. Product call-object sequencing/state or a subtler analog
-line behavior remains to be found. Carrier, data transfer, and fax are still
-unclaimed.
+skew, silent DSP output, and answer-role selection have all been excluded.
+Product call-object sequencing/state or analog line gain/polarity behavior
+remains to be found. Carrier, data transfer, and fax are still unclaimed.
 
 ## Published design cross-check
 
