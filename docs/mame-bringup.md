@@ -251,6 +251,11 @@ python3 tools/data_modem_pair_regression.py \
 # Requires the provider's home location to be mapped to PPP dialup:
 python3 tools/product_data_modem_regression.py \
   --nvram-source /path/to/a/provider-configured/run/nvram
+# Bounded host-supplied response through the same built-in-modem path:
+python3 tools/product_data_modem_regression.py \
+  --nvram-source /path/to/a/provider-configured/run/nvram \
+  --http-upstream-url https://example.com/magic-cap-small.html \
+  --http-expected-text "Expected page text"
 # Requires calibrated NVRAM that resumes at the ordinary Desk:
 python3 tools/telephone_ui_regression.py \
   --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
@@ -387,6 +392,15 @@ final Web Browser snapshot. Its trace classifies every PPP frame in each ROM
 read, so concatenated control packets and retransmissions do not advance a
 scripted response sequence. Artifacts remain under
 `$MAGIC_CAP_ASSETS/runtime/product-data-modem-regression/`.
+
+`--http-upstream-url` replaces the deterministic body with a host-fetched
+HTTP(S) response. The adapter normalizes status, content type, length and
+connection headers to HTTP/1.0, caps the complete application response at 700
+bytes so it fits the current single ROM write, preserves the normalized bytes
+as `host-http-response.bin`, and requires caller-supplied OCR text. This is a
+bounded response adapter, not yet a transparent proxy: the fetch happens
+before dialing, and the remaining work is forwarding the live guest request
+and segmenting larger responses.
 
 The paired-fax harness instead starts two ordinary retained-state machines,
 creates and selects `Fax Peer` through the visible origin UI, and rings the

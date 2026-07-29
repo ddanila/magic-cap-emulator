@@ -91,8 +91,12 @@ The full regression list and expected checkpoints are in
   it. OCR verifies that Web Browser renders `Magic Cap built-in modem works.`;
   the peer then waits for Magic Cap's ACK, sends a separate FIN, and
   acknowledges Magic Cap's FIN. The clean final screen proves that the
-  four-way close avoids the dropped-connection notice. The remaining
-  line-side target is a general host endpoint bridge. This is
+  four-way close avoids the dropped-connection notice. With
+  `--http-upstream-url`, the host prefetches one explicitly configured
+  HTTP(S) endpoint, normalizes a response of at most 700 application bytes,
+  and OCR-verifies its distinct body after the same modem path. The remaining
+  line-side target is forwarding the guest's live request and segmenting
+  larger host responses. This is
   separate from the working PC Card PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 

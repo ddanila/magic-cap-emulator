@@ -7,6 +7,7 @@ from tools.product_data_modem_regression import (
     PRODUCT_SYMBOLS,
     answer_automation_script,
     async_ppp_frame,
+    build_http_application,
     echo_responder_words,
     final_ipcp_response,
     internet_checksum,
@@ -23,12 +24,27 @@ from tools.product_data_modem_regression import (
     ppp_fcs,
     product_automation_script,
     tcp_syn_ack_response,
+    tcp_peer_lua,
     validate_results,
     verify_rendered_http,
 )
 
 
 class ProductDataModemScriptTests(unittest.TestCase):
+    def test_host_http_application_is_bounded_and_embedded(self) -> None:
+        application = build_http_application(
+            b"<html>Host bridge works.</html>",
+            content_type="text/html",
+        )
+
+        self.assertIn(b"HTTP/1.0 200 OK\r\n", application)
+        self.assertIn(b"Content-Length: 31\r\n", application)
+        script = tcp_peer_lua(application)
+        self.assertIn("0x48, 0x6f, 0x73, 0x74", script)
+
+        with self.assertRaises(ValueError):
+            build_http_application(b"x" * 701)
+
     def test_script_drives_browser_provider_and_reload(self) -> None:
         script = product_automation_script()
 

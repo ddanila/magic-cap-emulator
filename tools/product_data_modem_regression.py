@@ -12,6 +12,8 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -74,6 +76,8 @@ HTTP_FIN_PATTERN = re.compile(rb"PRODUCT_ANSWER_HTTP_FIN bytes=(\d+)")
 HTTP_CLOSE_ACK_PATTERN = re.compile(
     rb"PRODUCT_ANSWER_HTTP_CLOSE_ACK bytes=(\d+)"
 )
+DEFAULT_HTTP_TEXT = "Magic Cap built-in modem works."
+MAX_HTTP_APPLICATION = 700
 
 PRODUCT_SYMBOLS = (
     (0x13D4_DD08, "new_dialup_link"),
@@ -421,17 +425,63 @@ def write_responder_words() -> list[int]:
     return words
 
 
-def tcp_peer_lua() -> str:
+def build_http_application(
+    body: bytes,
+    status: int = 200,
+    reason: str = "OK",
+    content_type: str = "text/html",
+) -> bytes:
+    """Normalize a bounded host response for the Magic Cap HTTP/1.0 peer."""
+    safe_reason = reason.encode("ascii", "replace").decode("ascii")
+    safe_content_type = content_type.encode("ascii", "replace").decode("ascii")
+    headers = (
+        f"HTTP/1.0 {status} {safe_reason}\r\n"
+        f"Content-Type: {safe_content_type}\r\n"
+        f"Content-Length: {len(body)}\r\n"
+        "Connection: close\r\n\r\n"
+    ).encode("ascii")
+    application = headers + body
+    if len(application) > MAX_HTTP_APPLICATION:
+        raise ValueError(
+            f"normalized HTTP response exceeds {MAX_HTTP_APPLICATION} bytes"
+        )
+    return application
+
+
+def fetch_http_application(url: str) -> bytes:
+    """Fetch and normalize one explicitly configured host HTTP endpoint."""
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "magic-cap-emulator-host-bridge/1"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            body = response.read(MAX_HTTP_APPLICATION + 1)
+            status = response.status
+            reason = response.reason or ""
+            content_type = response.headers.get_content_type()
+    except (OSError, urllib.error.URLError) as error:
+        raise ValueError(f"unable to fetch HTTP upstream: {error}") from error
+    if len(body) > MAX_HTTP_APPLICATION:
+        raise ValueError("HTTP upstream body exceeds the bridge limit")
+    return build_http_application(body, status, reason, content_type)
+
+
+def tcp_peer_lua(http_application: bytes | None = None) -> str:
     """Return Lua helpers that build a SYN-ACK from the live browser SYN."""
+    if http_application is None:
+        body = (
+            f"<html><body>{DEFAULT_HTTP_TEXT}</body></html>\r\n".encode()
+        )
+        http_application = build_http_application(body)
+    if len(http_application) > MAX_HTTP_APPLICATION:
+        raise ValueError("HTTP application exceeds the bridge limit")
+    application_lua = "{ " + ", ".join(
+        f"0x{byte:02x}" for byte in http_application
+    ) + " }"
     return r"""
 local function append_bytes(target, source)
   for _, byte in ipairs(source) do table.insert(target, byte) end
-end
-
-local function string_bytes(value)
-  local bytes = {}
-  for index = 1, #value do bytes[index] = string.byte(value, index) end
-  return bytes
 end
 
 local function internet_checksum(bytes)
@@ -651,13 +701,7 @@ local function dynamic_http_response()
       or frame[data_start + 2] ~= string.byte("T") then
     return nil, nil
   end
-  local body = "<html><body>Magic Cap built-in modem works.</body></html>\r\n"
-  local headers =
-    "HTTP/1.0 200 OK\r\n"
-    .. "Content-Type: text/html\r\n"
-    .. "Content-Length: " .. #body .. "\r\n"
-    .. "Connection: close\r\n\r\n"
-  local application = string_bytes(headers .. body)
+  local application = __HTTP_APPLICATION__
   http_server_next_sequence = (0x01020305 + #application) & 0xffffffff
   return build_http_packet(
     0x01020305, client_next_sequence, 0x18, application, 0x1235
@@ -710,7 +754,7 @@ local function dynamic_peer_response(kind)
   end
   return dynamic_control_response(kind)
 end
-"""
+""".replace("__HTTP_APPLICATION__", application_lua)
 
 
 def product_automation_script(
@@ -929,6 +973,7 @@ end)
 def answer_automation_script(
     call_trigger_path: Path = Path("call.trigger"),
     result_offset: int = 2400,
+    http_application: bytes | None = None,
 ) -> str:
     """Keep the retained answer peer awake while running the direct-answer ROM."""
     script = direct_answer_script(
@@ -988,7 +1033,7 @@ def answer_automation_script(
         f"local ECHO_LOOP = 0x{echo_loop:08x}\n"
         f"local ECHO_WRITE_LOOP = 0x{write_loop:08x}\n"
         f"local ANSWER_DELIVER_COUNTER = 0x{ANSWER_DELIVER_COUNTER:08x}\n\n"
-        f"{tcp_peer_lua()}\n"
+        f"{tcp_peer_lua(http_application)}\n"
         f"local function start_echo()\n"
         f"  echo_round = echo_round + 1\n"
         f"{echo_writes}\n"
@@ -1297,7 +1342,9 @@ def parse_http_close_ack_result(output: bytes) -> int | None:
     return int(match.group(1)) if match is not None else None
 
 
-def verify_rendered_http(run_dir: Path) -> tuple[bool, str]:
+def verify_rendered_http(
+    run_dir: Path, expected_text: str = DEFAULT_HTTP_TEXT
+) -> tuple[bool, str]:
     """OCR the final Web Browser screen for the deterministic response body."""
     image = run_dir / "product" / "snapshots" / "product-result.png"
     if not image.is_file():
@@ -1320,7 +1367,7 @@ def verify_rendered_http(run_dir: Path) -> tuple[bool, str]:
         completed.stdout, encoding="utf-8"
     )
     text = " ".join(completed.stdout.lower().split())
-    if completed.returncode or "magic cap built-in modem works." not in text:
+    if completed.returncode or expected_text.lower() not in text:
         return False, f"Web Browser did not render the HTTP body: {text!r}"
     if "connection was unexpectedly dropped" in text:
         return False, "Web Browser reported an unexpected TCP disconnect"
@@ -1447,6 +1494,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="start from a copied post-run Web Browser state",
     )
+    parser.add_argument(
+        "--http-upstream-url",
+        help=(
+            "fetch one bounded host HTTP(S) response and replay it through "
+            "the built-in modem"
+        ),
+    )
+    parser.add_argument(
+        "--http-expected-text",
+        help="OCR text required when --http-upstream-url is used",
+    )
     return parser.parse_args(argv)
 
 
@@ -1507,10 +1565,28 @@ def run_regression(args: argparse.Namespace) -> int:
     if not (source / args.system / "ram").is_file():
         print(f"error: NVRAM not found under {source}", file=sys.stderr)
         return 2
+    if args.http_upstream_url and not args.http_expected_text:
+        print(
+            "error: --http-upstream-url requires --http-expected-text",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        http_application = (
+            fetch_http_application(args.http_upstream_url)
+            if args.http_upstream_url
+            else None
+        )
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+    expected_http_text = args.http_expected_text or DEFAULT_HTTP_TEXT
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
     run_dir = args.workdir.expanduser().resolve() / f"{stamp}-{os.getpid()}"
     run_dir.mkdir(parents=True)
+    if http_application is not None:
+        (run_dir / "host-http-response.bin").write_bytes(http_application)
     call_trigger = run_dir / "call.trigger"
     answer_trigger = run_dir / "answer.trigger"
     relay = CallPcmExchange(
@@ -1532,7 +1608,10 @@ def run_regression(args: argparse.Namespace) -> int:
             script = role_dir / f"{role}.lua"
             script.write_text(
                 (
-                    answer_automation_script(answer_trigger)
+                    answer_automation_script(
+                        answer_trigger,
+                        http_application=http_application,
+                    )
                     if role == "answer"
                     else product_automation_script(
                         call_trigger,
@@ -1666,7 +1745,9 @@ def run_regression(args: argparse.Namespace) -> int:
         failures.append("answer peer did not acknowledge the product TCP FIN")
     if product is not None and http_close_ack_bytes and product["ppp_read"] < 8:
         failures.append("product did not receive the HTTP response")
-    rendered, render_detail = verify_rendered_http(run_dir)
+    rendered, render_detail = verify_rendered_http(
+        run_dir, expected_http_text
+    )
     if not rendered:
         failures.append(render_detail)
     if relay.error is not None:

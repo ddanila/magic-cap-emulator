@@ -374,6 +374,25 @@ python3 tools/product_data_modem_regression.py \
     "$MAGIC_CAP_ASSETS/runtime/combined-browser/<provider-run>/nvram"
 ```
 
+To carry content fetched from an explicit host endpoint through the same
+modem stack, use:
+
+```sh
+python3 tools/product_data_modem_regression.py \
+  --nvram-source \
+    "$MAGIC_CAP_ASSETS/runtime/combined-browser/<provider-run>/nvram" \
+  --http-upstream-url https://example.com/magic-cap-small.html \
+  --http-expected-text "Expected page text"
+```
+
+The endpoint may use HTTP or HTTPS on the host side. Its response is fetched
+once before dialing, normalized to HTTP/1.0, limited to 700 application bytes
+for the current single ROM write, and saved with the run artifacts. The
+expected text is required so OCR proves that Web Browser rendered the
+host-supplied body rather than the deterministic fallback. Live forwarding
+of the guest request and multi-segment host responses remain future bridge
+work.
+
 The source is copied and never modified. One DataRover wakes from the
 Internet Center, returns through Downtown and Hallway to the Desk, opens Web
 Browser, selects the retained provider and reloads. The visible product

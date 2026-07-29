@@ -58,8 +58,11 @@ a randomized IPv4/TCP SYN to `10.0.2.2:8080`. The answer peer derives the
 matching SYN-ACK, reassembles Magic Cap's split `GET / HTTP/1.0`, and returns
 a checksum-valid `HTTP/1.0 200 OK` response through the answer ROM. Web
 Browser renders `Magic Cap built-in modem works.` and then completes the
-deterministic connection's orderly four-way TCP close. The remaining
-built-in-modem gap is a general host endpoint bridge.
+deterministic connection's orderly four-way TCP close. A bounded host adapter
+can instead fetch an explicitly configured HTTP(S) URL, normalize its small
+response to HTTP/1.0, and carry that host-supplied body through the same path.
+The remaining built-in-modem gap is live guest-request forwarding and
+multi-segment responses.
 The full status table and roadmap are in [`PLAN.md`](PLAN.md); the machine's
 hardware, history, and verification approach are in
 [`docs/background.md`](docs/background.md).
