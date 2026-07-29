@@ -213,6 +213,35 @@ yet claim carrier. The next test must run the real originating and answering
 software-modem state machines over this bridge and require both to report
 carrier before attempting data or fax.
 
+## Paired carrier baseline
+
+Exploratory paired-ROM runs now reach both real data-modem roles over the
+synchronized bridge. The originating side opens `System_iSoftwareModem`,
+runs `StartDataModem`, installs modulation `0x80` (V.32), and starts telecom
+DMA. The answering side replays the shipping `AnswerModem` command sequence
+through `SoftModemCommandHandler`, rather than calling guessed DSP helpers:
+
+- command 6 uses object operations 4983 and 4985. Their observed values are
+  `4` and `0x0669880e`; the ROM sets bit zero of the second value, producing
+  `0x0669880f`;
+- command 2 uses role `1`, flags `0x00a1`, and option words
+  `0xffffffff`, `0x00001fff`, `0x0000f071`, `0xffffffff`, and
+  `0x00000100`.
+
+The trace confirms both data receive/transmit callbacks, the V.32
+pump/control/FIR path, clean return from debugger-injected setup, and command
+2 with role `1`. A representative 20-second training window forwards roughly
+135–159 KiB per direction. Both streams are non-silent, with peaks around
+10,400 and 15,800 and RMS levels around 6,900 and 7,800. Reversing signed
+16-bit PCM polarity in both directions does not change the ROM's no-carrier
+result.
+
+This narrows the remaining failure: raw full-duplex transport, scheduler
+skew, silent DSP output, answer-role selection, and simple line polarity have
+all been excluded. Product call sequencing/state or a subtler Betty
+codec/analog-line behavior remains to be found. Carrier, data transfer, and
+fax are still unclaimed.
+
 ## Published design cross-check
 
 General Magic's preserved

@@ -39,10 +39,14 @@ The full regression list and expected checkpoints are in
   enters `580`, goes off-hook, runs both 48-word DMA rings, generates DTMF
   through the ROM softmodem, and is decoded by the exchange. A verified
   full-duplex PCM bridge now supplies the line transport between two
-  independent DataRovers. Carrier acquisition through the paired
-  originating/answering softmodems is the next missing layer. Fax is the
-  final documented product behavior beyond that boundary. This is separate
-  from the working PC Card PPP path
+  independent DataRovers and bounds unequal host scheduling. Exploratory
+  paired runs now verify the ROM's exact command-6 options, command-2
+  originating/answering roles, active V.32 receive/transmit paths, and
+  non-silent PCM in both directions; simple polarity is excluded. Carrier
+  acquisition through the product call sequence or a subtler Betty
+  codec/line behavior is the next missing layer. Fax is the final documented
+  product behavior beyond that boundary. This is separate from the working
+  PC Card PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 
 - **Expand Magic Bus beyond one keyboard.** The product connector supports
