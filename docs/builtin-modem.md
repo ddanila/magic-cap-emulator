@@ -50,7 +50,8 @@ The driver now implements this boundary. **Phone line** selects the connected
 input and **Incoming telephone ring** drives the MFIO level and both edge
 interrupts. Ring is intentionally a level input rather than a one-shot event,
 so an automation harness or UI operator can supply the cadence expected by
-the ROM.
+the ROM. **Telephone exchange** selects either a silent line or the automatic
+test exchange.
 
 The direct regression runs without personalized NVRAM:
 
@@ -60,8 +61,23 @@ python3 tools/telephone_line_regression.py --mame ../mame/datarover
 
 It verifies that off-hook/on-hook writes preserve a connected line, and that
 asserting and releasing ring change MFIO input bit 0 and latch the correct
-interrupt banks. This closes the digital DAA control boundary; it does not
-yet synthesize dial tone or put remote-modem audio into telecom RX DMA.
+interrupt banks.
+
+The automatic exchange supplies the North American continuous dial tone,
+350 Hz plus 440 Hz, only while the line is connected and Betty is off-hook.
+It uses phase accumulators at Dino's programmed telecom rate, so its samples
+and save-state continuation are deterministic. The direct analog regression
+programs the real 7,200-sample/s setting and analyzes 2,048 received samples:
+
+```sh
+python3 tools/telecom_regression.py --dial-tone
+```
+
+A passing capture spans about −7,878..7,878, measures amplitudes near 4,000
+at both 350 and 440 Hz, and has negligible 1 kHz off-band energy. This closes
+the first analog DAA input. Guest DTMF/pulse recognition, a product-level pass
+through the ROM's asynchronous `SoftwareModem_CheckDialTone`, carrier and a
+remote modem remain later milestones.
 
 ## Published design cross-check
 
@@ -127,10 +143,11 @@ PASS: Magic Cap opened the built-in modem, kept its 48-word telecom ring running
 ```
 
 This deliberately proves the ROM/Dino/DSP boundary, not an imaginary
-telephone network. Digital DAA hook, line-connect and ring behavior is
-modelled and checked separately, but dial tone, carrier acquisition and a
-remote modem are still missing. The test invokes the lower ROM boundary
-rather than automating the Internet Center's dial dialogs.
+telephone network. Digital DAA hook, line-connect and ring behavior plus the
+exchange's dial-tone waveform are modelled and checked separately, but guest
+dialing, carrier acquisition and a remote modem are still missing. The test
+invokes the lower ROM boundary rather than automating the Internet Center's
+dial dialogs.
 
 The product-level target is more specific. *Using Magic Cap*, pp. 135–163 and
 216, documents the built-in fax modem on a telephone line, including selectable

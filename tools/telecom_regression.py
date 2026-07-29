@@ -48,6 +48,10 @@ RESULT_PATTERN = re.compile(
     rb"TELECOM RESULT match=(\d+)/(\d+) ptr=(\d+) enables=(\d) "
     rb"half=(\d) end=(\d) ptrinc=(\d)"
 )
+TONE_PATTERN = re.compile(
+    rb"TELECOM TONE samples=(\d+) min=(-?\d+) max=(-?\d+) "
+    rb"hz350=(\d+) hz440=(\d+) hz1000=(\d+)"
+)
 
 
 def monitor_config(system: str) -> str:
@@ -68,10 +72,51 @@ def automation_script(
     words: int = WORDS,
     loopback: bool = True,
     continuous: bool = False,
+    dial_tone: bool = False,
 ) -> str:
     """Return Lua that programs one telecom transfer, optionally continuous."""
     loop_bit = "0x08" if loopback else "0x00"
     dma_control = "0x0003" if continuous else "0x8003"
+    divisor = "0x27" if dial_tone else "0x19"
+    offhook = (
+        "        program:write_u32(SIB_SF0_AUX, 0x04000200)\n"
+        if dial_tone
+        else ""
+    )
+    tone_report = (
+        r"""
+            local samples = {}
+            local minimum, maximum = 32767, -32768
+            for index = 0, WORDS - 1 do
+                local word = program:read_u32(RX + index * 4)
+                local first, second = (word >> 16) & 0xffff, word & 0xffff
+                if first >= 0x8000 then first = first - 0x10000 end
+                if second >= 0x8000 then second = second - 0x10000 end
+                table.insert(samples, first)
+                table.insert(samples, second)
+                minimum = math.min(minimum, first, second)
+                maximum = math.max(maximum, first, second)
+            end
+            local function amplitude(frequency)
+                local real, imag = 0.0, 0.0
+                for index, sample in ipairs(samples) do
+                    local angle =
+                        2.0 * math.pi * frequency * (index - 1) / 7200.0
+                    real = real + sample * math.cos(angle)
+                    imag = imag - sample * math.sin(angle)
+                end
+                return math.floor(
+                    2.0 * math.sqrt(real * real + imag * imag)
+                    / #samples + 0.5)
+            end
+            print(string.format(
+                "TELECOM TONE samples=%d min=%d max=%d hz350=%d hz440=%d hz1000=%d",
+                #samples, minimum, maximum, amplitude(350),
+                amplitude(440), amplitude(1000)))
+"""
+        if dial_tone
+        else ""
+    )
     return f"""local machine = manager.machine
 local program = machine.devices[":maincpu"].spaces["program"]
 local frames = 0
@@ -81,6 +126,7 @@ local TX, RX, WORDS = 0x{TX_BUFFER:08x}, 0x{RX_BUFFER:08x}, {words}
 local SIB_SIZE, SIB_CONTROL, SIB_DMA = 0x10c00060, 0x10c00074, 0x10c00090
 local TEL_RX_START, TEL_TX_START = 0x10c0006c, 0x10c00070
 local INTERRUPT1 = 0x10c00100
+local SIB_SF0_AUX = 0x10c00080
 
 emu.register_frame_done(function()
     frames = frames + 1
@@ -94,10 +140,11 @@ emu.register_frame_done(function()
 
         program:write_u32(TEL_TX_START, TX)
         program:write_u32(TEL_RX_START, RX)
-        -- Telecom size field is bits 13:2 and holds the last valid index.
+{offhook}        -- Telecom size field is bits 13:2 and holds the last valid index.
         program:write_u32(SIB_SIZE, ((WORDS - 1) * 4) & 0x3ffc)
-        -- kSibEnableSib | kSibEnableTel [| kSibLoopModeMask], divisor 25.
-        program:write_u32(SIB_CONTROL, 0x00190000 | {loop_bit} | 0x20 | 0x01)
+        -- kSibEnableSib | kSibEnableTel [| kSibLoopModeMask].
+        program:write_u32(
+            SIB_CONTROL, ({divisor} << 16) | {loop_bit} | 0x20 | 0x01)
         -- Both directions. kSibTelDmaOnceMask makes this an explicit
         -- one-shot; without it the software modem uses a continuous ring.
         program:write_u32(SIB_DMA, {dma_control})
@@ -121,7 +168,7 @@ emu.register_frame_done(function()
                 (status & 0x00100000) ~= 0 and 1 or 0,
                 (status & 0x00080000) ~= 0 and 1 or 0,
                 (status & 0x00020000) ~= 0 and 1 or 0))
-            machine:exit()
+{tone_report}            machine:exit()
         end
     end
 end)
@@ -140,6 +187,17 @@ def parse_result(output: bytes) -> dict[str, int] | None:
         "half": int(match.group(5)),
         "end": int(match.group(6)),
         "ptrinc": int(match.group(7)),
+    }
+
+
+def parse_tone_result(output: bytes) -> dict[str, int] | None:
+    match = TONE_PATTERN.search(output)
+    if not match:
+        return None
+    names = ("samples", "min", "max", "hz350", "hz440", "hz1000")
+    return {
+        name: int(value)
+        for name, value in zip(names, match.groups(), strict=True)
     }
 
 
@@ -208,6 +266,36 @@ def verify_continuous(result: dict[str, int]) -> tuple[bool, str]:
     )
 
 
+def verify_dial_tone(
+    result: dict[str, int], tone: dict[str, int] | None
+) -> tuple[bool, str]:
+    passed, message = verify_no_loopback(result)
+    if not passed:
+        return passed, message
+    if tone is None:
+        return False, "dial-tone sample report is missing"
+    if tone["samples"] < 2000:
+        return False, f"only {tone['samples']} dial-tone samples were captured"
+    if tone["min"] > -6000 or tone["max"] < 6000:
+        return False, (
+            f"dial tone has insufficient range {tone['min']}..{tone['max']}"
+        )
+    for frequency in ("hz350", "hz440"):
+        if not 3500 <= tone[frequency] <= 4500:
+            return False, (
+                f"{frequency[2:]} Hz component has amplitude "
+                f"{tone[frequency]}, expected approximately 4000"
+            )
+    if tone["hz1000"] >= 200:
+        return False, (
+            f"off-band 1000 Hz amplitude {tone['hz1000']} is unexpectedly high"
+        )
+    return True, (
+        "off-hook receive DMA captured the deterministic 350+440 Hz "
+        "telephone dial tone"
+    )
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mame", type=Path, default=DEFAULT_MAME)
@@ -230,9 +318,19 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "after the buffer wraps, as used by the built-in software modem"
         ),
     )
+    parser.add_argument(
+        "--dial-tone",
+        action="store_true",
+        help=(
+            "take Betty off-hook with loop mode clear and require the "
+            "automatic telephone exchange's 350+440 Hz dial tone"
+        ),
+    )
     args = parser.parse_args(argv)
-    if args.no_loopback and args.continuous:
-        parser.error("--no-loopback and --continuous are separate control runs")
+    if sum((args.no_loopback, args.continuous, args.dial_tone)) > 1:
+        parser.error(
+            "--no-loopback, --continuous and --dial-tone are separate runs"
+        )
     return args
 
 
@@ -257,8 +355,10 @@ def run_regression(args: argparse.Namespace) -> int:
     log_path = run_dir / "mame-output.txt"
     lua_path.write_text(
         automation_script(
-            loopback=not args.no_loopback,
+            words=1024 if args.dial_tone else WORDS,
+            loopback=not (args.no_loopback or args.dial_tone),
             continuous=args.continuous,
+            dial_tone=args.dial_tone,
         ),
         encoding="utf-8",
     )
@@ -311,7 +411,11 @@ def run_regression(args: argparse.Namespace) -> int:
         )
         return 1
 
-    if args.no_loopback:
+    if args.dial_tone:
+        passed, message = verify_dial_tone(
+            result, parse_tone_result(completed.stdout)
+        )
+    elif args.no_loopback:
         passed, message = verify_no_loopback(result)
     elif args.continuous:
         passed, message = verify_continuous(result)

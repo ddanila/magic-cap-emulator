@@ -18,7 +18,7 @@ The full regression list and expected checkpoints are in
 | Battery & supply inputs | Both ADC channels answer within the ROM's own calibration thresholds, so the spurious backup-battery warning is gone; battery levels, AC adapter and battery cover are selectable, and removing the cover raises the IO interrupt the OS services | [`power-wake.md`](docs/power-wake.md#battery-levels) |
 | Power outputs, charging & policy | MFIO LCD power blanks scanout without destroying the framebuffer; active-high Magic Bus Vcc-off removes and rediscovers its peripheral; AC plus charger enable advances the main-battery ADC; the real Power Controls clamp 1–60 minutes and automatic AC idle shutoff follows its checkbox | [`power-wake.md`](docs/power-wake.md#outputs-the-os-writes) |
 | Sound I/O | ROM's startup tone (unbuffered hold register), buffered SIB sound-TX/RX DMA, host or deterministic microphone input, and Magic Cap's sound-stamp record/stop/play workflow | [`betty-registers.md`](docs/betty-registers.md) |
-| Built-in software modem | Continuous 48-word SIB telecom DMA ring drives the ROM's V.32 pump/control/FIR through a TX39 `MADD`; the Betty DAA hookswitch and connected-line input plus Dino MFIO ring level/edges are modelled | [`builtin-modem.md`](docs/builtin-modem.md) |
+| Built-in software modem | Continuous 48-word SIB telecom DMA ring drives the ROM's V.32 pump/control/FIR through a TX39 `MADD`; the Betty DAA hookswitch/line input and Dino MFIO ring edges are modelled; the deterministic exchange supplies a verified 350+440 Hz dial tone | [`builtin-modem.md`](docs/builtin-modem.md) |
 | Magic Bus | Address assignment and reinitialization, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | TX39 extensions | `MADD`/`MADDU` implemented for the modem DSP's 792 uses | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core, completes TCP through rootless libslirp, renders deterministic local HTTP, carries Browser 3.5's native HTTPS Rule through a host TLS proxy, and can browse public HTTPS sites through a guarded loopback launcher | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
@@ -33,10 +33,11 @@ The full regression list and expected checkpoints are in
 
 - **Model the built-in modem's external line side.** The SIB telecom DMA ring
   and ROM V.32 DSP execute, and the digital DAA boundary now has connected,
-  off-hook and ring-level/edge behavior. Dial tone, tone/pulse recognition,
-  carrier acquisition and a remote modem are not represented. Fax is the
-  final documented product behavior beyond that boundary. This is separate
-  from the working PC Card PPP path
+  off-hook and ring-level/edge behavior, and its deterministic exchange now
+  supplies a direct-DMA-verified North American dial tone. Product-level dial
+  detection, tone/pulse digit recognition, carrier acquisition and a remote
+  modem are not yet represented. Fax is the final documented product behavior
+  beyond that boundary. This is separate from the working PC Card PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 
 - **Expand Magic Bus beyond one keyboard.** The product connector supports

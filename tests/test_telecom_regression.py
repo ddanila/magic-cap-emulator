@@ -30,12 +30,12 @@ class ScriptTests(unittest.TestCase):
     def test_loopback_sets_the_loop_mode_bit(self) -> None:
         script = telecom.automation_script(loopback=True)
 
-        self.assertIn("0x00190000 | 0x08 | 0x20 | 0x01", script)
+        self.assertIn("(0x19 << 16) | 0x08 | 0x20 | 0x01", script)
 
     def test_control_run_clears_the_loop_mode_bit(self) -> None:
         script = telecom.automation_script(loopback=False)
 
-        self.assertIn("0x00190000 | 0x00 | 0x20 | 0x01", script)
+        self.assertIn("(0x19 << 16) | 0x00 | 0x20 | 0x01", script)
 
     def test_one_shot_sets_once_and_continuous_omits_it(self) -> None:
         self.assertIn(
@@ -58,6 +58,16 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('tag=":BOOT_MODE"', config)
         self.assertIn('value="0"', config)
 
+    def test_dial_tone_takes_betty_off_hook_at_7200_hz(self) -> None:
+        script = telecom.automation_script(
+            words=1024, loopback=False, dial_tone=True
+        )
+
+        self.assertIn("program:write_u32(SIB_SF0_AUX, 0x04000200)", script)
+        self.assertIn("(0x27 << 16) | 0x00 | 0x20 | 0x01", script)
+        self.assertIn("amplitude(350)", script)
+        self.assertIn("amplitude(440)", script)
+
 
 class ParseTests(unittest.TestCase):
     def test_parses_a_result_line(self) -> None:
@@ -75,6 +85,24 @@ class ParseTests(unittest.TestCase):
 
     def test_missing_result_is_none(self) -> None:
         self.assertIsNone(telecom.parse_result(b"TELECOM START\n"))
+
+    def test_parses_dial_tone_spectrum(self) -> None:
+        output = (
+            b"TELECOM TONE samples=2048 min=-7878 max=7878 "
+            b"hz350=3987 hz440=3985 hz1000=3\n"
+        )
+
+        self.assertEqual(
+            telecom.parse_tone_result(output),
+            {
+                "samples": 2048,
+                "min": -7878,
+                "max": 7878,
+                "hz350": 3987,
+                "hz440": 3985,
+                "hz1000": 3,
+            },
+        )
 
 
 class VerifyTests(unittest.TestCase):
@@ -132,6 +160,38 @@ class VerifyTests(unittest.TestCase):
         passed, message = telecom.verify_continuous(result(enables=0))
         self.assertFalse(passed)
         self.assertIn("expected sibDMA RX/TX enables 3", message)
+
+    def test_accepts_a_clean_dial_tone(self) -> None:
+        passed, message = telecom.verify_dial_tone(
+            result(match=0),
+            {
+                "samples": 2048,
+                "min": -7878,
+                "max": 7878,
+                "hz350": 3987,
+                "hz440": 3985,
+                "hz1000": 3,
+            },
+        )
+
+        self.assertTrue(passed, message)
+        self.assertIn("350+440 Hz", message)
+
+    def test_rejects_missing_dial_tone_component(self) -> None:
+        passed, message = telecom.verify_dial_tone(
+            result(match=0),
+            {
+                "samples": 2048,
+                "min": -4000,
+                "max": 4000,
+                "hz350": 3987,
+                "hz440": 0,
+                "hz1000": 3,
+            },
+        )
+
+        self.assertFalse(passed)
+        self.assertIn("insufficient range", message)
 
 
 if __name__ == "__main__":
