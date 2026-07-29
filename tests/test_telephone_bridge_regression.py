@@ -1,0 +1,53 @@
+import unittest
+
+from tools.telephone_bridge_regression import (
+    RX_BUFFER,
+    TX_BUFFER,
+    WORDS,
+    automation_script,
+    monitor_bridge_config,
+    parse_result,
+)
+
+
+class TelephoneBridgeRegressionTests(unittest.TestCase):
+    def test_config_selects_monitor_and_external_bridge(self) -> None:
+        config = monitor_bridge_config("datarover840")
+
+        self.assertIn('tag=":BOOT_MODE"', config)
+        self.assertIn('tag=":PHONE_PEER"', config)
+        self.assertIn('mask="3"', config)
+        self.assertIn('value="2"', config)
+
+    def test_script_streams_distinct_words_without_internal_loopback(self) -> None:
+        script = automation_script(0x1111_2222, 0x3333_4444)
+
+        self.assertIn("0x11112222", script)
+        self.assertIn("0x33334444", script)
+        self.assertIn("program:write_u32(SIB_DMA, 0x0003)", script)
+        self.assertNotIn("| 0x08 |", script)
+
+    def test_result_parses(self) -> None:
+        output = (
+            b"PHONE_BRIDGE_RESULT received=64/64 expected=33334444 "
+            b"enables=3 tx=00200000 rx=00210000\n"
+        )
+
+        self.assertEqual(
+            parse_result(output),
+            {
+                "received": WORDS,
+                "words": WORDS,
+                "expected": 0x3333_4444,
+                "enables": 3,
+                "tx": TX_BUFFER,
+                "rx": RX_BUFFER,
+            },
+        )
+
+    def test_missing_result_rejected(self) -> None:
+        self.assertIsNone(parse_result(b"PHONE_BRIDGE_RESULT missing"))
+
+
+if __name__ == "__main__":
+    unittest.main()

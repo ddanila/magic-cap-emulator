@@ -169,6 +169,46 @@ TELEPHONE_UI_RESULT dialer=1 start_call=1 server_dial=1 audio_dialing=2 start_mo
 PASS: Magic Cap entered 580 in the Telephone, showed the active call screen, traversed PhoneDialer, PhoneServer, and the software DTMF generator, went off-hook, kept both 48-word sound and telecom DMA rings running, and the exchange decoded 580
 ```
 
+## External PCM bridge
+
+The **External PCM bridge** telephone-exchange setting connects Dino's
+telecom stream to MAME's `phone_bridge` bitbanger image. The wire format is
+exactly one big-endian 32-bit DMA word—two signed 16-bit samples—at the ROM's
+programmed sample rate. It is full duplex and does not decode, synthesize or
+otherwise special-case modem signals.
+
+Two independent MAME processes can therefore act as the originating and
+answering ends of one line. Start the byte-for-byte relay:
+
+```sh
+python3 tools/telephone_pcm_relay.py --port 7200
+```
+
+Select **External PCM bridge** in both machines and attach both to it:
+
+```sh
+../mame/datarover datarover840 -bitb socket.127.0.0.1:7200
+```
+
+The bridge keeps a bounded receive jitter queue because the two emulators
+have nominally identical 7,200-sample/s clocks but independent host
+schedulers. The relay also bounds stream skew so a consistently faster
+process is back-pressured instead of silently losing alignment.
+
+The automated transport check uses two isolated monitor boots, distinct
+constant sample words and continuous 64-word RX/TX rings:
+
+```sh
+python3 tools/telephone_bridge_regression.py
+```
+
+It requires every receive word on each DataRover to equal the other
+DataRover's transmit word and verifies nonzero byte counts in both relay
+directions. This closes the external bidirectional PCM transport; it does not
+yet claim carrier. The next test must run the real originating and answering
+software-modem state machines over this bridge and require both to report
+carrier before attempting data or fax.
+
 ## Published design cross-check
 
 General Magic's preserved

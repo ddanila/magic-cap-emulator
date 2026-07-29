@@ -243,6 +243,7 @@ python3 tools/telecom_regression.py --dial-tone
 python3 tools/telecom_regression.py --dtmf
 python3 tools/telephone_line_regression.py
 python3 tools/telephone_line_regression.py --pulse
+python3 tools/telephone_bridge_regression.py
 python3 tools/builtin_modem_regression.py \
   --nvram-source /path/to/a/passing/combined-browser/run/nvram
 # Requires calibrated NVRAM that resumes at the ordinary Desk:
@@ -339,6 +340,14 @@ lands on the capture's second channel, so the analysis always picks the most
 occupied channel.
 The WAV, generated Lua, NVRAM, and log remain under
 `$MAGIC_CAP_ASSETS/runtime/sound-regression/`.
+
+The telephone-bridge harness starts two isolated IDT-monitor machines and a
+local stream relay. Each continuous 64-word telecom DMA ring must receive the
+other machine's distinct sample word in every slot. The retained Lua, logs
+and NVRAM remain under
+`$MAGIC_CAP_ASSETS/runtime/telephone-bridge-regression/`. See
+[`builtin-modem.md`](builtin-modem.md#external-pcm-bridge) for the reusable
+relay and manual connection command.
 
 The TX39 harness executes signed and unsigned multiply and multiply/add
 instructions from uncached RAM and verifies `rd`, `HI`, and `LO`. Its
@@ -540,7 +549,7 @@ the separate serial-terminal view.
 | Power | LCD power blanks scanout without losing its framebuffer; Magic Bus Vcc-off drops and later rediscovers the accessory; AC plus charger enable raises the main-battery ADC; the real controls clamp 1–60 minutes and their AC-idle checkbox governs automatic `SLEE`/VCC-off shutdown |
 | Sound output | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
 | Sound input | One-shot SIB receive DMA captures deterministic tone/silence with all expected status; the real Stamper UI records a 1 kHz microphone source, stops and drains its SIB command, then plays an audible WAV segment |
-| Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 FIR code through TX39 DSP extensions; direct DAA verification covers connected/off-hook state, both Dino ring edges, deterministic 350+440 Hz dial tone, and decoding DTMF or pulse-dialed `580`; the visible Telephone enters `580`, reaches `Calling 580`, traverses PhoneDialer/PhoneServer and the software DTMF generator, keeps both 48-word sound and telecom rings active, and the exchange decodes its sampled output as `580` |
+| Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 FIR code through TX39 DSP extensions; direct DAA verification covers connected/off-hook state, both Dino ring edges, deterministic 350+440 Hz dial tone, and decoding DTMF or pulse-dialed `580`; the visible Telephone's sampled output decodes as `580`; two independent DataRovers exchange every word of their continuous telecom DMA rings through the external PCM bridge |
 | Magic Bus | ROM assigns and later reassigns address zero, validates the checksummed `ATKB` descriptor, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures |
 | PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback and live-OS checks; blank storage setup, persistent `RAMC` remount, Option-insert reformat, Good/Low/Dead battery pins, a card-backed Notebook object and full built-in backup/restore also pass; `Translation.pkg` copies an authentic 1.x `new items` package into Built-in storage without source writes |
 | PC Card Ethernet | The archived EtherLink driver initializes the 3C589, completes ARP/TCP through rootless libslirp, renders deterministic local HTTP, and carries Browser 3.5's native HTTPS Rule through a loopback Crypto Ancienne proxy; the absolute request, decrypted request, and rendered result are checked |
