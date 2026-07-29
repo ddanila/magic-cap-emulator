@@ -52,7 +52,7 @@ ECHO_WRITE_STUB = ECHO_STUB + 0x400
 ECHO_BUFFER = 0x0030_6800
 ECHO_RESPONSE = 0x0030_6C00
 DYNAMIC_RESPONSE = ECHO_RESPONSE + 0x800
-ECHO_TOTAL = 0x0030_7800
+ECHO_TOTAL = 0x0030_A800
 ECHO_DONE = ECHO_TOTAL + 4
 ECHO_READ_TOTAL = ECHO_TOTAL + 8
 ECHO_RESPONSE_KIND = ECHO_TOTAL + 12
@@ -77,7 +77,7 @@ HTTP_CLOSE_ACK_PATTERN = re.compile(
     rb"PRODUCT_ANSWER_HTTP_CLOSE_ACK bytes=(\d+)"
 )
 DEFAULT_HTTP_TEXT = "Magic Cap built-in modem works."
-MAX_HTTP_APPLICATION = 700
+MAX_HTTP_APPLICATION = 4_096
 
 PRODUCT_SYMBOLS = (
     (0x13D4_DD08, "new_dialup_link"),
@@ -622,6 +622,7 @@ end
 local http_server_next_sequence = nil
 local http_fin_sent = false
 local http_close_ack_sent = false
+local http_application = __HTTP_APPLICATION__
 
 local function build_http_packet(
     sequence, acknowledgement, flags, application, identification)
@@ -701,10 +702,10 @@ local function dynamic_http_response()
       or frame[data_start + 2] ~= string.byte("T") then
     return nil, nil
   end
-  local application = __HTTP_APPLICATION__
-  http_server_next_sequence = (0x01020305 + #application) & 0xffffffff
+  http_server_next_sequence =
+    (0x01020305 + #http_application) & 0xffffffff
   return build_http_packet(
-    0x01020305, client_next_sequence, 0x18, application, 0x1235
+    0x01020305, client_next_sequence, 0x18, http_application, 0x1235
   ), "response"
 end
 
@@ -1575,7 +1576,11 @@ def run_regression(args: argparse.Namespace) -> int:
         http_application = (
             fetch_http_application(args.http_upstream_url)
             if args.http_upstream_url
-            else None
+            else build_http_application(
+                (
+                    f"<html><body>{DEFAULT_HTTP_TEXT}</body></html>\r\n"
+                ).encode()
+            )
         )
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
@@ -1585,7 +1590,7 @@ def run_regression(args: argparse.Namespace) -> int:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
     run_dir = args.workdir.expanduser().resolve() / f"{stamp}-{os.getpid()}"
     run_dir.mkdir(parents=True)
-    if http_application is not None:
+    if args.http_upstream_url:
         (run_dir / "host-http-response.bin").write_bytes(http_application)
     call_trigger = run_dir / "call.trigger"
     answer_trigger = run_dir / "answer.trigger"

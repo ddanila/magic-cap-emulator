@@ -43,7 +43,7 @@ class ProductDataModemScriptTests(unittest.TestCase):
         self.assertIn("0x48, 0x6f, 0x73, 0x74", script)
 
         with self.assertRaises(ValueError):
-            build_http_application(b"x" * 701)
+            build_http_application(b"x" * 4_097)
 
     def test_script_drives_browser_provider_and_reload(self) -> None:
         script = product_automation_script()
@@ -94,12 +94,13 @@ class ProductDataModemScriptTests(unittest.TestCase):
         self.assertIn("PRODUCT_ANSWER_PEER_DATA", script)
         self.assertIn("dynamic_syn_ack", script)
         self.assertIn("dynamic_control_response", script)
-        self.assertIn("0x18, application, 0x1235", script)
+        self.assertIn("0x18, http_application, 0x1235", script)
         self.assertIn("0x11, {}, 0x1236", script)
         self.assertIn("PRODUCT_ANSWER_DYNAMIC_WRITE_RETURN", script)
         self.assertIn("PRODUCT_ANSWER_HTTP_RESPONSE", script)
         self.assertIn("PRODUCT_ANSWER_HTTP_FIN", script)
         self.assertIn("PRODUCT_ANSWER_HTTP_CLOSE_ACK", script)
+        self.assertIn("local ECHO_TOTAL = 0x0030a800", script)
         self.assertIn("PRODUCT_ANSWER_ECHO bytes=", script)
         self.assertIn("PRODUCT_ANSWER_ECHO_DATA hex=", script)
         self.assertIn("PRODUCT_ANSWER_LCP_REPLY read=", script)

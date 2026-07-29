@@ -93,7 +93,7 @@ The full regression list and expected checkpoints are in
   acknowledges Magic Cap's FIN. The clean final screen proves that the
   four-way close avoids the dropped-connection notice. With
   `--http-upstream-url`, the host prefetches one explicitly configured
-  HTTP(S) endpoint, normalizes a response of at most 700 application bytes,
+  HTTP(S) endpoint, normalizes a response of at most 4 KiB of application data,
   and OCR-verifies its distinct body after the same modem path. The remaining
   line-side target is forwarding the guest's live request and segmenting
   larger host responses. This is

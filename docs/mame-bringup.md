@@ -395,12 +395,12 @@ scripted response sequence. Artifacts remain under
 
 `--http-upstream-url` replaces the deterministic body with a host-fetched
 HTTP(S) response. The adapter normalizes status, content type, length and
-connection headers to HTTP/1.0, caps the complete application response at 700
-bytes so it fits the current single ROM write, preserves the normalized bytes
-as `host-http-response.bin`, and requires caller-supplied OCR text. This is a
-bounded response adapter, not yet a transparent proxy: the fetch happens
-before dialing, and the remaining work is forwarding the live guest request
-and segmenting larger responses.
+connection headers to HTTP/1.0, caps the complete application response at
+4 KiB so it fits the enlarged single ROM-write scratch area, preserves the
+normalized bytes as `host-http-response.bin`, and requires caller-supplied
+OCR text. This is a bounded response adapter, not yet a transparent proxy:
+the fetch happens before dialing, and the remaining work is forwarding the
+live guest request and segmenting larger responses.
 
 The paired-fax harness instead starts two ordinary retained-state machines,
 creates and selects `Fax Peer` through the visible origin UI, and rings the
