@@ -235,7 +235,7 @@ def role_words(role: str) -> list[int]:
 def automation_script(
     role: str,
     start_frame: int = 1800,
-    result_offset: int = 900,
+    result_offset: int = 1600,
 ) -> str:
     words = role_words(role)
     writes = "\n".join(
@@ -283,8 +283,9 @@ for index,address in ipairs(addresses) do
       INIT_ARGS + 16, INIT_ARGS + 20, INIT_ARGS + 24,
       INIT_ARGS + 28, INIT_ARGS + 32, INIT_ARGS + 36, INIT_ARGS + 40)
   end
-  cpu.debug:bpset(
-    address, string.format("d@0x%08x==0", counter), action)
+  local condition = string.format("d@0x%08x==0", counter)
+  if address == 0x13e5b4b8 then condition = "" end
+  cpu.debug:bpset(address, condition, action)
 end
 cpu.debug:go()
 

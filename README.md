@@ -52,9 +52,9 @@ The same half-DMA process clock also lets the shipping generic V.32
 originating and answering roles negotiate matching rates, enter HDLC mode and
 complete the LAPM SABME/UA handshake. The real Internet Center dial-up actor
 also receives that LAPM-connect status, sends its first PPP bytes through the
-ROM modem, and processes an LCP frame echoed through the answer ROM. The
-remaining built-in-modem gap is supplying a protocol-aware remote PPP peer and
-host network endpoint.
+ROM modem, negotiates LCP with an answer-side peer, accepts an IPCP peer
+address, and retries with its assigned `10.0.2.15` guest address. The remaining
+built-in-modem gap is completing IPCP and supplying a host network endpoint.
 The full status table and roadmap are in [`PLAN.md`](PLAN.md); the machine's
 hardware, history, and verification approach are in
 [`docs/background.md`](docs/background.md).

@@ -391,11 +391,12 @@ the first answer carrier block, and releases both processes on a shared
 been sampled.
 
 A passing run requires the product's real dial-up-link, PPP start/write/read,
-LCP-frame, connect/open/start and connection-monitor paths; both ROMs'
+LCP negotiation, IPCP start, connect/open/start and connection-monitor paths; both ROMs'
 receive/transmit/pump/status paths; V.32 data-mode entry; matching low 12-bit
 payloads in the three stable rate samples; HDLC-framer initialization; LAPM
 SABME/UA and connect reporting; answer-side delivery of the product data
-unit; a nonempty ROM-queue echo and product-side delivery of the reply; live
+units; valid answer-side LCP/IPCP responses and product-side delivery of the
+replies; live
 48-word RX/TX DMA; at least 100 KiB of call PCM per side; and no more than one
 half-ring of final skew. The first sampled rate word carries transient state
 and the product detector byte may clear after the sticky data-mode transition,
@@ -406,15 +407,17 @@ application-status handoff. The trace reaches `DialupPPPMeans_NewDataLink`,
 `PPPServer_StartDataLink`, `SoftwareModem_ConnectToNumber`,
 `MonitorDataConnection`, `LapmReportConnect`, and `PPPServer_WritePDU`.
 The product sends bytes through `SoftwareModem_Write` and LAPM, and the answer
-ROM calls `LapmDeliverData`. A one-shot answer stub reads that first data unit
-with the ROM's `SoftModemRead`, writes the same 37 bytes through
+ROM calls `LapmDeliverData`. An answer-side peer reads each data unit with the
+ROM's `SoftModemRead`, writes framed RFC 1662 responses through
 `SoftModemWrite`, and restores the interrupted CPU state so Magic Cap's LAPM
-task transmits it. The product then calls `SoftwareModem_Read`,
-`PPPServer_ReadPDU` and `LCP_ProcessFrame`. This proves bidirectional
-application data across the complete ROM stack; it does not constitute a PPP
-peer, because an echo cannot negotiate LCP/IPCP or bridge IP to the host. That
-protocol-aware remote service remains separate from the already working PC
-Card PPP path.
+task transmits them. It acknowledges Magic Cap's LCP Configure-Request and
+sends its own request. Magic Cap accepts both, starts IPCP with address
+`0.0.0.0`, accepts a NAK assigning `10.0.2.15`, acknowledges peer address
+`10.0.2.2`, and retries with the assigned address plus VJ compression. The
+product calls `SoftwareModem_Read`, `PPPServer_ReadPDU` and
+`LCP_ProcessFrame` throughout. This proves protocol-aware LCP negotiation and
+the first IPCP transition across the complete ROM stack. IPCP completion and
+an IP bridge remain separate from the already working PC Card PPP path.
 
 The live Dino SIB control value is `0x00a79923`: telecom 16-bit mode is set
 and divisor `0x27` selects 7,200 samples/s. Telecom size `0x00bc` describes

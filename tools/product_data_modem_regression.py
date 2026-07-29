@@ -46,8 +46,11 @@ STATUS_EVENT = COUNTERS + 0x200
 INIT_ARGS = COUNTERS + 0x300
 ECHO_STUB = 0x0030_6000
 ECHO_BUFFER = 0x0030_6800
+ECHO_RESPONSE = 0x0030_6C00
 ECHO_TOTAL = 0x0030_7800
 ECHO_DONE = ECHO_TOTAL + 4
+ECHO_READ_TOTAL = ECHO_TOTAL + 8
+ECHO_RESPONSE_LENGTH = ECHO_TOTAL + 12
 ANSWER_DELIVER_COUNTER = ANSWER_COUNTERS + next(
     index * 4
     for index, (_, name) in enumerate(MODEM_SYMBOLS)
@@ -62,7 +65,7 @@ PRODUCT_SYMBOLS = (
     (0x13C4_DF70, "ppp_read"),
     (0x13C4_ECE4, "ppp_check"),
     (0x13C4_FCDC, "lcp_frame"),
-    (0x13C4_FF9C, "chap_frame"),
+    (0x13C4_FF9C, "network_control_frame"),
     (0x13C5_A628, "connect"),
     (0x13C5_A938, "connect_number"),
     (0x13C5_C55C, "monitor_connection"),
@@ -75,6 +78,12 @@ PRODUCT_SYMBOLS = (
     (0x13C5_AC84, "set_status_handler"),
     *MODEM_SYMBOLS[1:],
 )
+CALL_READY_COUNTER = COUNTERS + next(
+    index * 4
+    for index, (_, name) in enumerate(PRODUCT_SYMBOLS)
+    if name == "connect_number"
+)
+CALL_SETTLE_FRAMES = 240
 PRODUCT_PATTERN = re.compile(
     rb"PRODUCT_DATA_MODEM_RESULT "
     + rb" ".join(name.encode() + rb"=(\d+)" for _, name in PRODUCT_SYMBOLS)
@@ -93,8 +102,63 @@ def _lua_path(path: Path) -> str:
     return str(path).replace("\\", "\\\\").replace('"', '\\"')
 
 
+def ppp_fcs(payload: bytes) -> int:
+    """Return the complemented RFC 1662 FCS for an unescaped PPP payload."""
+    fcs = 0xFFFF
+    for byte in payload:
+        fcs ^= byte
+        for _ in range(8):
+            fcs = (fcs >> 1) ^ (0x8408 if fcs & 1 else 0)
+    return fcs ^ 0xFFFF
+
+
+def async_ppp_frame(payload: bytes) -> bytes:
+    """Frame and escape a PPP payload using the initial all-control ACCM."""
+    fcs = ppp_fcs(payload)
+    framed = payload + bytes((fcs & 0xFF, fcs >> 8))
+    escaped = bytearray((0x7E,))
+    for byte in framed:
+        if byte < 0x20 or byte in (0x7D, 0x7E):
+            escaped.extend((0x7D, byte ^ 0x20))
+        else:
+            escaped.append(byte)
+    escaped.append(0x7E)
+    return bytes(escaped)
+
+
+def initial_lcp_response(request_id: int = 0x1F) -> bytes:
+    """Acknowledge Magic Cap's deterministic request and offer empty options."""
+    options = bytes.fromhex("02060000000007020802")
+    acknowledge = (
+        bytes.fromhex("ff03c02102")
+        + bytes((request_id,))
+        + (4 + len(options)).to_bytes(2, "big")
+        + options
+    )
+    peer_request = bytes.fromhex("ff03c02101010004")
+    return async_ppp_frame(acknowledge) + async_ppp_frame(peer_request)
+
+
+def initial_ipcp_response(request_id: int = 0x20) -> bytes:
+    """Assign the guest address and request the peer address via IPCP."""
+    guest_address = bytes.fromhex("03060a00020f")
+    peer_address = bytes.fromhex("03060a000202")
+    negative_acknowledge = (
+        bytes.fromhex("ff03802103")
+        + bytes((request_id,))
+        + (4 + len(guest_address)).to_bytes(2, "big")
+        + guest_address
+    )
+    peer_request = (
+        bytes.fromhex("ff0380210102")
+        + (4 + len(peer_address)).to_bytes(2, "big")
+        + peer_address
+    )
+    return async_ppp_frame(negative_acknowledge) + async_ppp_frame(peer_request)
+
+
 def echo_responder_words() -> list[int]:
-    """Read and echo one answer-side data unit through the ROM queues."""
+    """Read one answer data unit and write the initial LCP peer response."""
     words = [
         *load_address(8, 0xA030_0800),
         op(0x23, rs=8, rt=23, immediate=0),
@@ -112,8 +176,15 @@ def echo_responder_words() -> list[int]:
     read_failed = len(words)
     words += [0, 0]
     words += [
-        move(4, 2),
-        *load_address(5, 0xA000_0000 + ECHO_BUFFER),
+        *load_address(8, 0xA000_0000 + ECHO_READ_TOTAL),
+        op(0x2B, rs=8, rt=2, immediate=0),
+        *load_address(8, 0xA000_0000 + ECHO_RESPONSE_LENGTH),
+        op(0x23, rs=8, rt=4, immediate=0),
+    ]
+    no_response = len(words)
+    words += [0, 0]
+    words += [
+        *load_address(5, 0xA000_0000 + ECHO_RESPONSE),
         *call(0x13E4_2C80),
         *load_address(8, 0xA000_0000 + ECHO_TOTAL),
         op(0x23, rs=8, rt=9, immediate=0),
@@ -131,6 +202,9 @@ def echo_responder_words() -> list[int]:
     words[empty] = op(0x06, rs=2, immediate=done - (empty + 1))
     words[read_failed] = op(
         0x06, rs=2, immediate=done - (read_failed + 1)
+    )
+    words[no_response] = op(
+        0x06, rs=4, immediate=done - (no_response + 1)
     )
     return words
 
@@ -159,8 +233,10 @@ local touch_button = ports[":TOUCH_BUTTON"]:field(0x01)
 local power_button = ports[":POWER_BUTTON"]:field(0x01)
 local screen = machine.screens[":screen"]
 local frames = 0
-local result_written = false
+local result_written, call_triggered, call_ready_frame = false, false, nil
 local COUNTERS = 0x{COUNTERS:08x}
+local CALL_READY_COUNTER = 0x{CALL_READY_COUNTER:08x}
+local CALL_SETTLE_FRAMES = {CALL_SETTLE_FRAMES}
 local V32_POINTER = 0x{V32_POINTER:08x}
 local STATUS_EVENT = 0x{STATUS_EVENT:08x}
 local INIT_ARGS = 0x{INIT_ARGS:08x}
@@ -251,11 +327,6 @@ emu.register_frame_done(function()
   elseif frames == 4700 then press(450, 250)
   elseif frames == 4720 then release()
 
-  elseif frames == 5100 then
-    screen:snapshot("product-dialing.png")
-    local trigger_file = assert(io.open(call_trigger_path, "w"))
-    trigger_file:write("dialed\\n")
-    trigger_file:close()
   elseif frames == {result_frame} then
     local v32 = program:read_u32(V32_POINTER)
     local detector, rate0, rate1, rate2, rate3 = 0, 0, 0, 0, 0
@@ -299,6 +370,18 @@ emu.register_frame_done(function()
     result_file:close()
     result_written = true
   end
+  if call_ready_frame == nil
+      and program:read_u32(CALL_READY_COUNTER) > 0 then
+    call_ready_frame = frames
+  end
+  if not call_triggered and call_ready_frame ~= nil
+      and frames >= call_ready_frame + CALL_SETTLE_FRAMES then
+    screen:snapshot("product-dialing.png")
+    local trigger_file = assert(io.open(call_trigger_path, "w"))
+    trigger_file:write("dialed\\n")
+    trigger_file:close()
+    call_triggered = true
+  end
   if result_written then
     local peer_result = io.open(peer_result_path, "r")
     if peer_result ~= nil then
@@ -318,12 +401,25 @@ def answer_automation_script(
     script = direct_answer_script(
         "answer", start_frame=999999, result_offset=result_offset
     )
+    responses = (initial_lcp_response(), initial_ipcp_response())
     echo_words = echo_responder_words()
     echo_loop = 0xA000_0000 + ECHO_STUB + (len(echo_words) - 2) * 4
     echo_writes = "\n".join(
         f"  program:write_u32(ECHO_STUB + {index * 4}, 0x{word:08x})"
         for index, word in enumerate(echo_words)
     )
+    response_writes = "\n".join(
+        (
+            f"  if echo_round == {round_index} then\n"
+            + "\n".join(
+                f"    program:write_u8(ECHO_RESPONSE + {index}, 0x{byte:02x})"
+                for index, byte in enumerate(response)
+            )
+            + "\n  end"
+        )
+        for round_index, response in enumerate(responses, start=1)
+    )
+    response_lengths = ", ".join(str(len(response)) for response in responses)
     trigger = _lua_path(call_trigger_path)
     result_path = _lua_path(call_trigger_path.parent / "answer.result-ready")
     peer_result_path = _lua_path(call_trigger_path.parent / "product.result-ready")
@@ -342,17 +438,27 @@ def answer_automation_script(
     )
     script = script.replace(
         "local function inject()\n",
-        f"local echo_started, echo_restored = false, false\n"
+        f"local echo_active, echo_round, echo_deliver_seen = false, 0, 0\n"
         f"local echo_saved_state = nil\n"
         f"local ECHO_STUB = 0x{ECHO_STUB:08x}\n"
+        f"local ECHO_BUFFER = 0x{ECHO_BUFFER:08x}\n"
+        f"local ECHO_RESPONSE = 0x{ECHO_RESPONSE:08x}\n"
         f"local ECHO_TOTAL = 0x{ECHO_TOTAL:08x}\n"
         f"local ECHO_DONE = 0x{ECHO_DONE:08x}\n"
+        f"local ECHO_READ_TOTAL = 0x{ECHO_READ_TOTAL:08x}\n"
+        f"local ECHO_RESPONSE_LENGTH = 0x{ECHO_RESPONSE_LENGTH:08x}\n"
         f"local ECHO_LOOP = 0x{echo_loop:08x}\n"
         f"local ANSWER_DELIVER_COUNTER = 0x{ANSWER_DELIVER_COUNTER:08x}\n\n"
+        f"local echo_response_lengths = {{ {response_lengths} }}\n\n"
         f"local function start_echo()\n"
+        f"  echo_round = echo_round + 1\n"
         f"{echo_writes}\n"
-        f"  program:write_u32(ECHO_TOTAL, 0)\n"
+        f"{response_writes}\n"
+        f"  if echo_round == 1 then program:write_u32(ECHO_TOTAL, 0) end\n"
         f"  program:write_u32(ECHO_DONE, 0)\n"
+        f"  program:write_u32(ECHO_READ_TOTAL, 0)\n"
+        f"  program:write_u32(ECHO_RESPONSE_LENGTH,\n"
+        f"    echo_response_lengths[echo_round] or 0)\n"
         f'  echo_saved_state = {{ PC = cpu.state["PC"].value }}\n'
         f"  for _,name in ipairs(register_names) do\n"
         f"    echo_saved_state[name] = cpu.state[name].value\n"
@@ -360,8 +466,8 @@ def answer_automation_script(
         f'  machine.debugger:command("resume :maincpu")\n'
         f'  cpu.state["SR"].value = cpu.state["SR"].value & 0xfffffffc\n'
         f'  cpu.state["PC"].value = 0x{0xA000_0000 + ECHO_STUB:08x}\n'
-        f"  echo_started = true\n"
-        f'  print("PRODUCT_ANSWER_ECHO_START")\n'
+        f"  echo_active = true\n"
+        f'  print(string.format("PRODUCT_ANSWER_ECHO_START round=%d", echo_round))\n'
         f"end\n\n"
         "local function inject()\n",
         1,
@@ -397,11 +503,12 @@ def answer_automation_script(
         "      inject()\n"
         "    end\n"
         "  end\n"
-        "  if restored and not echo_started\n"
-        "      and program:read_u32(ANSWER_DELIVER_COUNTER) > 0 then\n"
+        "  if restored and not echo_active and echo_round < 3\n"
+        "      and program:read_u32(ANSWER_DELIVER_COUNTER)\n"
+        "        > echo_deliver_seen then\n"
         "    start_echo()\n"
         "  end\n"
-        "  if echo_started and not echo_restored then\n"
+        "  if echo_active then\n"
         '    local echo_pc = cpu.state["PC"].value\n'
         "    if program:read_u32(ECHO_DONE) == 1\n"
         "        or echo_pc == ECHO_LOOP or echo_pc == ECHO_LOOP + 4 then\n"
@@ -409,8 +516,10 @@ def answer_automation_script(
         "        cpu.state[name].value = echo_saved_state[name]\n"
         "      end\n"
         '      cpu.state["PC"].value = echo_saved_state.PC\n'
-        "      echo_restored = true\n"
-        '      print("PRODUCT_ANSWER_ECHO_RETURN")\n'
+        "      echo_active = false\n"
+        "      echo_deliver_seen = program:read_u32(ANSWER_DELIVER_COUNTER)\n"
+        '      print(string.format("PRODUCT_ANSWER_ECHO_RETURN round=%d",\n'
+        "        echo_round))\n"
         "    end\n"
         "  end\n"
         "  local pc = cpu.state",
@@ -427,6 +536,15 @@ def answer_automation_script(
         '    local result_file = assert(io.open(result_path, "w"))\n',
         '    print(string.format("PRODUCT_ANSWER_ECHO bytes=%d",\n'
         "      program:read_u32(ECHO_TOTAL)))\n"
+        '    print(string.format("PRODUCT_ANSWER_LCP_REPLY read=%d wrote=%d",\n'
+        "      program:read_u32(ECHO_READ_TOTAL),\n"
+        "      program:read_u32(ECHO_TOTAL)))\n"
+        "    local echo_hex = {}\n"
+        "    for offset = 0, program:read_u32(ECHO_READ_TOTAL) - 1 do\n"
+        "      table.insert(echo_hex,\n"
+        '        string.format("%02X", program:read_u8(ECHO_BUFFER + offset)))\n'
+        "    end\n"
+        '    print("PRODUCT_ANSWER_ECHO_DATA hex=" .. table.concat(echo_hex))\n'
         '    local result_file = assert(io.open(result_path, "w"))\n',
         1,
     )
@@ -534,6 +652,8 @@ def validate_results(
         ):
             if not product[name]:
                 failures.append(f"product missed {name}")
+        if product["ppp_read"] < 3 or product["lcp_frame"] < 4:
+            failures.append("product did not reach the IPCP address retry")
         if product["enables"] != 3 or product["size"] != 48:
             failures.append("product lost its 48-word RX/TX DMA ring")
     if answer is None:
@@ -562,9 +682,9 @@ def validate_results(
         if answer["detector"] != 1:
             failures.append("answer detector did not lock")
     if echoed is None:
-        failures.append("answer did not report its PPP echo")
-    elif echoed <= 0:
-        failures.append("answer did not echo any PPP bytes")
+        failures.append("answer did not report its PPP peer replies")
+    elif echoed < len(initial_lcp_response()) + len(initial_ipcp_response()):
+        failures.append("answer did not write both LCP and IPCP replies")
     if product is not None and answer is not None:
         product_rates = product["rates"]
         answer_rates = answer["rates"]
@@ -691,6 +811,14 @@ def run_regression(args: argparse.Namespace) -> int:
 
         def arm_call() -> None:
             while not call_trigger.is_file():
+                if (run_dir / "product.result-ready").is_file():
+                    trigger_errors.append(
+                        "product did not arm the call after ConnectToNumber"
+                    )
+                    for _, process in processes:
+                        if process.poll() is None:
+                            process.kill()
+                    return
                 if any(process.poll() is not None for _, process in processes):
                     trigger_errors.append("a peer exited before dialing completed")
                     return
@@ -721,6 +849,8 @@ def run_regression(args: argparse.Namespace) -> int:
                 return
             relay.release_call()
 
+        completion_forwarded: list[int] = []
+
         def release_completion_hold() -> None:
             markers = (
                 run_dir / "answer.result-ready",
@@ -730,6 +860,7 @@ def run_regression(args: argparse.Namespace) -> int:
                 if any(process.poll() is not None for _, process in processes):
                     return
                 threading.Event().wait(0.05)
+            completion_forwarded[:] = relay.call_forwarded
             relay.disable_process_control()
 
         trigger_thread = threading.Thread(target=arm_call, daemon=True)
@@ -756,7 +887,12 @@ def run_regression(args: argparse.Namespace) -> int:
     product = parse_product_result(outputs.get("product", b""))
     answer = parse_direct_result(outputs.get("answer", b""))
     echoed = parse_echo_result(outputs.get("answer", b""))
-    failures = validate_results(product, answer, relay.call_forwarded, echoed)
+    failures = validate_results(
+        product,
+        answer,
+        completion_forwarded or relay.call_forwarded,
+        echoed,
+    )
     failures.extend(trigger_errors)
     if relay.error is not None:
         failures.append(f"PCM relay failed: {relay.error}")
@@ -771,8 +907,9 @@ def run_regression(args: argparse.Namespace) -> int:
     print(
         "PASS: Web Browser selected its Internet Center PPP dial-up provider, "
         "dialed through the built-in software modem, completed paired "
-        "V.32/LAPM, and processed its first round-tripped LCP frame "
-        f"(echo={echoed}, rates={','.join(f'{rate:04x}' for rate in rates)}, "
+        "V.32/LAPM, negotiated LCP, and began IPCP address assignment "
+        f"(peer-bytes={echoed}, "
+        f"rates={','.join(f'{rate:04x}' for rate in rates)}, "
         f"PCM={tuple(relay.call_forwarded)})"
     )
     print(f"Artifacts: {run_dir}")
