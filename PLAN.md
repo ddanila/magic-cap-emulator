@@ -18,7 +18,7 @@ The full regression list and expected checkpoints are in
 | Battery & supply inputs | Both ADC channels answer within the ROM's own calibration thresholds, so the spurious backup-battery warning is gone; battery levels, AC adapter and battery cover are selectable, and removing the cover raises the IO interrupt the OS services | [`power-wake.md`](docs/power-wake.md#battery-levels) |
 | Power outputs, charging & policy | MFIO LCD power blanks scanout without destroying the framebuffer; active-high Magic Bus Vcc-off removes and rediscovers its peripheral; AC plus charger enable advances the main-battery ADC; the real Power Controls clamp 1–60 minutes and automatic AC idle shutoff follows its checkbox | [`power-wake.md`](docs/power-wake.md#outputs-the-os-writes) |
 | Sound I/O | ROM's startup tone (unbuffered hold register), buffered SIB sound-TX/RX DMA, host or deterministic microphone input, and Magic Cap's sound-stamp record/stop/play workflow | [`betty-registers.md`](docs/betty-registers.md) |
-| Built-in software modem | Continuous 48-word SIB telecom DMA drives the ROM's V.32 and fax paths through TX39 DSP extensions; the Betty DAA hookswitch/line input and Dino ring detector are modelled; a held ring opens Phone Status, whose real **receive fax** action reaches `AnswerModem`, fax HDLC and non-silent PCM; the visible outbound Fax workflow creates a recipient, renders a screen and dials `5551212`; a clocked two-DataRover exchange runs both product fax roles through retained In-box storage, stationery and a reopened rendered page; the deterministic exchange also supplies dial tone and decodes DTMF/pulse dialing; the visible Telephone output decodes as `580`; Web Browser selects an Internet Center provider mapped to `PPP dialup`, dials through the built-in modem and reaches paired V.32 data mode | [`builtin-modem.md`](docs/builtin-modem.md) |
+| Built-in software modem | Continuous 48-word SIB telecom DMA drives the ROM's V.32 and fax paths through TX39 DSP extensions; the Betty DAA hookswitch/line input and Dino ring detector are modelled; a held ring opens Phone Status, whose real **receive fax** action reaches `AnswerModem`, fax HDLC and non-silent PCM; the visible outbound Fax workflow creates a recipient, renders a screen and dials `5551212`; a clocked two-DataRover exchange runs both product fax roles through retained In-box storage, stationery and a reopened rendered page; the deterministic exchange also supplies dial tone and decodes DTMF/pulse dialing; the visible Telephone output decodes as `580`; Web Browser selects an Internet Center provider mapped to `PPP dialup`, dials through the built-in modem, completes V.32/LAPM, and processes an LCP frame echoed through the answer ROM | [`builtin-modem.md`](docs/builtin-modem.md) |
 | Magic Bus | Address assignment and reinitialization, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | TX39 extensions | `MADD`/`MADDU` plus three-operand `MULT`/`MULTU` implemented; all four verify `rd`, `HI`, and `LO`, covering 792 multiply/add and 89 destination-writing multiply uses in the SDK ELF | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core, completes TCP through rootless libslirp, renders deterministic local HTTP, carries Browser 3.5's native HTTPS Rule through a host TLS proxy, and can browse public HTTPS sites through a guarded loopback launcher | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
@@ -69,10 +69,15 @@ The full regression list and expected checkpoints are in
   Center provider's `home` location to `PPP dialup`, reopens Web Browser,
   selects that provider, dials `555-1212`, and pairs the product originator
   with the direct-answer ROM. Both sides enter V.32 data mode with matching
-  rate payloads and live 48-word DMA. The remaining line-side target is the
-  transition from that carrier state through
-  `DataModemReportModemSignal`/`SoftwareModemStatusHandlerCallback` into the
-  Internet Center's PPP session. This is separate from the working PC Card PPP
+  stable rate payloads and live 48-word DMA, switch their framers to HDLC,
+  exchange LAPM SABME/UA, and report LAPM connected. Internet Center creates
+  its dial-up link, starts `PPPServer`, observes the connection monitor, and
+  delivers its first PPP data unit to the answer-side ROM queue. A one-shot
+  answer stub consumes that unit through `SoftModemRead`, writes it back
+  through `SoftModemWrite`, restores the interrupted CPU state, and makes the
+  product process the returned LCP frame. The remaining line-side target is a
+  protocol-aware remote PPP application that completes LCP/IPCP and bridges
+  IP to a host network endpoint. This is separate from the working PC Card PPP
   path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 

@@ -49,9 +49,12 @@ data while the answerer visibly shows `Receiving page 1`. Its extended
 acceptance relaunches the retained receiver, finds the new fax in the In box,
 opens its one-page stationery, and renders `Fax page 1`.
 The same half-DMA process clock also lets the shipping generic V.32
-originating and answering roles negotiate matching rates and enter data mode;
-the remaining built-in-modem gap is handing that carrier to a real Internet
-Center session.
+originating and answering roles negotiate matching rates, enter HDLC mode and
+complete the LAPM SABME/UA handshake. The real Internet Center dial-up actor
+also receives that LAPM-connect status, sends its first PPP bytes through the
+ROM modem, and processes an LCP frame echoed through the answer ROM. The
+remaining built-in-modem gap is supplying a protocol-aware remote PPP peer and
+host network endpoint.
 The full status table and roadmap are in [`PLAN.md`](PLAN.md); the machine's
 hardware, history, and verification approach are in
 [`docs/background.md`](docs/background.md).

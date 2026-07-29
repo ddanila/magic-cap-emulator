@@ -19,10 +19,16 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tools.data_modem_pair_regression import (  # noqa: E402
+    COUNTERS as ANSWER_COUNTERS,
     HALF_DMA_BYTES,
     MIN_PCM_BYTES,
     SYMBOLS as MODEM_SYMBOLS,
     automation_script as direct_answer_script,
+    call,
+    load_address,
+    move,
+    op,
+    r,
     parse_result as parse_direct_result,
 )
 from tools.fax_pair_regression import CallPcmExchange  # noqa: E402
@@ -36,11 +42,37 @@ DEFAULT_ROMPATH = ASSETS_ROOT / "roms"
 DEFAULT_WORKDIR = ASSETS_ROOT / "runtime" / "product-data-modem-regression"
 COUNTERS = 0x0030_4000
 V32_POINTER = COUNTERS + 0x100
+STATUS_EVENT = COUNTERS + 0x200
+INIT_ARGS = COUNTERS + 0x300
+ECHO_STUB = 0x0030_6000
+ECHO_BUFFER = 0x0030_6800
+ECHO_TOTAL = 0x0030_7800
+ECHO_DONE = ECHO_TOTAL + 4
+ANSWER_DELIVER_COUNTER = ANSWER_COUNTERS + next(
+    index * 4
+    for index, (_, name) in enumerate(MODEM_SYMBOLS)
+    if name == "lapm_deliver_data"
+)
+ECHO_PATTERN = re.compile(rb"PRODUCT_ANSWER_ECHO bytes=(\d+)")
 
 PRODUCT_SYMBOLS = (
+    (0x13D4_DD08, "new_dialup_link"),
+    (0x13C4_E864, "ppp_start"),
+    (0x13C4_DA18, "ppp_write"),
+    (0x13C4_DF70, "ppp_read"),
+    (0x13C4_ECE4, "ppp_check"),
+    (0x13C4_FCDC, "lcp_frame"),
+    (0x13C4_FF9C, "chap_frame"),
+    (0x13C5_A628, "connect"),
     (0x13C5_A938, "connect_number"),
+    (0x13C5_C55C, "monitor_connection"),
+    (0x13C5_B214, "modem_write"),
+    (0x13C5_B2A4, "modem_read"),
+    (0x13C5_B344, "modem_write_frame"),
+    (0x13C5_B3D4, "modem_read_frame"),
     (0x13C5_9A08, "open"),
     (0x13C5_BF80, "start"),
+    (0x13C5_AC84, "set_status_handler"),
     *MODEM_SYMBOLS[1:],
 )
 PRODUCT_PATTERN = re.compile(
@@ -48,7 +80,12 @@ PRODUCT_PATTERN = re.compile(
     + rb" ".join(name.encode() + rb"=(\d+)" for _, name in PRODUCT_SYMBOLS)
     + rb" detector=(\d+) rates="
     + rb"([0-9A-F]{4}),([0-9A-F]{4}),([0-9A-F]{4}),([0-9A-F]{4}) "
-    + rb"enables=(\d+) size=(\d+)"
+    + rb"enables=(\d+) size=(\d+) initargs="
+    + rb"([0-9A-F]{8}),([0-9A-F]{8}),([0-9A-F]{8}),([0-9A-F]{8}),"
+    + rb"([0-9A-F]{8}),([0-9A-F]{8}),([0-9A-F]{8}) cfg="
+    + rb"([0-9A-F]{8}),([0-9A-F]{8}),([0-9A-F]{8}),([0-9A-F]{8}) status="
+    + rb"([0-9A-F]{8}),([0-9A-F]{8}),([0-9A-F]{8}),([0-9A-F]{8}) "
+    + rb"status_caller=([0-9A-F]{8}) status_target=([0-9A-F]{8})"
 )
 
 
@@ -56,9 +93,51 @@ def _lua_path(path: Path) -> str:
     return str(path).replace("\\", "\\\\").replace('"', '\\"')
 
 
+def echo_responder_words() -> list[int]:
+    """Read and echo one answer-side data unit through the ROM queues."""
+    words = [
+        *load_address(8, 0xA030_0800),
+        op(0x23, rs=8, rt=23, immediate=0),
+        op(0x23, rs=8, rt=28, immediate=4),
+    ]
+    words += call(0x13E4_2DDC)
+    empty = len(words)
+    words += [0, 0]
+    words += [
+        move(16, 2),
+        move(4, 16),
+        *load_address(5, 0xA000_0000 + ECHO_BUFFER),
+        *call(0x13E4_2CC8),
+    ]
+    read_failed = len(words)
+    words += [0, 0]
+    words += [
+        move(4, 2),
+        *load_address(5, 0xA000_0000 + ECHO_BUFFER),
+        *call(0x13E4_2C80),
+        *load_address(8, 0xA000_0000 + ECHO_TOTAL),
+        op(0x23, rs=8, rt=9, immediate=0),
+        r(rs=9, rt=2, rd=9, function=0x21),
+        op(0x2B, rs=8, rt=9, immediate=0),
+    ]
+    done = len(words)
+    words += [
+        *load_address(8, 0xA000_0000 + ECHO_DONE),
+        op(0x0D, rt=9, immediate=1),
+        op(0x2B, rs=8, rt=9, immediate=0),
+        0x1000_FFFF,
+        0,
+    ]
+    words[empty] = op(0x06, rs=2, immediate=done - (empty + 1))
+    words[read_failed] = op(
+        0x06, rs=2, immediate=done - (read_failed + 1)
+    )
+    return words
+
+
 def product_automation_script(
     call_trigger_path: Path = Path("call.trigger"),
-    result_frame: int = 6800,
+    result_frame: int = 7600,
 ) -> str:
     """Drive the retained Internet Center provider through Web Browser reload."""
     addresses = ", ".join(f"0x{address:08x}" for address, _ in PRODUCT_SYMBOLS)
@@ -83,6 +162,8 @@ local frames = 0
 local result_written = false
 local COUNTERS = 0x{COUNTERS:08x}
 local V32_POINTER = 0x{V32_POINTER:08x}
+local STATUS_EVENT = 0x{STATUS_EVENT:08x}
+local INIT_ARGS = 0x{INIT_ARGS:08x}
 local addresses = {{ {addresses} }}
 local call_trigger_path = "{trigger}"
 local result_path = "{result_path}"
@@ -105,12 +186,35 @@ for index,address in ipairs(addresses) do
     "do d@0x%08x=d@0x%08x+1; g", counter, counter)
   if address == 0x13e42f20 then
     action = string.format(
-      "do d@0x%08x=d@0x%08x+1; d@0x%08x=R23; g",
-      counter, counter, V32_POINTER)
+      "do d@0x%08x=d@0x%08x+1; do d@0x%08x=R23; "
+      .. "do d@0x%08x=R4; do d@0x%08x=R5; "
+      .. "do d@0x%08x=R6; do d@0x%08x=R7; "
+      .. "do d@0x%08x=d@(R29+16); do d@0x%08x=d@(R29+20); "
+      .. "do d@0x%08x=d@(R29+24); "
+      .. "do d@0x%08x=d@R6; do d@0x%08x=d@(R6+4); "
+      .. "do d@0x%08x=d@(R6+8); do d@0x%08x=d@(R6+12); g",
+      counter, counter, V32_POINTER,
+      INIT_ARGS, INIT_ARGS + 4, INIT_ARGS + 8, INIT_ARGS + 12,
+      INIT_ARGS + 16, INIT_ARGS + 20, INIT_ARGS + 24,
+      INIT_ARGS + 28, INIT_ARGS + 32, INIT_ARGS + 36, INIT_ARGS + 40)
+  elseif address == 0x13e50e80 then
+    action = string.format(
+      "do d@0x%08x=d@0x%08x+1; "
+      .. "do d@0x%08x=d@0x%08x*256+(R4&255); "
+      .. "do d@0x%08x=R4; do d@0x%08x=R31; g",
+      counter, counter,
+      STATUS_EVENT, STATUS_EVENT,
+      STATUS_EVENT + 4, STATUS_EVENT + 8)
   end
   cpu.debug:bpset(address, "", action)
 end
+cpu.debug:bpset(
+  0x13e50e94, "",
+  string.format("do d@0x%08x=R25; g", STATUS_EVENT + 12))
 program:write_u32(V32_POINTER, 0)
+for offset = 0, 20, 4 do
+  program:write_u32(STATUS_EVENT + offset, 0)
+end
 cpu.debug:go()
 
 emu.register_frame_done(function()
@@ -167,8 +271,29 @@ emu.register_frame_done(function()
       ((program:read_u32(0x10c00060) & 0x3ffc) >> 2) + 1
     print(string.format(
       "PRODUCT_DATA_MODEM_RESULT {fields} "
-      .. "detector=%d rates=%04X,%04X,%04X,%04X enables=%d size=%d",
-      {reads}, detector, rate0, rate1, rate2, rate3, enables, size))
+      .. "detector=%d rates=%04X,%04X,%04X,%04X enables=%d size=%d "
+      .. "initargs=%08X,%08X,%08X,%08X,%08X,%08X,%08X "
+      .. "cfg=%08X,%08X,%08X,%08X "
+      .. "status=%08X,%08X,%08X,%08X "
+      .. "status_caller=%08X status_target=%08X",
+      {reads}, detector, rate0, rate1, rate2, rate3, enables, size,
+      program:read_u32(INIT_ARGS),
+      program:read_u32(INIT_ARGS + 4),
+      program:read_u32(INIT_ARGS + 8),
+      program:read_u32(INIT_ARGS + 12),
+      program:read_u32(INIT_ARGS + 16),
+      program:read_u32(INIT_ARGS + 20),
+      program:read_u32(INIT_ARGS + 24),
+      program:read_u32(INIT_ARGS + 28),
+      program:read_u32(INIT_ARGS + 32),
+      program:read_u32(INIT_ARGS + 36),
+      program:read_u32(INIT_ARGS + 40),
+      program:read_u32(STATUS_EVENT),
+      program:read_u32(STATUS_EVENT + 4),
+      0,
+      0,
+      program:read_u32(STATUS_EVENT + 8),
+      program:read_u32(STATUS_EVENT + 12)))
     local result_file = assert(io.open(result_path, "w"))
     result_file:write("ready\\n")
     result_file:close()
@@ -187,11 +312,17 @@ end)
 
 def answer_automation_script(
     call_trigger_path: Path = Path("call.trigger"),
-    result_offset: int = 1600,
+    result_offset: int = 2400,
 ) -> str:
     """Keep the retained answer peer awake while running the direct-answer ROM."""
     script = direct_answer_script(
         "answer", start_frame=999999, result_offset=result_offset
+    )
+    echo_words = echo_responder_words()
+    echo_loop = 0xA000_0000 + ECHO_STUB + (len(echo_words) - 2) * 4
+    echo_writes = "\n".join(
+        f"  program:write_u32(ECHO_STUB + {index * 4}, 0x{word:08x})"
+        for index, word in enumerate(echo_words)
     )
     trigger = _lua_path(call_trigger_path)
     result_path = _lua_path(call_trigger_path.parent / "answer.result-ready")
@@ -207,6 +338,32 @@ def answer_automation_script(
         'local touch_x = ports[":TOUCH_X"]:field(0xffff)\n'
         'local touch_y = ports[":TOUCH_Y"]:field(0xffff)\n'
         'local touch_button = ports[":TOUCH_BUTTON"]:field(0x01)\n',
+        1,
+    )
+    script = script.replace(
+        "local function inject()\n",
+        f"local echo_started, echo_restored = false, false\n"
+        f"local echo_saved_state = nil\n"
+        f"local ECHO_STUB = 0x{ECHO_STUB:08x}\n"
+        f"local ECHO_TOTAL = 0x{ECHO_TOTAL:08x}\n"
+        f"local ECHO_DONE = 0x{ECHO_DONE:08x}\n"
+        f"local ECHO_LOOP = 0x{echo_loop:08x}\n"
+        f"local ANSWER_DELIVER_COUNTER = 0x{ANSWER_DELIVER_COUNTER:08x}\n\n"
+        f"local function start_echo()\n"
+        f"{echo_writes}\n"
+        f"  program:write_u32(ECHO_TOTAL, 0)\n"
+        f"  program:write_u32(ECHO_DONE, 0)\n"
+        f'  echo_saved_state = {{ PC = cpu.state["PC"].value }}\n'
+        f"  for _,name in ipairs(register_names) do\n"
+        f"    echo_saved_state[name] = cpu.state[name].value\n"
+        f"  end\n"
+        f'  machine.debugger:command("resume :maincpu")\n'
+        f'  cpu.state["SR"].value = cpu.state["SR"].value & 0xfffffffc\n'
+        f'  cpu.state["PC"].value = 0x{0xA000_0000 + ECHO_STUB:08x}\n'
+        f"  echo_started = true\n"
+        f'  print("PRODUCT_ANSWER_ECHO_START")\n'
+        f"end\n\n"
+        "local function inject()\n",
         1,
     )
     script = script.replace(
@@ -240,6 +397,22 @@ def answer_automation_script(
         "      inject()\n"
         "    end\n"
         "  end\n"
+        "  if restored and not echo_started\n"
+        "      and program:read_u32(ANSWER_DELIVER_COUNTER) > 0 then\n"
+        "    start_echo()\n"
+        "  end\n"
+        "  if echo_started and not echo_restored then\n"
+        '    local echo_pc = cpu.state["PC"].value\n'
+        "    if program:read_u32(ECHO_DONE) == 1\n"
+        "        or echo_pc == ECHO_LOOP or echo_pc == ECHO_LOOP + 4 then\n"
+        "      for _,name in ipairs(register_names) do\n"
+        "        cpu.state[name].value = echo_saved_state[name]\n"
+        "      end\n"
+        '      cpu.state["PC"].value = echo_saved_state.PC\n'
+        "      echo_restored = true\n"
+        '      print("PRODUCT_ANSWER_ECHO_RETURN")\n'
+        "    end\n"
+        "  end\n"
         "  local pc = cpu.state",
         1,
     )
@@ -248,6 +421,13 @@ def answer_automation_script(
         '    local result_file = assert(io.open(result_path, "w"))\n'
         '    result_file:write("ready\\\\n")\n'
         "    result_file:close()\n",
+        1,
+    )
+    script = script.replace(
+        '    local result_file = assert(io.open(result_path, "w"))\n',
+        '    print(string.format("PRODUCT_ANSWER_ECHO bytes=%d",\n'
+        "      program:read_u32(ECHO_TOTAL)))\n"
+        '    local result_file = assert(io.open(result_path, "w"))\n',
         1,
     )
     ending = "end)\n"
@@ -295,28 +475,61 @@ def parse_product_result(output: bytes) -> dict[str, int | tuple[int, ...]] | No
     )
     result["enables"] = int(values[offset + 5])
     result["size"] = int(values[offset + 6])
+    result["initargs"] = tuple(
+        int(value, 16) for value in values[offset + 7 : offset + 14]
+    )
+    result["config"] = tuple(
+        int(value, 16) for value in values[offset + 14 : offset + 18]
+    )
+    result["status"] = tuple(
+        int(value, 16) for value in values[offset + 18 : offset + 22]
+    )
+    result["status_caller"] = int(values[offset + 22], 16)
+    result["status_target"] = int(values[offset + 23], 16)
     return result
+
+
+def parse_echo_result(output: bytes) -> int | None:
+    """Return the number of answer-side bytes round-tripped through the ROM."""
+    match = ECHO_PATTERN.search(output)
+    return int(match.group(1)) if match is not None else None
 
 
 def validate_results(
     product: dict[str, int | tuple[int, ...]] | None,
     answer: dict[str, int | str] | None,
     forwarded: list[int],
+    echoed: int | None,
 ) -> list[str]:
     failures: list[str] = []
     if product is None:
         failures.append("product did not report a result")
     else:
         for name in (
+            "new_dialup_link",
+            "ppp_start",
+            "ppp_write",
+            "ppp_read",
+            "lcp_frame",
             "connect_number",
+            "monitor_connection",
             "open",
             "start",
+            "modem_read",
             "init",
             "receive",
             "transmit",
             "install",
             "pump",
             "report_status",
+            "framer_hdlc_init",
+            "lapm_init",
+            "lapm_start",
+            "lapm_main",
+            "lapm_report_connect",
+            "lapm_send_sabme",
+            "lapm_process_ua",
+            "lapm_deliver_data",
             "data_mode",
         ):
             if not product[name]:
@@ -334,6 +547,13 @@ def validate_results(
             "install",
             "pump",
             "report_status",
+            "framer_hdlc_init",
+            "lapm_init",
+            "lapm_start",
+            "lapm_main",
+            "lapm_report_connect",
+            "lapm_process_sabme",
+            "lapm_deliver_data",
             "data_mode",
             "returned",
         ):
@@ -341,13 +561,17 @@ def validate_results(
                 failures.append(f"answer missed {name}")
         if answer["detector"] != 1:
             failures.append("answer detector did not lock")
+    if echoed is None:
+        failures.append("answer did not report its PPP echo")
+    elif echoed <= 0:
+        failures.append("answer did not echo any PPP bytes")
     if product is not None and answer is not None:
         product_rates = product["rates"]
         answer_rates = answer["rates"]
         assert isinstance(product_rates, tuple)
         assert isinstance(answer_rates, tuple)
-        if tuple(rate & 0x0FFF for rate in product_rates) != tuple(
-            rate & 0x0FFF for rate in answer_rates
+        if tuple(rate & 0x0FFF for rate in product_rates[1:]) != tuple(
+            rate & 0x0FFF for rate in answer_rates[1:]
         ):
             failures.append("the peers negotiated different rate words")
     if min(forwarded, default=0) < MIN_PCM_BYTES:
@@ -531,7 +755,8 @@ def run_regression(args: argparse.Namespace) -> int:
 
     product = parse_product_result(outputs.get("product", b""))
     answer = parse_direct_result(outputs.get("answer", b""))
-    failures = validate_results(product, answer, relay.call_forwarded)
+    echoed = parse_echo_result(outputs.get("answer", b""))
+    failures = validate_results(product, answer, relay.call_forwarded, echoed)
     failures.extend(trigger_errors)
     if relay.error is not None:
         failures.append(f"PCM relay failed: {relay.error}")
@@ -545,8 +770,9 @@ def run_regression(args: argparse.Namespace) -> int:
     assert isinstance(rates, tuple)
     print(
         "PASS: Web Browser selected its Internet Center PPP dial-up provider, "
-        "dialed through the built-in software modem, and entered paired V.32 "
-        f"data mode (rates={','.join(f'{rate:04x}' for rate in rates)}, "
+        "dialed through the built-in software modem, completed paired "
+        "V.32/LAPM, and processed its first round-tripped LCP frame "
+        f"(echo={echoed}, rates={','.join(f'{rate:04x}' for rate in rates)}, "
         f"PCM={tuple(relay.call_forwarded)})"
     )
     print(f"Artifacts: {run_dir}")

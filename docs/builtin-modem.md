@@ -350,10 +350,11 @@ python3 tools/data_modem_pair_regression.py \
 The harness copies the source twice, starts the answering peer first so TCP
 connection order identifies the roles, then holds both processes until the
 external PCM endpoints exist. It alternates execution at the 96-byte
-half-DMA boundary and requires matching rate words, detector lock,
-`V32DataPumpReportStatus`, `V32DataModeRxState`, both directions of the
-48-word DMA ring, at least 100 KiB per stream and no more than one half-ring of
-final skew. Generated Lua, copied NVRAM and logs remain under
+half-DMA boundary and requires matching stable rate payloads, detector lock,
+`V32DataPumpReportStatus`, `V32DataModeRxState`, HDLC-framer initialization,
+LAPM SABME/UA and connect reporting, both directions of the 48-word DMA ring,
+at least 100 KiB per stream and no more than one half-ring of final skew.
+Generated Lua, copied NVRAM and logs remain under
 `$MAGIC_CAP_ASSETS/runtime/data-modem-pair-regression/`.
 
 ## Product Internet Center carrier
@@ -389,19 +390,31 @@ the first answer carrier block, and releases both processes on a shared
 96-byte clock. Result markers keep both peers alive until their counters have
 been sampled.
 
-A passing run requires the product's real connect/open/start path, both ROMs'
-receive/transmit/pump/status paths, V.32 data-mode entry, matching low 12-bit
-rate payloads, live 48-word RX/TX DMA, at least 100 KiB of call PCM per side
-and no more than one half-ring of final skew. The product's detector byte may
-clear after the sticky data-mode transition; the answer detector and both
-data-mode counters preserve the carrier evidence.
+A passing run requires the product's real dial-up-link, PPP start/write/read,
+LCP-frame, connect/open/start and connection-monitor paths; both ROMs'
+receive/transmit/pump/status paths; V.32 data-mode entry; matching low 12-bit
+payloads in the three stable rate samples; HDLC-framer initialization; LAPM
+SABME/UA and connect reporting; answer-side delivery of the product data
+unit; a nonempty ROM-queue echo and product-side delivery of the reply; live
+48-word RX/TX DMA; at least 100 KiB of call PCM per side; and no more than one
+half-ring of final skew. The first sampled rate word carries transient state
+and the product detector byte may clear after the sticky data-mode transition,
+so neither is used to reject an otherwise stable connection.
 
-This closes product selection, dialing and carrier acquisition. The next
-boundary is narrower: the observed product run does not yet call
-`DataModemReportModemSignal` or
-`SoftwareModemStatusHandlerCallback`, so Internet Center has not started PPP
-over the carrier. That application-status handoff remains separate from the
-already working PC Card PPP path.
+This closes product selection, dialing, carrier acquisition and the local
+application-status handoff. The trace reaches `DialupPPPMeans_NewDataLink`,
+`PPPServer_StartDataLink`, `SoftwareModem_ConnectToNumber`,
+`MonitorDataConnection`, `LapmReportConnect`, and `PPPServer_WritePDU`.
+The product sends bytes through `SoftwareModem_Write` and LAPM, and the answer
+ROM calls `LapmDeliverData`. A one-shot answer stub reads that first data unit
+with the ROM's `SoftModemRead`, writes the same 37 bytes through
+`SoftModemWrite`, and restores the interrupted CPU state so Magic Cap's LAPM
+task transmits it. The product then calls `SoftwareModem_Read`,
+`PPPServer_ReadPDU` and `LCP_ProcessFrame`. This proves bidirectional
+application data across the complete ROM stack; it does not constitute a PPP
+peer, because an echo cannot negotiate LCP/IPCP or bridge IP to the host. That
+protocol-aware remote service remains separate from the already working PC
+Card PPP path.
 
 The live Dino SIB control value is `0x00a79923`: telecom 16-bit mode is set
 and divisor `0x27` selects 7,200 samples/s. Telecom size `0x00bc` describes
@@ -421,11 +434,10 @@ scheduler skew, silent DSP output, answer-role selection, simple polarity, a
 broad direct-to-attenuated gain range, V.32 carrier, incoming call-object
 creation, and the real fax-answer and fax-origin startups have all been
 addressed or excluded. The direct carrier harness does not create an Internet
-Center connection object. The product carrier regression now does create that
-object and reaches V.32 data mode, but it still does not call
-`DataModemReportModemSignal` or
-`SoftwareModemStatusHandlerCallback`. Diagnosing that final status transition
-remains distinct from proving the paired ROM data pumps. A
+Center connection object. The product carrier regression now creates that
+object, completes V.32 and LAPM, starts the PPP actor and delivers its first
+data unit to the answer ROM. A remote PPP consumer and network bridge remain
+distinct from proving the paired ROM data pumps. A
 captured answer stream begins with the expected strong 2,100 Hz CED and then
 V.21-like FSK; replaying it through a single socket peer makes the origin run
 fax RX/TX, exchange HDLC, and call `SendFaxImageData` 71 times. This proves
@@ -534,9 +546,10 @@ The product-level target is more specific. *Using Magic Cap*, pp. 135–163 and
 216, documents the built-in fax modem on a telephone line, including selectable
 tone/pulse dialing and fax workflows. The real Telephone now reaches its call
 screen, generates its tone-dialed number and crosses the line hardware.
-The product regression now drives the Internet Center through carrier
-behavior and a remote peer, and the fax pair covers the complete send/receive
-workflow. Closing the remaining gap means delivering the successful carrier
-status to Internet Center's PPP actor—not merely making the lower-level DSP
-or digital-DAA probes count more functions. See
+The product regression now drives the Internet Center through carrier, LAPM
+and a bidirectional PPP/LCP data unit, and the fax pair covers the complete
+send/receive workflow. Closing the remaining gap means replacing the
+diagnostic echo with a protocol-aware PPP peer and host-network bridge—not
+merely making the lower-level DSP or digital-DAA probes count more functions.
+See
 [`user-guide.md`](user-guide.md).

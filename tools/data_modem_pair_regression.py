@@ -8,7 +8,6 @@ import os
 import re
 import shutil
 import signal
-import struct
 import subprocess
 import sys
 import threading
@@ -19,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools.telephone_pcm_relay import PcmRelay
+from tools.telephone_pcm_relay import PcmRelay  # noqa: E402
 
 
 ASSETS_ROOT = Path(
@@ -35,6 +34,7 @@ DONE = STATE + 0x100
 OPTIONS = STATE + 0x200
 COMMAND = STATE + 0x400
 COUNTERS = 0x0030_3000
+INIT_ARGS = COUNTERS + 0x100
 HALF_DMA_BYTES = 96
 MIN_PCM_BYTES = 100_000
 
@@ -46,7 +46,20 @@ SYMBOLS = (
     (0x13E4_31DC, "install"),
     (0x13E5_0B10, "pump"),
     (0x13E5_0E80, "report_status"),
+    (0x13E4_3478, "report_modulation"),
     (0x13E4_35E0, "report_signal"),
+    (0x13E4_3614, "report_clear_down"),
+    (0x13E5_8670, "framer_async_init"),
+    (0x13E5_8B00, "framer_hdlc_init"),
+    (0x13E5_94A0, "lapm_init"),
+    (0x13E5_97F8, "lapm_start"),
+    (0x13E5_9870, "lapm_main"),
+    (0x13E5_A0BC, "lapm_report_connect"),
+    (0x13E5_BBF0, "lapm_send_sabme"),
+    (0x13E5_BC18, "lapm_process_sabme"),
+    (0x13E5_C378, "lapm_process_ua"),
+    (0x13E5_B4B8, "lapm_deliver_data"),
+    (0x13E5_D620, "lapm_tx_data"),
     (0x13C5_AC4C, "status_callback"),
     (0x13E4_B770, "data_mode"),
 )
@@ -55,7 +68,10 @@ RESULT_PATTERN = re.compile(
     + rb" ".join(name.encode() + rb"=(\d+)" for _, name in SYMBOLS)
     + rb" returned=(\d) detector=(\d+) rates="
     + rb"([0-9A-F]{4}),([0-9A-F]{4}),([0-9A-F]{4}),([0-9A-F]{4}) "
-    + rb"enables=(\d+) size=(\d+)"
+    + rb"enables=(\d+) size=(\d+) initargs="
+    + rb"([0-9A-F]{8}),([0-9A-F]{8}),([0-9A-F]{8}),([0-9A-F]{8}),"
+    + rb"([0-9A-F]{8}),([0-9A-F]{8}),([0-9A-F]{8}) cfg="
+    + rb"([0-9A-F]{8}),([0-9A-F]{8}),([0-9A-F]{8}),([0-9A-F]{8})"
 )
 
 
@@ -241,6 +257,7 @@ local restored, result_printed = false, false
 local saved_state = nil
 local STUB, DONE = 0x{STUB:08x}, 0x{DONE:08x}
 local OPTIONS, COUNTERS = 0x{OPTIONS:08x}, 0x{COUNTERS:08x}
+local INIT_ARGS = 0x{INIT_ARGS:08x}
 local LOOP = 0x{loop:08x}
 local addresses = {{ {addresses} }}
 local register_names = {{ "HI", "LO", "SR" }}
@@ -253,8 +270,18 @@ for index,address in ipairs(addresses) do
     "do d@0x%08x=d@0x%08x+1; g", counter, counter)
   if address == 0x13e42f20 then
     action = string.format(
-      "do d@0x%08x=d@0x%08x+1; d@0x00300800=R23; d@0x00300804=R28; g",
-      counter, counter)
+      "do d@0x%08x=d@0x%08x+1; "
+      .. "do d@0x00300800=R23; do d@0x00300804=R28; "
+      .. "do d@0x%08x=R4; do d@0x%08x=R5; "
+      .. "do d@0x%08x=R6; do d@0x%08x=R7; "
+      .. "do d@0x%08x=d@(R29+16); do d@0x%08x=d@(R29+20); "
+      .. "do d@0x%08x=d@(R29+24); "
+      .. "do d@0x%08x=d@R6; do d@0x%08x=d@(R6+4); "
+      .. "do d@0x%08x=d@(R6+8); do d@0x%08x=d@(R6+12); g",
+      counter, counter,
+      INIT_ARGS, INIT_ARGS + 4, INIT_ARGS + 8, INIT_ARGS + 12,
+      INIT_ARGS + 16, INIT_ARGS + 20, INIT_ARGS + 24,
+      INIT_ARGS + 28, INIT_ARGS + 32, INIT_ARGS + 36, INIT_ARGS + 40)
   end
   cpu.debug:bpset(
     address, string.format("d@0x%08x==0", counter), action)
@@ -311,7 +338,21 @@ emu.register_frame_done(function()
       program:read_u16(v32 - 0x1fcd),
       program:read_u16(v32 - 0x1fcb),
       program:read_u16(v32 - 0x1fc9),
-      enables, size))
+      enables, size)
+      .. string.format(
+        " initargs=%08X,%08X,%08X,%08X,%08X,%08X,%08X "
+        .. "cfg=%08X,%08X,%08X,%08X",
+        program:read_u32(INIT_ARGS),
+        program:read_u32(INIT_ARGS + 4),
+        program:read_u32(INIT_ARGS + 8),
+        program:read_u32(INIT_ARGS + 12),
+        program:read_u32(INIT_ARGS + 16),
+        program:read_u32(INIT_ARGS + 20),
+        program:read_u32(INIT_ARGS + 24),
+        program:read_u32(INIT_ARGS + 28),
+        program:read_u32(INIT_ARGS + 32),
+        program:read_u32(INIT_ARGS + 36),
+        program:read_u32(INIT_ARGS + 40)))
     machine:exit()
   end
 end)
@@ -343,6 +384,12 @@ def parse_result(output: bytes) -> dict[str, int | str] | None:
     )
     result["enables"] = int(groups[offset + 6])
     result["size"] = int(groups[offset + 7])
+    result["initargs"] = tuple(
+        int(value, 16) for value in groups[offset + 8 : offset + 15]
+    )
+    result["config"] = tuple(
+        int(value, 16) for value in groups[offset + 15 : offset + 19]
+    )
     return result
 
 
@@ -364,6 +411,11 @@ def validate_results(
             "install",
             "pump",
             "report_status",
+            "framer_hdlc_init",
+            "lapm_init",
+            "lapm_start",
+            "lapm_main",
+            "lapm_report_connect",
             "data_mode",
             "returned",
         ):
@@ -373,8 +425,21 @@ def validate_results(
             failures.append(f"{role} detector did not lock")
         if result["enables"] != 3 or result["size"] != 48:
             failures.append(f"{role} lost its 48-word RX/TX DMA ring")
-    if len(results) == 2 and results["answer"]["rates"] != results["origin"]["rates"]:
-        failures.append("the peers negotiated different rate words")
+    if "origin" in results:
+        for name in ("lapm_send_sabme", "lapm_process_ua"):
+            if not results["origin"][name]:
+                failures.append(f"origin missed {name}")
+    if "answer" in results and not results["answer"]["lapm_process_sabme"]:
+        failures.append("answer missed lapm_process_sabme")
+    if len(results) == 2:
+        answer_rates = results["answer"]["rates"]
+        origin_rates = results["origin"]["rates"]
+        assert isinstance(answer_rates, tuple)
+        assert isinstance(origin_rates, tuple)
+        if tuple(rate & 0x0FFF for rate in answer_rates[1:]) != tuple(
+            rate & 0x0FFF for rate in origin_rates[1:]
+        ):
+            failures.append("the peers negotiated different rate words")
     if min(forwarded, default=0) < MIN_PCM_BYTES:
         failures.append(f"insufficient paired PCM: {tuple(forwarded)}")
     if len(forwarded) == 2 and abs(forwarded[0] - forwarded[1]) > HALF_DMA_BYTES:
@@ -526,7 +591,8 @@ def run_regression(args: argparse.Namespace) -> int:
     assert isinstance(rates, tuple)
     print(
         "PASS: paired shipping V.32 ROMs synchronized through R2/R3, "
-        "negotiated matching rates, reported status, and entered data mode "
+        "negotiated matching rates, entered HDLC data mode, and completed "
+        "the LAPM SABME/UA handshake "
         f"(rates={','.join(f'{rate:04x}' for rate in rates)}, "
         f"PCM={tuple(relay.forwarded)})"
     )
