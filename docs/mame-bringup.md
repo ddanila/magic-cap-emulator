@@ -343,8 +343,11 @@ The WAV, generated Lua, NVRAM, and log remain under
 
 The telephone-bridge harness starts two isolated IDT-monitor machines and a
 local stream relay. Each continuous 64-word telecom DMA ring must receive the
-other machine's distinct sample word in every slot. The retained Lua, logs
-and NVRAM remain under
+other machine's distinct sample word in every slot. MAME starts after one
+complete telecom word, waits at most 50 ms for later words, and falls back to
+nonblocking startup after four misses; this keeps unequal host workloads
+sample-aligned without hanging after a disconnect. The retained Lua, logs and
+NVRAM remain under
 `$MAGIC_CAP_ASSETS/runtime/telephone-bridge-regression/`. See
 [`builtin-modem.md`](builtin-modem.md#external-pcm-bridge) for the reusable
 relay and manual connection command.

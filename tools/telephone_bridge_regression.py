@@ -94,18 +94,26 @@ emu.register_frame_done(function()
         program:write_u32(SIB_DMA, 0x0003)
     elseif frames == {result_frame} then
         local received = 0
+        local zero = 0
+        local self = 0
         for index = 0, WORDS - 1 do
-            if program:read_u32(RX + index * 4) == 0x{expected_word:08x} then
+            local word = program:read_u32(RX + index * 4)
+            if word == 0x{expected_word:08x} then
                 received = received + 1
+            elseif word == 0 then
+                zero = zero + 1
+            elseif word == 0x{transmit_word:08x} then
+                self = self + 1
             end
         end
         local dma = program:read_u32(SIB_DMA)
         print(string.format(
             "PHONE_BRIDGE_RESULT received=%d/%d expected=%08X "
-            .. "enables=%d tx=%08X rx=%08X",
+            .. "enables=%d tx=%08X rx=%08X zero=%d self=%d first=%08X",
             received, WORDS, 0x{expected_word:08x}, dma & 3,
             program:read_u32(TEL_TX_START),
-            program:read_u32(TEL_RX_START)))
+            program:read_u32(TEL_RX_START), zero, self,
+            program:read_u32(RX)))
         machine:exit()
     end
 end)

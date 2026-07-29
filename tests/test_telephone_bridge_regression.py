@@ -28,6 +28,7 @@ class TelephoneBridgeRegressionTests(unittest.TestCase):
         self.assertIn("0x11112222", script)
         self.assertIn("0x33334444", script)
         self.assertIn("program:write_u32(SIB_DMA, 0x0003)", script)
+        self.assertIn("zero=%d self=%d first=%08X", script)
         self.assertNotIn("| 0x08 |", script)
 
     def test_result_parses(self) -> None:
@@ -63,6 +64,27 @@ class TelephoneBridgeRegressionTests(unittest.TestCase):
                 time.sleep(0.01)
 
             self.assertEqual(relay.forwarded[0], 4_096)
+        finally:
+            first.close()
+            second.close()
+            relay.stop()
+
+    def test_relay_supports_small_skew_and_bounded_capture(self) -> None:
+        relay = PcmRelay(
+            startup_grace=4,
+            max_skew=4,
+            capture_limit=3,
+        )
+        relay.start()
+        first = socket.create_connection((relay.host, relay.port))
+        second = socket.create_connection((relay.host, relay.port))
+        second.settimeout(2)
+        try:
+            first.sendall(b"abcdef")
+
+            self.assertEqual(second.recv(6), b"abcdef")
+            self.assertEqual(relay.captured[0], b"abc")
+            self.assertEqual(relay.captured[1], b"")
         finally:
             first.close()
             second.close()

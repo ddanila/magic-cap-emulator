@@ -13,15 +13,30 @@ import threading
 class PcmRelay:
     """Pair two TCP clients and forward their byte streams unchanged."""
 
+    STARTUP_GRACE = 4_096
     MAX_SKEW = 2_048
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 0) -> None:
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 0,
+        *,
+        startup_grace: int | None = None,
+        max_skew: int | None = None,
+        capture_limit: int = 0,
+    ) -> None:
         self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.listener.bind((host, port))
         self.listener.listen(2)
         self.host = host
         self.port = self.listener.getsockname()[1]
+        self.startup_grace = (
+            self.STARTUP_GRACE if startup_grace is None else startup_grace
+        )
+        self.max_skew = self.MAX_SKEW if max_skew is None else max_skew
+        self.capture_limit = capture_limit
+        self.captured = [bytearray(), bytearray()]
         self.forwarded = [0, 0]
         self.error: Exception | None = None
         self._stop = threading.Event()
@@ -58,9 +73,9 @@ class PcmRelay:
                         if active[index]
                         and (
                             not active[1 - index]
-                            or min(self.forwarded) < 4_096
+                            or min(self.forwarded) < self.startup_grace
                             or self.forwarded[index]
-                            <= self.forwarded[1 - index] + self.MAX_SKEW
+                            <= self.forwarded[1 - index] + self.max_skew
                         )
                     ],
                     [],
@@ -85,6 +100,9 @@ class PcmRelay:
                         if not any(active):
                             return
                         continue
+                    if len(self.captured[index]) < self.capture_limit:
+                        remaining = self.capture_limit - len(self.captured[index])
+                        self.captured[index].extend(data[:remaining])
                     target = peers[1 - index]
                     if active[1 - index]:
                         try:

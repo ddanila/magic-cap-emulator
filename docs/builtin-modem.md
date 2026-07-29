@@ -190,10 +190,14 @@ Select **External PCM bridge** in both machines and attach both to it:
 ../mame/datarover datarover840 -bitb socket.127.0.0.1:7200
 ```
 
-The bridge keeps a bounded receive jitter queue because the two emulators
-have nominally identical 7,200-sample/s clocks but independent host
-schedulers. The relay also bounds stream skew so a consistently faster
-process is back-pressured instead of silently losing alignment.
+After receiving its first complete telecom word, MAME waits up to 50 ms for
+each subsequent word. Four consecutive misses return it to nonblocking
+startup mode, so a disconnected peer cannot hang the machine. This bounded
+wait is needed because the two emulators have nominally identical
+7,200-sample/s clocks but different host workloads; without it, the faster
+virtual modem can consume silence while its peer is still computing. The
+relay also bounds stream skew and permits a configurable, bounded diagnostic
+capture without changing the forwarded bytes.
 
 The automated transport check uses two isolated monitor boots, distinct
 constant sample words and continuous 64-word RX/TX rings:
