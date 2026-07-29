@@ -217,6 +217,9 @@ python3 tools/incoming_call_regression.py \
 # Product fax-answer path; same retained-state requirement:
 python3 tools/fax_receive_regression.py \
   --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
+# Product fax-origin path; same retained-state requirement:
+python3 tools/fax_origin_regression.py \
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
 ```
 
 The loopback run requires all 64 words to arrive, the half, end and pointer
@@ -240,6 +243,9 @@ both PhoneServer and FaxReceive, and open the incoming Phone Status window.
 requires the live-call `AnswerModem`, softmodem command/line handlers, fax
 modem receive/transmit, both HDLC directions, 48-word bidirectional DMA, a
 non-silent external PCM capture, and the Receiving fax progress window.
+`tools/fax_origin_regression.py` follows the visible Desk/Magic lamp/Fax
+workflow, creates and selects a fax recipient, requires the exchange to decode
+`5551212`, and checks fax initialization plus the 48-word RX/TX DMA ring.
 
 ## Verifying the sound path
 

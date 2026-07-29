@@ -99,6 +99,22 @@ Receiving fax progress window. Its line input is intentionally silent, so
 this claims the complete local answer startup—not remote negotiation or a
 received page.
 
+The matching product-origin baseline starts from the same calibrated state:
+
+```sh
+python3 tools/fax_origin_regression.py \
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
+```
+
+It goes to the Desk, opens Magic lamp → Fax, creates a `Fax Peer` contact with
+the default `(650)` prefix and `555-1212`, selects that contact, and sends the
+current screen. The test exchange must decode the ROM's sampled output as
+`5551212`; breakpoints require `SoftwareModem_ConnectToNumber`,
+`SoftwareModem_InitFax`, the softmodem command and line handlers, and telecom
+DMA startup. The visible Sending fax window and the 48-word bidirectional DMA
+ring are also required. A silent test exchange cannot answer, so this claims
+the genuine originating and dialing startup, not carrier or page transfer.
+
 The automatic exchange supplies the North American continuous dial tone,
 350 Hz plus 440 Hz, only while the line is connected and Betty is off-hook.
 It uses phase accumulators at Dino's programmed telecom rate, so its samples
@@ -212,6 +228,13 @@ exactly one big-endian 32-bit DMA word—two signed 16-bit samples—at the ROM'
 programmed sample rate. It is full duplex and does not decode, synthesize or
 otherwise special-case modem signals.
 
+**External PCM bridge with test exchange** combines the two existing
+boundaries. It presents deterministic central-office dial tone while the
+originator is off hook, decodes its first outbound digit, and then exposes
+peer PCM. Use this combined setting only on the originating machine; the
+answerer remains on the pure bridge so its fax response is never masked by a
+locally generated dial tone.
+
 Two independent MAME processes can therefore act as the originating and
 answering ends of one line. Start the byte-for-byte relay:
 
@@ -289,8 +312,11 @@ interval, installs `SoftModemLineHandler`, runs both `FaxModemRcv` and
 This narrows the remaining failure: raw full-duplex transport, scheduler
 skew, silent DSP output, answer-role selection, simple polarity, a broad
 direct-to-attenuated gain range, incoming call-object creation, and the real
-fax-answer startup have all been addressed or excluded. The missing peer is a
-matched product-level fax originator; after that, any remaining negotiation
+fax-answer and fax-origin startups have all been addressed or excluded. A
+paired product run also proves seven origin digits plus non-silent PCM in both
+directions, while the answer side repeatedly runs fax receive/transmit and
+both HDLC directions. The remaining switch sequencing must delay answering
+until origin digit collection is complete; after that, any negotiation
 failure can be separated from analog-line behavior. Carrier, data transfer,
 and completed fax-page transfer are still unclaimed.
 

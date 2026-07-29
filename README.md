@@ -38,9 +38,11 @@ side also qualifies a held ring envelope through the real ROM detector,
 notifies the phone and fax clients, and opens Phone Status with its
 **receive fax** and **answer** choices. Selecting **receive fax** now uses that
 live call context, opens the Receiving fax progress window, runs the ROM's fax
-modem and HDLC paths, and emits non-silent line PCM. A full-duplex PCM bridge
-carries both telecom DMA streams between two independent DataRover processes,
-ready for matched fax-originating/answering work.
+modem and HDLC paths, and emits non-silent line PCM. The visible outbound Fax
+workflow creates and selects a recipient, renders the current screen, dials
+`5551212`, initializes fax mode, and starts telecom DMA. A full-duplex PCM
+bridge carries both streams between independent DataRovers; its combined test
+exchange mode supplies central-office dial tone before joining peer PCM.
 The full status table and roadmap are in [`PLAN.md`](PLAN.md); the machine's
 hardware, history, and verification approach are in
 [`docs/background.md`](docs/background.md).
