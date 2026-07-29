@@ -206,6 +206,7 @@ python3 tools/telecom_regression.py --no-loopback # control
 python3 tools/telecom_regression.py --dial-tone   # exchange analog input
 python3 tools/telecom_regression.py --dtmf        # exchange tone dialing
 python3 tools/telephone_line_regression.py         # DAA hook/ring boundary
+python3 tools/telephone_line_regression.py --pulse # exchange pulse dialing
 ```
 
 The loopback run requires all 64 words to arrive, the half, end and pointer

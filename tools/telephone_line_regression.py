@@ -32,6 +32,7 @@ RESULT_PATTERN = re.compile(
     rb"RING_HIGH=(\d) RING_POS=(\d) RING_LOW=(\d) RING_NEG=(\d)"
 )
 EXPECTED_RESULT = (1, 1, 1, 1, 1, 1, 1)
+PULSE_PATTERN = re.compile(rb"Telephone exchange pulse digit: ([0-9])")
 
 
 def config_xml(system: str) -> str:
@@ -120,9 +121,70 @@ end)
 """
 
 
+def pulse_automation_script() -> str:
+    return r"""local machine = manager.machine
+local program = machine.devices[":maincpu"].spaces["program"]
+local frames = 0
+
+local SIB_SF0_AUX = 0x10c00080
+local digits = { 5, 8, 10 }
+local digit_index = 1
+local pulse_index = 0
+local next_transition = 10
+local starting_break = true
+local finished = false
+
+local function set_offhook(offhook)
+    program:write_u32(
+        SIB_SF0_AUX, offhook and 0x04000200 or 0x04000000)
+end
+
+emu.register_frame_done(function()
+    frames = frames + 1
+
+    if frames == 5 then
+        set_offhook(true)
+    elseif frames == next_transition and not finished then
+        if starting_break then
+            -- Four video frames is about 67 ms of loop break.
+            set_offhook(false)
+            starting_break = false
+            next_transition = frames + 4
+        else
+            set_offhook(true)
+            pulse_index = pulse_index + 1
+            starting_break = true
+            if pulse_index == digits[digit_index] then
+                digit_index = digit_index + 1
+                pulse_index = 0
+                if digit_index > #digits then
+                    finished = true
+                    next_transition = frames + 35
+                else
+                    -- Thirty frames leaves a 500 ms inter-digit gap.
+                    next_transition = frames + 30
+                end
+            else
+                -- Three frames is about 50 ms of loop make.
+                next_transition = frames + 3
+            end
+        end
+    elseif frames == next_transition and finished then
+        print("TELEPHONE_PULSE_DONE")
+        machine:exit()
+    end
+end)
+"""
+
+
 def parse_result(output: bytes) -> tuple[int, ...] | None:
     match = RESULT_PATTERN.search(output)
     return tuple(int(group) for group in match.groups()) if match else None
+
+
+def parse_pulse_result(output: bytes) -> str | None:
+    digits = PULSE_PATTERN.findall(output)
+    return b"".join(digits).decode("ascii") if digits else None
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -131,6 +193,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--rompath", type=Path, default=DEFAULT_ROMPATH)
     parser.add_argument("--workdir", type=Path, default=DEFAULT_WORKDIR)
     parser.add_argument("--system", default="datarover840")
+    parser.add_argument(
+        "--pulse",
+        action="store_true",
+        help="pulse-dial 580 and require the automatic exchange to decode it",
+    )
     return parser.parse_args(argv)
 
 
@@ -154,7 +221,10 @@ def run_regression(args: argparse.Namespace) -> int:
         config_xml(args.system), encoding="utf-8"
     )
     script_path = run_dir / "telephone-line.lua"
-    script_path.write_text(automation_script(), encoding="utf-8")
+    script_path.write_text(
+        pulse_automation_script() if args.pulse else automation_script(),
+        encoding="utf-8",
+    )
 
     command = [
         str(args.mame),
@@ -187,7 +257,6 @@ def run_regression(args: argparse.Namespace) -> int:
     log_path = run_dir / "mame-output.txt"
     log_path.write_bytes(output)
 
-    result = parse_result(output)
     if completed.returncode:
         print(
             f"FAIL: MAME exited with status {completed.returncode}; "
@@ -195,6 +264,20 @@ def run_regression(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    if args.pulse:
+        digits = parse_pulse_result(output)
+        if digits != "580":
+            print(
+                f"FAIL: exchange decoded pulse digits {digits!r}, expected "
+                f"'580'; see {log_path}",
+                file=sys.stderr,
+            )
+            return 1
+        print("PASS: automatic telephone exchange decoded pulse-dialed 580")
+        print(f"Artifacts: {run_dir}")
+        return 0
+
+    result = parse_result(output)
     if result != EXPECTED_RESULT:
         print(
             f"FAIL: telephone line result {result!r}, expected "

@@ -89,9 +89,22 @@ python3 tools/telecom_regression.py --dtmf
 ```
 
 The detector and its partial block, debounce state and dial-tone state survive
-MAME save/load. A product-level pass through the ROM's asynchronous
-`SoftwareModem_CheckDialTone` and dialer, pulse dialing, carrier and a remote
-modem remain later milestones.
+MAME save/load.
+
+For pulse dialing, the same exchange observes Betty's physical hookswitch
+rather than telecom samples. Loop breaks from 20–150 ms count as pulses; a
+400 ms make interval completes a digit, with ten pulses representing zero.
+The regression produces the same `580` number as 5, 8 and 10 approximately
+67 ms breaks separated by approximately 50 ms makes:
+
+```sh
+python3 tools/telephone_line_regression.py --pulse
+```
+
+A sustained on-hook state remains a hangup and does not produce a digit. A
+product-level pass through the ROM's asynchronous
+`SoftwareModem_CheckDialTone` and normal dialer, carrier and a remote modem
+remain later milestones.
 
 ## Published design cross-check
 
@@ -158,10 +171,11 @@ PASS: Magic Cap opened the built-in modem, kept its 48-word telecom ring running
 
 This deliberately proves the ROM/Dino/DSP boundary, not an imaginary
 telephone network. Digital DAA hook, line-connect and ring behavior plus the
-exchange's dial-tone waveform and outbound DTMF decoder are modelled and
-checked separately, but normal product dialing, carrier acquisition and a
-remote modem are still missing. The test invokes the lower ROM boundary rather
-than automating the Internet Center's dial dialogs.
+exchange's dial-tone waveform, outbound DTMF decoder and hookswitch pulse
+decoder are modelled and checked separately, but normal product dialing,
+carrier acquisition and a remote modem are still missing. The test invokes
+the lower ROM boundary rather than automating the Internet Center's dial
+dialogs.
 
 The product-level target is more specific. *Using Magic Cap*, pp. 135–163 and
 216, documents the built-in fax modem on a telephone line, including selectable

@@ -159,7 +159,8 @@ boot, OS, and peripheral regressions:
   output, plus Dino MFIO input pin 0 and interrupt-bank-3/4 positive/negative
   ring-detector edges. The automatic test exchange feeds a deterministic
   350+440 Hz dial tone into telecom RX while connected and off-hook, and
-  decodes standard DTMF pairs from telecom TX.
+  decodes standard DTMF pairs from telecom TX or timed pulse breaks from the
+  hookswitch.
 - A battery-backed 32,768 Hz RTC counter, alarm and rollover interrupts,
   freeze/clear controls, and a separate persistent clock record.
 - Read-only power-good/on-button inputs plus cold-start/VCC power state.

@@ -34,6 +34,14 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("ring:set_value(0)", script)
         self.assertIn("MFIO_INPUT = 0x10c0018c", script)
 
+    def test_pulse_script_dials_five_eight_and_ten_pulses(self) -> None:
+        script = telephone_line.pulse_automation_script()
+
+        self.assertIn("local digits = { 5, 8, 10 }", script)
+        self.assertIn("set_offhook(false)", script)
+        self.assertIn("set_offhook(true)", script)
+        self.assertIn("next_transition = frames + 30", script)
+
 
 class ResultTests(unittest.TestCase):
     def test_parses_complete_result(self) -> None:
@@ -51,6 +59,15 @@ class ResultTests(unittest.TestCase):
         self.assertIsNone(
             telephone_line.parse_result(b"TELEPHONE_LINE CONNECTED=1\n")
         )
+
+    def test_parses_pulse_digits(self) -> None:
+        output = (
+            b"Telephone exchange pulse digit: 5\n"
+            b"Telephone exchange pulse digit: 8\n"
+            b"Telephone exchange pulse digit: 0\n"
+        )
+
+        self.assertEqual(telephone_line.parse_pulse_result(output), "580")
 
 
 if __name__ == "__main__":
