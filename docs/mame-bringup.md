@@ -378,7 +378,9 @@ SABME/UA, report connected and retain their 48-word bidirectional DMA rings.
 The product companion additionally requires Internet Center's dial-up and PPP
 actors, the connection monitor, PPP output, answer-side ROM-queue delivery,
 product-side PPP input, complete LCP/IPCP negotiation and an IPv4/TCP SYN from
-`10.0.2.15:1024` to `10.0.2.2:8080`. Artifacts remain under
+`10.0.2.15:1024` to `10.0.2.2:8080`. The answer trace classifies every PPP
+frame in each ROM read, so concatenated control packets and retransmissions do
+not advance a scripted response sequence. Artifacts remain under
 `$MAGIC_CAP_ASSETS/runtime/data-modem-pair-regression/`.
 
 The paired-fax harness instead starts two ordinary retained-state machines,

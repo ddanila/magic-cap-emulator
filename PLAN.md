@@ -82,7 +82,11 @@ The full regression list and expected checkpoints are in
   acknowledges that corrected request, after which Magic Cap emits an
   IPv4/TCP SYN from `10.0.2.15:1024` to `10.0.2.2:8080`. The remaining
   line-side target is answering and bridging IP to a host network endpoint.
-  This is separate from the working PC Card PPP path
+  The answer probe now dispatches replies from the protocol content of every
+  PPP frame in a ROM read, including concatenated retransmissions, and captures
+  Magic Cap's TCP RST when a deliberately static SYN-ACK acknowledges the
+  wrong randomized client sequence. A real responder must derive that ACK and
+  its checksums from each SYN. This is separate from the working PC Card PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 
 - **Expand Magic Bus beyond one keyboard.** The product connector supports

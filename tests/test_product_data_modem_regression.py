@@ -8,6 +8,7 @@ from tools.product_data_modem_regression import (
     async_ppp_frame,
     echo_responder_words,
     final_ipcp_response,
+    internet_checksum,
     initial_lcp_response,
     initial_ipcp_response,
     machine_config,
@@ -16,6 +17,7 @@ from tools.product_data_modem_regression import (
     parse_product_result,
     ppp_fcs,
     product_automation_script,
+    tcp_syn_ack_response,
     validate_results,
 )
 
@@ -55,8 +57,9 @@ class ProductDataModemScriptTests(unittest.TestCase):
         self.assertIn('io.open(call_trigger_path, "r")', script)
         self.assertIn("answer.result-ready", script)
         self.assertIn("product.result-ready", script)
+        self.assertIn("protocol.result-ready", script)
         self.assertIn("PRODUCT_ANSWER_ECHO_START", script)
-        self.assertIn("PRODUCT_ANSWER_ECHO_RETURN", script)
+        self.assertIn("PRODUCT_ANSWER_PEER_DATA", script)
         self.assertIn("PRODUCT_ANSWER_ECHO bytes=", script)
         self.assertIn("PRODUCT_ANSWER_ECHO_DATA hex=", script)
         self.assertIn("PRODUCT_ANSWER_LCP_REPLY read=", script)
@@ -96,6 +99,10 @@ class ProductDataModemScriptTests(unittest.TestCase):
             final_ipcp,
         )
         self.assertEqual(final_ipcp.count(0x7E), 2)
+        self.assertEqual(internet_checksum(bytes.fromhex("0001f203f4f5")), 0x1905)
+        syn_ack = tcp_syn_ack_response()
+        self.assertIn(bytes.fromhex("7d2a7d207d227d22"), syn_ack)
+        self.assertEqual(syn_ack.count(0x7E), 2)
 
 
 class ProductDataModemResultTests(unittest.TestCase):
@@ -250,6 +257,24 @@ class ProductDataModemResultTests(unittest.TestCase):
         failures = validate_results(
             product,
             self.answer_result(),
+            [MIN_PCM_BYTES, MIN_PCM_BYTES],
+            len(initial_lcp_response())
+            + len(initial_ipcp_response())
+            + len(final_ipcp_response()),
+            self.PEER_IP_DATA,
+        )
+
+        self.assertEqual(failures, [])
+
+    def test_answer_detector_may_clear_after_first_ip_packet(self) -> None:
+        product = parse_product_result(self.product_output())
+        assert product is not None
+        answer = self.answer_result()
+        answer["detector"] = 0
+
+        failures = validate_results(
+            product,
+            answer,
             [MIN_PCM_BYTES, MIN_PCM_BYTES],
             len(initial_lcp_response())
             + len(initial_ipcp_response())

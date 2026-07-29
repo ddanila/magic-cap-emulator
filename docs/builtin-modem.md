@@ -423,6 +423,17 @@ This proves LCP/IPCP and the first IP packet across the complete ROM stack.
 Answering and bridging IP remain separate from the already working PC Card
 PPP path.
 
+ROM reads are not packet-aligned: one observed 58-byte read contained an LCP
+Configure-Ack followed by an IPCP Configure-Request, while another contained
+several retransmitted LCP requests. The answer probe therefore scans the
+whole read and prioritizes IP, IPCP, then LCP rather than advancing a scripted
+round number. Per-read logs record the selected protocol kind, exact escaped
+bytes and cumulative reply count. A diagnostic SYN-ACK reaches Magic Cap, but
+its fixed acknowledgement intentionally demonstrates the final TCP gap:
+Magic Cap randomizes the client sequence and returns RST when that value is
+wrong. The next peer must derive the ACK, TCP checksum and PPP FCS from the
+live SYN before an HTTP response or host bridge can be valid.
+
 The live Dino SIB control value is `0x00a79923`: telecom 16-bit mode is set
 and divisor `0x27` selects 7,200 samples/s. Telecom size `0x00bc` describes
 the expected 48-word ring. This confirms the bridge's two signed 16-bit

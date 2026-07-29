@@ -11,6 +11,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -50,7 +51,8 @@ ECHO_RESPONSE = 0x0030_6C00
 ECHO_TOTAL = 0x0030_7800
 ECHO_DONE = ECHO_TOTAL + 4
 ECHO_READ_TOTAL = ECHO_TOTAL + 8
-ECHO_RESPONSE_LENGTH = ECHO_TOTAL + 12
+ECHO_RESPONSE_KIND = ECHO_TOTAL + 12
+ECHO_IP_READS = ECHO_TOTAL + 16
 ANSWER_DELIVER_COUNTER = ANSWER_COUNTERS + next(
     index * 4
     for index, (_, name) in enumerate(MODEM_SYMBOLS)
@@ -58,6 +60,10 @@ ANSWER_DELIVER_COUNTER = ANSWER_COUNTERS + next(
 )
 ECHO_PATTERN = re.compile(rb"PRODUCT_ANSWER_ECHO bytes=(\d+)")
 PEER_DATA_PATTERN = re.compile(rb"PRODUCT_ANSWER_ECHO_DATA hex=([0-9A-F]+)")
+PEER_ROUND_PATTERN = re.compile(
+    rb"PRODUCT_ANSWER_PEER_DATA round=\d+ kind=(\d+) "
+    rb"read=\d+ wrote=\d+ hex=([0-9A-F]*)"
+)
 
 PRODUCT_SYMBOLS = (
     (0x13D4_DD08, "new_dialup_link"),
@@ -85,6 +91,7 @@ CALL_READY_COUNTER = COUNTERS + next(
     if name == "connect_number"
 )
 CALL_SETTLE_FRAMES = 240
+MAX_PEER_READS = 12
 PRODUCT_PATTERN = re.compile(
     rb"PRODUCT_DATA_MODEM_RESULT "
     + rb" ".join(name.encode() + rb"=(\d+)" for _, name in PRODUCT_SYMBOLS)
@@ -170,8 +177,57 @@ def final_ipcp_response(request_id: int = 0x21) -> bytes:
     return async_ppp_frame(acknowledge)
 
 
+def internet_checksum(payload: bytes) -> int:
+    """Return the RFC 1071 checksum for an even- or odd-length byte string."""
+    if len(payload) & 1:
+        payload += b"\0"
+    total = sum(
+        int.from_bytes(payload[offset : offset + 2], "big")
+        for offset in range(0, len(payload), 2)
+    )
+    while total >> 16:
+        total = (total & 0xFFFF) + (total >> 16)
+    return total ^ 0xFFFF
+
+
+def tcp_syn_ack_response() -> bytes:
+    """Answer the deterministic browser SYN at the negotiated peer address."""
+    source_ip = bytes.fromhex("0a000202")
+    destination_ip = bytes.fromhex("0a00020f")
+    tcp = bytearray.fromhex(
+        "1f900400010203043f999b01601210000000000002040218"
+    )
+    pseudo_header = (
+        source_ip
+        + destination_ip
+        + bytes((0, 6))
+        + len(tcp).to_bytes(2, "big")
+    )
+    tcp[16:18] = internet_checksum(pseudo_header + tcp).to_bytes(2, "big")
+    ip = bytearray.fromhex(
+        "4500002c12340000400600000a0002020a00020f"
+    )
+    ip[10:12] = internet_checksum(ip).to_bytes(2, "big")
+    return async_ppp_frame(bytes.fromhex("ff030021") + ip + tcp)
+
+
 def echo_responder_words() -> list[int]:
-    """Read one answer data unit and write the initial LCP peer response."""
+    """Read one answer data unit and dispatch its protocol-specific reply."""
+    response_addresses = (
+        ECHO_RESPONSE,
+        ECHO_RESPONSE + 0x200,
+        ECHO_RESPONSE + 0x400,
+        ECHO_RESPONSE + 0x600,
+    )
+    response_lengths = tuple(
+        len(response)
+        for response in (
+            initial_lcp_response(),
+            initial_ipcp_response(),
+            final_ipcp_response(),
+            tcp_syn_ack_response(),
+        )
+    )
     words = [
         *load_address(8, 0xA030_0800),
         op(0x23, rs=8, rt=23, immediate=0),
@@ -191,13 +247,123 @@ def echo_responder_words() -> list[int]:
     words += [
         *load_address(8, 0xA000_0000 + ECHO_READ_TOTAL),
         op(0x2B, rs=8, rt=2, immediate=0),
-        *load_address(8, 0xA000_0000 + ECHO_RESPONSE_LENGTH),
-        op(0x23, rs=8, rt=4, immediate=0),
+        op(0x0D, rt=4, immediate=0),
+        op(0x0D, rt=9, immediate=0),
+        *load_address(11, 0xA000_0000 + ECHO_BUFFER),
+        move(12, 2),
+        op(0x09, rs=12, rt=12, immediate=-2),
+        op(0x0D, rt=13, immediate=0),
+        op(0x0D, rt=14, immediate=0),
+    ]
+    branches: list[tuple[int, str]] = []
+    labels: dict[str, int] = {}
+
+    def branch(major: int, rs: int, rt: int, label: str) -> None:
+        branches.append((len(words), label))
+        words.extend((op(major, rs=rs, rt=rt), 0))
+
+    def jump(label: str) -> None:
+        branch(0x04, 0, 0, label)
+
+    labels["scan"] = len(words)
+    branch(0x06, 12, 0, "scan_done")
+    words += [
+        op(0x24, rs=11, rt=8, immediate=0),
+        op(0x24, rs=11, rt=9, immediate=1),
+        op(0x0D, rt=10, immediate=0x7D),
+    ]
+    branch(0x04, 8, 10, "check_ip")
+    words += [op(0x0D, rt=10, immediate=0x80)]
+    branch(0x04, 8, 10, "record_ipcp")
+    words += [op(0x0D, rt=10, immediate=0xC0)]
+    branch(0x04, 8, 10, "record_lcp")
+
+    labels["advance_scan"] = len(words)
+    words += [
+        op(0x09, rs=11, rt=11, immediate=1),
+        op(0x09, rs=12, rt=12, immediate=-1),
+    ]
+    jump("scan")
+
+    labels["check_ip"] = len(words)
+    words += [op(0x0D, rt=10, immediate=0x20)]
+    branch(0x05, 9, 10, "advance_scan")
+    words += [
+        op(0x24, rs=11, rt=8, immediate=2),
+        op(0x0D, rt=10, immediate=0x21),
+    ]
+    branch(0x04, 8, 10, "ip")
+    jump("advance_scan")
+
+    labels["record_ipcp"] = len(words)
+    words += [op(0x0D, rt=10, immediate=0x21)]
+    branch(0x05, 9, 10, "advance_scan")
+    words += [move(13, 11)]
+    jump("advance_scan")
+
+    labels["record_lcp"] = len(words)
+    words += [op(0x0D, rt=10, immediate=0x21)]
+    branch(0x05, 9, 10, "advance_scan")
+    words += [move(14, 11)]
+    jump("advance_scan")
+
+    labels["scan_done"] = len(words)
+    branch(0x05, 13, 0, "ipcp")
+    branch(0x05, 14, 0, "lcp")
+    jump("write")
+
+    labels["lcp"] = len(words)
+    words += [
+        op(0x0D, rt=4, immediate=response_lengths[0]),
+        *load_address(5, 0xA000_0000 + response_addresses[0]),
+        op(0x0D, rt=9, immediate=1),
+    ]
+    jump("write")
+
+    labels["ipcp"] = len(words)
+    words += [
+        op(0x24, rs=13, rt=8, immediate=4),
+        op(0x0D, rt=10, immediate=0x20),
+    ]
+    branch(0x04, 8, 10, "initial_ipcp")
+    words += [
+        op(0x0D, rt=4, immediate=response_lengths[2]),
+        *load_address(5, 0xA000_0000 + response_addresses[2]),
+        op(0x0D, rt=9, immediate=3),
+    ]
+    jump("write")
+
+    labels["initial_ipcp"] = len(words)
+    words += [
+        op(0x0D, rt=4, immediate=response_lengths[1]),
+        *load_address(5, 0xA000_0000 + response_addresses[1]),
+        op(0x0D, rt=9, immediate=2),
+    ]
+    jump("write")
+
+    labels["ip"] = len(words)
+    words += [
+        op(0x0D, rt=9, immediate=4),
+        *load_address(10, 0xA000_0000 + ECHO_IP_READS),
+        op(0x23, rs=10, rt=8, immediate=0),
+        op(0x09, rs=8, rt=8, immediate=1),
+        op(0x2B, rs=10, rt=8, immediate=0),
+        op(0x0D, rt=10, immediate=1),
+    ]
+    branch(0x05, 8, 10, "write")
+    words += [
+        op(0x0D, rt=4, immediate=response_lengths[3]),
+        *load_address(5, 0xA000_0000 + response_addresses[3]),
+    ]
+
+    labels["write"] = len(words)
+    words += [
+        *load_address(10, 0xA000_0000 + ECHO_RESPONSE_KIND),
+        op(0x2B, rs=10, rt=9, immediate=0),
     ]
     no_response = len(words)
     words += [0, 0]
     words += [
-        *load_address(5, 0xA000_0000 + ECHO_RESPONSE),
         *call(0x13E4_2C80),
         *load_address(8, 0xA000_0000 + ECHO_TOTAL),
         op(0x23, rs=8, rt=9, immediate=0),
@@ -219,6 +385,10 @@ def echo_responder_words() -> list[int]:
     words[no_response] = op(
         0x06, rs=4, immediate=done - (no_response + 1)
     )
+    for index, label in branches:
+        words[index] = (words[index] & 0xFFFF_0000) | (
+            (labels[label] - (index + 1)) & 0xFFFF
+        )
     return words
 
 
@@ -418,6 +588,7 @@ def answer_automation_script(
         initial_lcp_response(),
         initial_ipcp_response(),
         final_ipcp_response(),
+        tcp_syn_ack_response(),
     )
     echo_words = echo_responder_words()
     echo_loop = 0xA000_0000 + ECHO_STUB + (len(echo_words) - 2) * 4
@@ -426,26 +597,24 @@ def answer_automation_script(
         for index, word in enumerate(echo_words)
     )
     response_writes = "\n".join(
-        (
-            f"  if echo_round == {round_index} then\n"
-            + "\n".join(
-                f"    program:write_u8(ECHO_RESPONSE + {index}, 0x{byte:02x})"
-                for index, byte in enumerate(response)
-            )
-            + "\n  end"
-        )
-        for round_index, response in enumerate(responses, start=1)
+        f"  program:write_u8(ECHO_RESPONSE + 0x{response_index * 0x200:03x}"
+        f" + {index}, 0x{byte:02x})"
+        for response_index, response in enumerate(responses)
+        for index, byte in enumerate(response)
     )
-    response_lengths = ", ".join(str(len(response)) for response in responses)
     trigger = _lua_path(call_trigger_path)
     result_path = _lua_path(call_trigger_path.parent / "answer.result-ready")
     peer_result_path = _lua_path(call_trigger_path.parent / "product.result-ready")
+    protocol_result_path = _lua_path(
+        call_trigger_path.parent / "protocol.result-ready"
+    )
     script = script.replace(
         "local saved_state = nil\n",
         'local saved_state = nil\n'
         f'local call_trigger_path = "{trigger}"\n'
         f'local result_path = "{result_path}"\n'
         f'local peer_result_path = "{peer_result_path}"\n'
+        f'local protocol_result_path = "{protocol_result_path}"\n'
         'local ports = machine.ioport.ports\n'
         'local power_button = ports[":POWER_BUTTON"]:field(0x01)\n'
         'local touch_x = ports[":TOUCH_X"]:field(0xffff)\n'
@@ -456,6 +625,7 @@ def answer_automation_script(
     script = script.replace(
         "local function inject()\n",
         f"local echo_active, echo_round, echo_deliver_seen = false, 0, 0\n"
+        f"local protocol_written = false\n"
         f"local echo_saved_state = nil\n"
         f"local ECHO_STUB = 0x{ECHO_STUB:08x}\n"
         f"local ECHO_BUFFER = 0x{ECHO_BUFFER:08x}\n"
@@ -463,19 +633,21 @@ def answer_automation_script(
         f"local ECHO_TOTAL = 0x{ECHO_TOTAL:08x}\n"
         f"local ECHO_DONE = 0x{ECHO_DONE:08x}\n"
         f"local ECHO_READ_TOTAL = 0x{ECHO_READ_TOTAL:08x}\n"
-        f"local ECHO_RESPONSE_LENGTH = 0x{ECHO_RESPONSE_LENGTH:08x}\n"
+        f"local ECHO_RESPONSE_KIND = 0x{ECHO_RESPONSE_KIND:08x}\n"
+        f"local ECHO_IP_READS = 0x{ECHO_IP_READS:08x}\n"
         f"local ECHO_LOOP = 0x{echo_loop:08x}\n"
         f"local ANSWER_DELIVER_COUNTER = 0x{ANSWER_DELIVER_COUNTER:08x}\n\n"
-        f"local echo_response_lengths = {{ {response_lengths} }}\n\n"
         f"local function start_echo()\n"
         f"  echo_round = echo_round + 1\n"
         f"{echo_writes}\n"
         f"{response_writes}\n"
-        f"  if echo_round == 1 then program:write_u32(ECHO_TOTAL, 0) end\n"
+        f"  if echo_round == 1 then\n"
+        f"    program:write_u32(ECHO_TOTAL, 0)\n"
+        f"    program:write_u32(ECHO_IP_READS, 0)\n"
+        f"  end\n"
         f"  program:write_u32(ECHO_DONE, 0)\n"
         f"  program:write_u32(ECHO_READ_TOTAL, 0)\n"
-        f"  program:write_u32(ECHO_RESPONSE_LENGTH,\n"
-        f"    echo_response_lengths[echo_round] or 0)\n"
+        f"  program:write_u32(ECHO_RESPONSE_KIND, 0)\n"
         f'  echo_saved_state = {{ PC = cpu.state["PC"].value }}\n'
         f"  for _,name in ipairs(register_names) do\n"
         f"    echo_saved_state[name] = cpu.state[name].value\n"
@@ -520,7 +692,7 @@ def answer_automation_script(
         "      inject()\n"
         "    end\n"
         "  end\n"
-        "  if restored and not echo_active and echo_round < 4\n"
+        f"  if restored and not echo_active and echo_round < {MAX_PEER_READS}\n"
         "      and program:read_u32(ANSWER_DELIVER_COUNTER)\n"
         "        > echo_deliver_seen then\n"
         "    start_echo()\n"
@@ -535,8 +707,25 @@ def answer_automation_script(
         '      cpu.state["PC"].value = echo_saved_state.PC\n'
         "      echo_active = false\n"
         "      echo_deliver_seen = program:read_u32(ANSWER_DELIVER_COUNTER)\n"
-        '      print(string.format("PRODUCT_ANSWER_ECHO_RETURN round=%d",\n'
-        "        echo_round))\n"
+        "      local echo_read_total = program:read_u32(ECHO_READ_TOTAL)\n"
+        "      local echo_hex = {}\n"
+        "      for offset = 0, echo_read_total - 1 do\n"
+        "        table.insert(echo_hex,\n"
+        '          string.format("%02X", program:read_u8(ECHO_BUFFER + offset)))\n'
+        "      end\n"
+        '      print(string.format("PRODUCT_ANSWER_PEER_DATA "\n'
+        '        .. "round=%d kind=%d read=%d wrote=%d hex=%s",\n'
+        "        echo_round, program:read_u32(ECHO_RESPONSE_KIND),\n"
+        "        echo_read_total, program:read_u32(ECHO_TOTAL),\n"
+        "        table.concat(echo_hex)))\n"
+        "      if program:read_u32(ECHO_IP_READS) >= 2\n"
+        "          and not protocol_written then\n"
+        "        local protocol_result = assert(io.open(\n"
+        '          protocol_result_path, "w"))\n'
+        '        protocol_result:write("ready\\n")\n'
+        "        protocol_result:close()\n"
+        "        protocol_written = true\n"
+        "      end\n"
         "    end\n"
         "  end\n"
         "  local pc = cpu.state",
@@ -632,23 +821,33 @@ def parse_echo_result(output: bytes) -> int | None:
 
 def parse_peer_data(output: bytes) -> bytes | None:
     """Return the first unescaped payload from the answer's final ROM read."""
-    match = PEER_DATA_PATTERN.search(output)
-    if match is None:
-        return None
-    framed = bytes.fromhex(match.group(1).decode())
-    payload = bytearray()
-    escaped = False
-    for byte in framed[1:] if framed[:1] == b"\x7e" else framed:
-        if byte == 0x7E:
-            break
-        if escaped:
-            payload.append(byte ^ 0x20)
-            escaped = False
-        elif byte == 0x7D:
-            escaped = True
-        else:
-            payload.append(byte)
-    return bytes(payload)
+    matches = [
+        framed
+        for kind, framed in PEER_ROUND_PATTERN.findall(output)
+        if kind == b"4"
+    ]
+    if not matches:
+        match = PEER_DATA_PATTERN.search(output)
+        if match is None:
+            return None
+        matches = [match.group(1)]
+    for encoded in matches:
+        framed = bytes.fromhex(encoded.decode())
+        payload = bytearray()
+        escaped = False
+        for byte in framed[1:] if framed[:1] == b"\x7e" else framed:
+            if byte == 0x7E:
+                break
+            if escaped:
+                payload.append(byte ^ 0x20)
+                escaped = False
+            elif byte == 0x7D:
+                escaped = True
+            else:
+                payload.append(byte)
+        if payload.startswith(bytes.fromhex("ff03002145")):
+            return bytes(payload)
+    return None
 
 
 def validate_results(
@@ -728,7 +927,7 @@ def validate_results(
                 failures.append(f"answer missed {name}")
         if answer["lapm_deliver_data"] < 4:
             failures.append("answer did not receive the first IP packet")
-        if answer["detector"] != 1:
+        if answer["detector"] != 1 and not opened_ip:
             failures.append("answer detector did not lock")
     if echoed is None:
         failures.append("answer did not report its PPP peer replies")
@@ -908,12 +1107,18 @@ def run_regression(args: argparse.Namespace) -> int:
 
         def release_completion_hold() -> None:
             markers = (
-                run_dir / "answer.result-ready",
+                run_dir / "protocol.result-ready",
                 run_dir / "product.result-ready",
             )
+            answer_result_seen: float | None = None
             while not any(marker.is_file() for marker in markers):
                 if any(process.poll() is not None for _, process in processes):
                     return
+                if (run_dir / "answer.result-ready").is_file():
+                    if answer_result_seen is None:
+                        answer_result_seen = time.monotonic()
+                    elif time.monotonic() - answer_result_seen >= 20:
+                        break
                 threading.Event().wait(0.05)
             completion_forwarded[:] = relay.call_forwarded
             relay.disable_process_control()
