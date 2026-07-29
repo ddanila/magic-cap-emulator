@@ -96,7 +96,7 @@ the contract for future archived WaveLAN, NE2000 and wireless-card work.
 | Speaker and controls | Volume and system sounds are configurable; a sound stamp can record, stop and play microphone audio (pp. 23, 51–53, 67–68) | Startup beep and continuously buffered sound-TX DMA pass; direct sound-RX DMA captures tone/silence; the real Stamper UI records, stops, drains its SIB command, and plays the captured audio into a WAV | Principal sound-stamp workflow covered; volume/control UI choices are not separate tests |
 | Infrared Beam | Any displayed card or page can be beamed; discovery fills the recipient, multiple peers require selection, and Magic Cap 3.1 does not interoperate with earlier versions (pp. 78–79, 133) | Two fresh 3.1 peers discover by owner name, select Bob and transfer Alice's name card | Principal workflow covered; other object types and old-version rejection are not separate tests |
 | Web access | Internet Center provider settings drive dial-up Web access and downloaded-page handling (pp. 105–120, 165–174) | PC Card modem completes Hayes/PPP and Web Browser 4.0 fetches a deterministic local page | Covered for the PC Card PPP route |
-| Telephone and built-in modem | The built-in fax modem uses a telephone line, presents receive-fax/answer choices, and can fax visible pages through Magic lamp → Fax (pp. 76–78, 94–95, 135–163, 216) | ROM V.32/fax code and continuous DMA execute; one held ring opens Phone Status; **receive fax** starts live-call `AnswerModem`, both fax HDLC directions, the Receiving fax window and non-silent PCM; the outbound Fax workflow creates/selects a recipient, renders the screen, dials `5551212`, initializes fax and starts DMA; a full-duplex PCM bridge exchanges every word and its combined exchange mode supplies origin dial tone before peer PCM | Internal ROM/DSP, digital DAA, incoming/fax-answer UI, fax-origin UI and dialing, normal Telephone dialing and remote PCM transport covered; carrier/data and completed fax transfer are missing |
+| Telephone and built-in modem | The built-in fax modem uses a telephone line, presents receive-fax/answer choices, and can fax visible pages through Magic lamp → Fax (pp. 76–78, 94–95, 135–163, 216) | ROM V.32/fax code and continuous DMA execute; one held ring opens Phone Status; **receive fax** starts live-call `AnswerModem`, both fax HDLC directions, the Receiving fax window and non-silent PCM; a clocked two-DataRover run creates/selects a recipient, dials `5551212`, enters both product fax roles, exchanges fax/HDLC and reaches sender plus receiver image-data callbacks | Internal ROM/DSP, digital DAA, both fax UIs, dialing, normal Telephone dialing, remote PCM transport and fax image-data entry covered; data-modem carrier and a persisted/rendered received fax page are missing |
 | Storeroom and packages | Packages can be moved, unpacked, sent, backed up and restored through Storeroom (pp. 179–206) | PCLink installs a real package; Storeroom creates a card-resident built-in backup and restores it in a fresh process | Package installation and full built-in backup/restore covered |
 | Storage cards | A card inserted while off is offered for setup after power-on; Option-insert while running can erase/setup it; Magic Cap displays card battery state and can translate older packages (pp. 183–198, 210–215) | Erased `BLNK` setup/naming, persistent `RAMC` remount, live Option-insert reformat, Good/Low/Dead BVD states, a card-backed Notebook object, and built-in backup/restore pass across process boundaries; `Translation.pkg` copies an authentic 1.x `new items` package into Built-in storage and exposes its Notebook page without source writes | Covered |
 | Power | Main and backup batteries are displayed; AC operation recharges the main cell; automatic shutoff defaults to five minutes and is adjustable from 1–60 minutes, optionally while plugged in (pp. 209–211) | Battery ADC levels, AC/cover inputs, retained-RAM suspend/wake, LCD/Magic Bus rail effects and charger-driven main-ADC rise pass; the real Power Controls show 5, clamp at 1/60, and govern plugged-in `SLEE`/VCC-off shutdown | Covered |
@@ -108,12 +108,12 @@ the contract for future archived WaveLAN, NE2000 and wireless-card work.
 These are product-level tests, ordered by how directly they close known
 hardware gaps:
 
-1. **Built-in line side.** Replace independent frame-timed ringing with the
-   relay's measured origin-byte gate, then advance the already bidirectional
-   fax/HDLC session from initial `SendFaxImageData` calls into receiver image
-   mode and a stored page. Both product startups, answer detection, the
-   incoming call object, digit-dependent analog output, and remote transport
-   are now covered.
+1. **Complete received-fax delivery.** The measured origin-byte ring gate and
+   clocked exchange now advance bidirectional fax/HDLC through sender and
+   receiver image-data callbacks. Continue from that receiver image mode to a
+   persisted page and verify it visibly after reopening. Both product
+   startups, answer detection, the incoming call object, digit-dependent
+   analog output, and remote transport are covered.
 2. **Magic Bus topology.** Replace the single optional endpoint with an
    addressable collection, prove two descriptors on one bus, and cover another
    documented class such as an external modem or PC interface.

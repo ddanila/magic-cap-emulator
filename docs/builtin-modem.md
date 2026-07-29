@@ -115,6 +115,22 @@ DMA startup. The visible Sending fax window and the 48-word bidirectional DMA
 ring are also required. A silent test exchange cannot answer, so this claims
 the genuine originating and dialing startup, not carrier or page transfer.
 
+The complete paired product path uses the same calibrated source for two
+isolated copies:
+
+```sh
+python3 tools/fax_pair_regression.py \
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
+```
+
+The origin repeats the visible recipient-creation workflow while the answerer
+waits at the ordinary Desk. A central-office relay returns equal-duration
+silence during dialing instead of queuing stale caller audio at the answerer.
+After 300,000 caller PCM bytes it holds the caller, rings the answerer, waits
+for the real **receive fax** workflow to emit its first modem samples, then
+exchanges both streams with at most one 4 KiB block of skew. Result markers
+keep each emulator alive until both have recorded their counters.
+
 The automatic exchange supplies the North American continuous dial tone,
 350 Hz plus 440 Hz, only while the line is connected and Betty is off-hook.
 It uses phase accumulators at Dino's programmed telecom rate, so its samples
@@ -269,10 +285,9 @@ python3 tools/telephone_bridge_regression.py
 
 It requires every receive word on each DataRover to equal the other
 DataRover's transmit word and verifies nonzero byte counts in both relay
-directions. This closes the external bidirectional PCM transport; it does not
-yet claim carrier. The next test must run the real originating and answering
-software-modem state machines over this bridge and require both to report
-carrier before attempting data or fax.
+directions. This closes the raw external bidirectional PCM transport. The
+paired-fax regression below supplies the product-level, clocked call exchange;
+data-modem carrier remains a separate open acceptance target.
 
 ## Paired carrier baseline
 
@@ -321,16 +336,21 @@ V.21-like FSK; replaying it through a single socket peer makes the origin run
 fax RX/TX, exchange HDLC, and call `SendFaxImageData` 71 times. This proves
 answer generation, bridge framing, and origin detection independently.
 
-The paired result is now one layer farther. Relay first-activity timing shows
-that frame-scheduled answer startup varies substantially before both telecom
-streams exist. A run connected near 236 KiB of origin output and reached
-origin fax receive plus two HDLC frames. Another connected earlier, initialized
-fax nine times on both ROMs, ran bidirectional fax DSP, exchanged 7/4 origin
-and 4/12 answer HDLC calls, and reached two real origin
-`SendFaxImageData` calls before both UIs reported failure. The next harness
-must trigger the physical ring from origin byte count rather than independent
-video frames, then require receiver image mode and a stored page. Completed
-fax-page transfer remains unclaimed.
+The maintained paired result closes that timing layer. Independent video-frame
+schedules were unsuitable before both telecom streams existed: one machine
+could accumulate stale audio or advance its modem timeout while the other UI
+was still answering. The byte-gated relay instead creates one line timeline
+with setup silence, caller hold, and bounded post-answer skew. A representative
+passing run decoded `5551212`; initialized fax nine times on each ROM; ran
+fax receive/transmit and 4/4 origin plus 2/4 answer HDLC calls; reached two
+origin `SendFaxImageData`, two answer `StartReceiveFaxImageData`, and five
+answer `ReceiveFaxImageData` calls; and retained 827,888 bytes of non-silent
+bidirectional PCM. Both visible progress windows changed during the call.
+
+This proves real product-to-product negotiation through receiver image mode.
+It does not yet claim that Magic Cap committed the completed fax object to
+storage or rendered the received page after reopening it; that persisted-page
+check is the next fax acceptance layer.
 
 ## Published design cross-check
 

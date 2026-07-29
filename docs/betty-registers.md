@@ -220,6 +220,9 @@ python3 tools/fax_receive_regression.py \
 # Product fax-origin path; same retained-state requirement:
 python3 tools/fax_origin_regression.py \
   --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
+# Complete two-DataRover product fax path; same retained-state requirement:
+python3 tools/fax_pair_regression.py \
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
 ```
 
 The loopback run requires all 64 words to arrive, the half, end and pointer
@@ -246,6 +249,10 @@ non-silent external PCM capture, and the Receiving fax progress window.
 `tools/fax_origin_regression.py` follows the visible Desk/Magic lamp/Fax
 workflow, creates and selects a fax recipient, requires the exchange to decode
 `5551212`, and checks fax initialization plus the 48-word RX/TX DMA ring.
+`tools/fax_pair_regression.py` runs those visible origin actions beside the
+real incoming-call/**receive fax** workflow. Its byte-gated, clocked exchange
+requires fax receive/transmit and HDLC in both ROMs, sender image data,
+receiver image-data entry, and non-silent PCM in both directions.
 
 ## Verifying the sound path
 
