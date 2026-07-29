@@ -1,0 +1,13 @@
+# Optional host-side analysis environment.
+#
+# The emulator regression harnesses themselves only require Pillow.  The
+# remaining packages support PCM/modem analysis, plots, ELF inspection,
+# MIPS disassembly, serial experiments, and binary format prototyping.
+Pillow==12.3.0
+numpy==2.5.1
+scipy==1.18.0
+matplotlib==3.11.1
+capstone==5.0.7
+pyelftools==0.32
+pyserial==3.5
+construct==2.10.70

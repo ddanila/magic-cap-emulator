@@ -90,6 +90,7 @@ directory and write the asset tree as `$MAGIC_CAP_ASSETS`.
 | [`background.md`](docs/background.md) | The machine, the ROM, prior art, simulators, resources, verification philosophy |
 | [`developer-archives.md`](docs/developer-archives.md) | Public developer sources, adopted evidence, checksums and roadmap impact |
 | [`mame-bringup.md`](docs/mame-bringup.md) | Host setup, build, run, and the full regression suite |
+| [`local-tooling-handoff.md`](docs/local-tooling-handoff.md) | Optional Ghidra and reproducible Python analysis environment |
 | [`rom-layout.md`](docs/rom-layout.md) | ROM/SDK provenance, checksums, asset mirror, image format |
 | [`memory-map.md`](docs/memory-map.md) | Memory map, Dino peripheral block, Magic Bus, Glacier |
 | [`betty-registers.md`](docs/betty-registers.md) | Betty SIB ASIC registers, sound and telecom DMA |
