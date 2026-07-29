@@ -62,10 +62,12 @@ The full regression list and expected checkpoints are in
   error, and visibly show `Receiving page 1`. The extended acceptance observes
   an image-helper completion, relaunches copied receiver state, finds the new
   `a fax` In-box row, opens its one-page stationery, and renders the received
-  page. Fax transfer is therefore covered end to end; establishing
-  application-level carrier between the two generic V.32 data-modem roles is
-  the remaining line-side target. This is separate from the working PC Card
-  PPP path
+  page. Fax transfer is therefore covered end to end. A 96-byte,
+  process-clocked paired run now also advances the generic originating and
+  answering V.32 ROMs through R2/R3, E and B1 into data mode with matching
+  negotiated rates. Connecting that successful DSP carrier report to a real
+  Internet Center session is the remaining line-side target. This is separate
+  from the working PC Card PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 
 - **Expand Magic Bus beyond one keyboard.** The product connector supports

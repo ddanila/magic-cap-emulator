@@ -589,8 +589,8 @@ the separate serial-terminal view.
 | Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
 
 The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
-still incomplete. The current gaps include data-modem carrier, multi-device
-Magic Bus topology, and hardware fidelity beyond the register behavior
-exercised by the ROM; see
+still incomplete. The current gaps include handing paired ROM V.32 data mode
+to a real Internet Center connection, multi-device Magic Bus topology, and
+hardware fidelity beyond the register behavior exercised by the ROM; see
 [`PLAN.md`](../PLAN.md#remaining-work). Magic Bus discovery and its
 AT-keyboard traffic are functional and covered by the headless probe.

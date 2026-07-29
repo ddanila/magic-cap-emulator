@@ -14,6 +14,10 @@ from tools.telephone_pcm_relay import PcmRelay
 
 
 class TelephoneBridgeRegressionTests(unittest.TestCase):
+    def test_relay_rejects_invalid_read_size(self) -> None:
+        with self.assertRaisesRegex(ValueError, "invalid read size"):
+            PcmRelay(read_size=0)
+
     def test_config_selects_monitor_and_external_bridge(self) -> None:
         config = monitor_bridge_config("datarover840")
 
@@ -86,6 +90,102 @@ class TelephoneBridgeRegressionTests(unittest.TestCase):
             self.assertEqual(relay.captured[0], b"abc")
             self.assertEqual(relay.captured[1], b"")
             self.assertEqual(relay.started_at_peer_bytes, [0, None])
+        finally:
+            first.close()
+            second.close()
+            relay.stop()
+
+    def test_relay_reports_deterministic_connection_order(self) -> None:
+        relay = PcmRelay()
+        relay.start()
+        first = socket.create_connection((relay.host, relay.port))
+        self.assertTrue(relay.wait_for_peer_count(1, timeout=2))
+        second = socket.create_connection((relay.host, relay.port))
+        try:
+            self.assertTrue(relay.wait_for_peer_count(2, timeout=2))
+            self.assertEqual(relay.peer_count, 2)
+        finally:
+            first.close()
+            second.close()
+            relay.stop()
+
+    def test_process_controller_pauses_the_leading_pcm_producer(self) -> None:
+        changes: list[tuple[int, bool]] = []
+        relay = PcmRelay(startup_grace=4, max_skew=4)
+        relay.start()
+        first = socket.create_connection((relay.host, relay.port))
+        self.assertTrue(relay.wait_for_peer_count(1, timeout=2))
+        second = socket.create_connection((relay.host, relay.port))
+        self.assertTrue(relay.wait_for_peer_count(2, timeout=2))
+        relay.set_process_controller(
+            lambda index, paused: changes.append((index, paused))
+        )
+        try:
+            first.sendall(b"abcd")
+            deadline = time.monotonic() + 2
+            while (0, True) not in changes and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertIn((0, True), changes)
+
+            second.sendall(b"wxyz")
+            deadline = time.monotonic() + 2
+            while (0, False) not in changes and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertIn((0, False), changes)
+            self.assertEqual(relay.forwarded, [4, 4])
+        finally:
+            first.close()
+            second.close()
+            relay.stop()
+
+    def test_process_controller_releases_when_lagging_pcm_stalls(self) -> None:
+        changes: list[tuple[int, bool]] = []
+        relay = PcmRelay(
+            startup_grace=4,
+            max_skew=4,
+            process_clock_stale_after=0.05,
+        )
+        relay.start()
+        first = socket.create_connection((relay.host, relay.port))
+        self.assertTrue(relay.wait_for_peer_count(1, timeout=2))
+        second = socket.create_connection((relay.host, relay.port))
+        self.assertTrue(relay.wait_for_peer_count(2, timeout=2))
+        relay.set_process_controller(
+            lambda index, paused: changes.append((index, paused))
+        )
+        try:
+            first.sendall(b"abcd")
+            deadline = time.monotonic() + 2
+            while (0, False) not in changes and time.monotonic() < deadline:
+                time.sleep(0.01)
+
+            self.assertIn((0, True), changes)
+            self.assertIn((0, False), changes)
+        finally:
+            first.close()
+            second.close()
+            relay.stop()
+
+    def test_process_controller_releases_when_peer_process_exits(self) -> None:
+        changes: list[tuple[int, bool]] = []
+        relay = PcmRelay(startup_grace=4, max_skew=4)
+        relay.start()
+        first = socket.create_connection((relay.host, relay.port))
+        self.assertTrue(relay.wait_for_peer_count(1, timeout=2))
+        second = socket.create_connection((relay.host, relay.port))
+        self.assertTrue(relay.wait_for_peer_count(2, timeout=2))
+        relay.set_process_controller(
+            lambda index, paused: changes.append((index, paused))
+        )
+        try:
+            first.sendall(b"abcd")
+            deadline = time.monotonic() + 2
+            while (0, True) not in changes and time.monotonic() < deadline:
+                time.sleep(0.01)
+            relay.mark_peer_inactive(1)
+
+            self.assertIn((0, True), changes)
+            self.assertEqual(changes[-1], (0, False))
         finally:
             first.close()
             second.close()

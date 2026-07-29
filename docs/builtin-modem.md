@@ -321,13 +321,23 @@ through `SoftModemCommandHandler`, rather than calling guessed DSP helpers:
 
 The trace confirms both data receive/transmit callbacks, the V.32
 pump/control/FIR path, clean return from debugger-injected setup, and command
-2 with role `1`. A representative 20-second training window forwards roughly
-135–159 KiB per direction. Both streams are non-silent, with peaks around
-10,400 and 15,800 and RMS levels around 6,900 and 7,800. Word-aligned line
-experiments preserve all four bytes of each DMA word: reversing signed
-16-bit polarity leaves those levels unchanged, while 12 dB attenuation plus
-14-bit quantization produces 2,600–4,000 peaks and 1,700–1,900 RMS. Neither
-changes the no-carrier result.
+2 with role `1`. The bridge now exposes deterministic peer connection order,
+96-byte half-DMA reads and optional process-clock control. Holding whichever
+emulator leads the PCM byte clock removes host socket buffering from the
+training timeline. A paired-delivery run forwarded 215,912 and 215,916 bytes,
+set both ROM detector flags, negotiated the same `0xfff0` rate word, called
+`V32DataPumpReportStatus`, and advanced both sides through E and B1 into
+`V32DataModeRxState`. This closes ROM-to-ROM V.32 carrier acquisition at the
+DSP boundary.
+
+Both streams are non-silent. Earlier word-aligned experiments preserve all
+four bytes of each DMA word: reversing signed 16-bit polarity leaves their
+levels unchanged, while 12 dB attenuation plus 14-bit quantization lowers
+them as expected. A paired two-wire-hybrid experiment that adds a -20 dB
+local echo also follows the same training frontier; synthetic echo is not
+required for carrier. The decisive condition is allowing enough synchronized
+training time: at ten seconds both roles are still in the complementary
+R2/R3 waits, while by fifteen seconds both have entered data mode.
 
 The live Dino SIB control value is `0x00a79923`: telecom 16-bit mode is set
 and divisor `0x27` selects 7,200 samples/s. Telecom size `0x00bc` describes
@@ -342,10 +352,16 @@ reaches `AnswerModem`, issues 24 softmodem commands during the observed
 interval, installs `SoftModemLineHandler`, runs both `FaxModemRcv` and
 `FaxModemXmt`, exercises HDLC receive/send, and produces non-silent PCM.
 
-This narrows the remaining failure: raw full-duplex transport, scheduler
-skew, silent DSP output, answer-role selection, simple polarity, a broad
-direct-to-attenuated gain range, incoming call-object creation, and the real
-fax-answer and fax-origin startups have all been addressed or excluded. A
+This narrows the remaining product-level gap: raw full-duplex transport,
+scheduler skew, silent DSP output, answer-role selection, simple polarity, a
+broad direct-to-attenuated gain range, V.32 carrier, incoming call-object
+creation, and the real fax-answer and fax-origin startups have all been
+addressed or excluded. The direct carrier harness does not create an Internet
+Center connection object, so its successful DSP status report does not call
+`DataModemReportModemSignal` or
+`SoftwareModemStatusHandlerCallback`. Driving a real application session
+through that already-working carrier handoff remains distinct from proving
+the paired ROM data pumps. A
 captured answer stream begins with the expected strong 2,100 Hz CED and then
 V.21-like FSK; replaying it through a single socket peer makes the origin run
 fax RX/TX, exchange HDLC, and call `SendFaxImageData` 71 times. This proves
