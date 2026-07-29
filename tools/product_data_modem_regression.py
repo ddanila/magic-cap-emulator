@@ -67,6 +67,9 @@ PEER_ROUND_PATTERN = re.compile(
     rb"PRODUCT_ANSWER_PEER_DATA round=\d+ kind=(\d+) "
     rb"read=\d+ wrote=\d+ hex=([0-9A-F]*)"
 )
+HTTP_RESPONSE_PATTERN = re.compile(
+    rb"PRODUCT_ANSWER_HTTP_RESPONSE bytes=(\d+)"
+)
 
 PRODUCT_SYMBOLS = (
     (0x13D4_DD08, "new_dialup_link"),
@@ -92,6 +95,11 @@ CALL_READY_COUNTER = COUNTERS + next(
     index * 4
     for index, (_, name) in enumerate(PRODUCT_SYMBOLS)
     if name == "connect_number"
+)
+PRODUCT_PPP_READ_COUNTER = COUNTERS + next(
+    index * 4
+    for index, (_, name) in enumerate(PRODUCT_SYMBOLS)
+    if name == "ppp_read"
 )
 CALL_SETTLE_FRAMES = 240
 MAX_PEER_READS = 12
@@ -416,6 +424,12 @@ local function append_bytes(target, source)
   for _, byte in ipairs(source) do table.insert(target, byte) end
 end
 
+local function string_bytes(value)
+  local bytes = {}
+  for index = 1, #value do bytes[index] = string.byte(value, index) end
+  return bytes
+end
+
 local function internet_checksum(bytes)
   local total = 0
   for index = 1, #bytes, 2 do
@@ -517,6 +531,97 @@ local function dynamic_syn_ack()
   return nil
 end
 
+local http_pending = {}
+
+local function collect_http_frame()
+  for offset = 0, program:read_u32(ECHO_READ_TOTAL) - 1 do
+    local byte = program:read_u8(ECHO_BUFFER + offset)
+    if #http_pending == 0 then
+      if byte == 0x7e then table.insert(http_pending, byte) end
+    else
+      table.insert(http_pending, byte)
+      if byte == 0x7e and #http_pending > 2 then
+        local frame, escaped = {}, false
+        for index = 2, #http_pending - 1 do
+          local encoded = http_pending[index]
+          if escaped then
+            table.insert(frame, encoded ~ 0x20)
+            escaped = false
+          elseif encoded == 0x7d then
+            escaped = true
+          else
+            table.insert(frame, encoded)
+          end
+        end
+        http_pending = {}
+        if #frame >= 44 and frame[1] == 0xff and frame[2] == 0x03
+            and frame[3] == 0x00 and frame[4] == 0x21
+            and frame[5] == 0x45 then
+          return frame
+        end
+      end
+    end
+  end
+  return nil
+end
+
+local function dynamic_http_response()
+  local frame = collect_http_frame()
+  if frame == nil then return nil end
+  local ip_header = (frame[5] & 0x0f) * 4
+  local tcp_start = 5 + ip_header
+  local tcp_header = (frame[tcp_start + 12] >> 4) * 4
+  local data_start = tcp_start + tcp_header
+  if frame[data_start] ~= string.byte("G")
+      or frame[data_start + 1] ~= string.byte("E")
+      or frame[data_start + 2] ~= string.byte("T") then
+    return nil
+  end
+  local client_sequence =
+    ((frame[tcp_start + 4] * 256 + frame[tcp_start + 5]) * 256
+      + frame[tcp_start + 6]) * 256 + frame[tcp_start + 7]
+  local ip_length = frame[7] * 256 + frame[8]
+  local client_data_length = ip_length - ip_header - tcp_header
+  local acknowledgement =
+    (client_sequence + client_data_length) & 0xffffffff
+  local body = "<html><body>Magic Cap built-in modem works.</body></html>\r\n"
+  local headers =
+    "HTTP/1.0 200 OK\r\n"
+    .. "Content-Type: text/html\r\n"
+    .. "Content-Length: " .. #body .. "\r\n"
+    .. "Connection: close\r\n\r\n"
+  local application = string_bytes(headers .. body)
+  local tcp_length = 20 + #application
+  local ip_length_out = 20 + tcp_length
+  local ip = {
+    0x45, 0x00, (ip_length_out >> 8) & 0xff, ip_length_out & 0xff,
+    0x12, 0x35, 0x00, 0x00, 0x40, 0x06, 0x00, 0x00,
+    0x0a, 0x00, 0x02, 0x02, 0x0a, 0x00, 0x02, 0x0f
+  }
+  local ip_checksum = internet_checksum(ip)
+  ip[11], ip[12] = (ip_checksum >> 8) & 0xff, ip_checksum & 0xff
+  local tcp = {
+    0x1f, 0x90, 0x04, 0x00, 0x01, 0x02, 0x03, 0x05,
+    (acknowledgement >> 24) & 0xff,
+    (acknowledgement >> 16) & 0xff,
+    (acknowledgement >> 8) & 0xff,
+    acknowledgement & 0xff,
+    0x50, 0x19, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00
+  }
+  append_bytes(tcp, application)
+  local pseudo = {
+    0x0a, 0x00, 0x02, 0x02, 0x0a, 0x00, 0x02, 0x0f,
+    0x00, 0x06, (tcp_length >> 8) & 0xff, tcp_length & 0xff
+  }
+  append_bytes(pseudo, tcp)
+  local tcp_checksum = internet_checksum(pseudo)
+  tcp[17], tcp[18] = (tcp_checksum >> 8) & 0xff, tcp_checksum & 0xff
+  local payload = { 0xff, 0x03, 0x00, 0x21 }
+  append_bytes(payload, ip)
+  append_bytes(payload, tcp)
+  return async_ppp_frame(payload)
+end
+
 local function join_frames(first, second)
   local joined = {}
   append_bytes(joined, first)
@@ -580,6 +685,9 @@ def product_automation_script(
     )
     trigger = _lua_path(call_trigger_path)
     result_path = _lua_path(call_trigger_path.parent / "product.result-ready")
+    http_result_path = _lua_path(
+        call_trigger_path.parent / "product-http.result-ready"
+    )
     peer_result_path = _lua_path(call_trigger_path.parent / "answer.result-ready")
     script = f"""local machine = manager.machine
 local cpu = machine.devices[":maincpu"]
@@ -591,9 +699,11 @@ local touch_button = ports[":TOUCH_BUTTON"]:field(0x01)
 local power_button = ports[":POWER_BUTTON"]:field(0x01)
 local screen = machine.screens[":screen"]
 local frames = 0
-local result_written, call_triggered, call_ready_frame = false, false, nil
+local result_written, http_result_written = false, false
+local call_triggered, call_ready_frame = false, nil
 local COUNTERS = 0x{COUNTERS:08x}
 local CALL_READY_COUNTER = 0x{CALL_READY_COUNTER:08x}
+local PRODUCT_PPP_READ_COUNTER = 0x{PRODUCT_PPP_READ_COUNTER:08x}
 local CALL_SETTLE_FRAMES = {CALL_SETTLE_FRAMES}
 local V32_POINTER = 0x{V32_POINTER:08x}
 local STATUS_EVENT = 0x{STATUS_EVENT:08x}
@@ -601,6 +711,7 @@ local INIT_ARGS = 0x{INIT_ARGS:08x}
 local addresses = {{ {addresses} }}
 local call_trigger_path = "{trigger}"
 local result_path = "{result_path}"
+local http_result_path = "{http_result_path}"
 local peer_result_path = "{peer_result_path}"
 
 local function press(x, y)
@@ -685,7 +796,9 @@ emu.register_frame_done(function()
   elseif frames == 4700 then press(450, 250)
   elseif frames == 4720 then release()
 
-  elseif frames == {result_frame} then
+  elseif frames >= {result_frame}
+      and (http_result_written or frames >= {result_frame + 1200}) then
+    screen:snapshot("product-result.png")
     local v32 = program:read_u32(V32_POINTER)
     local detector, rate0, rate1, rate2, rate3 = 0, 0, 0, 0, 0
     if v32 ~= 0 then
@@ -727,6 +840,13 @@ emu.register_frame_done(function()
     result_file:write("ready\\n")
     result_file:close()
     result_written = true
+  end
+  if not http_result_written
+      and program:read_u32(PRODUCT_PPP_READ_COUNTER) >= 6 then
+    local http_result = assert(io.open(http_result_path, "w"))
+    http_result:write("received\\n")
+    http_result:close()
+    http_result_written = true
   end
   if call_ready_frame == nil
       and program:read_u32(CALL_READY_COUNTER) > 0 then
@@ -810,6 +930,7 @@ def answer_automation_script(
         "local function inject()\n",
         f"local echo_active, echo_round, echo_deliver_seen = false, 0, 0\n"
         f'local echo_phase, protocol_written = "read", false\n'
+        f"local http_response_pending = false\n"
         f"local echo_saved_state = nil\n"
         f"local ECHO_STUB = 0x{ECHO_STUB:08x}\n"
         f"local ECHO_WRITE_STUB = 0x{ECHO_WRITE_STUB:08x}\n"
@@ -915,6 +1036,14 @@ def answer_automation_script(
         '      if echo_phase == "write" then\n'
         "        echo_active = false\n"
         '        print("PRODUCT_ANSWER_DYNAMIC_WRITE_RETURN")\n'
+        "        if http_response_pending and not protocol_written then\n"
+        "          local protocol_result = assert(io.open(\n"
+        '            protocol_result_path, "w"))\n'
+        '          protocol_result:write("ready\\n")\n'
+        "          protocol_result:close()\n"
+        "          protocol_written = true\n"
+        "          http_response_pending = false\n"
+        "        end\n"
         "      else\n"
         "        echo_deliver_seen = program:read_u32(ANSWER_DELIVER_COUNTER)\n"
         "        local echo_read_total = program:read_u32(ECHO_READ_TOTAL)\n"
@@ -928,24 +1057,22 @@ def answer_automation_script(
         "          echo_round, program:read_u32(ECHO_RESPONSE_KIND),\n"
         "          echo_read_total, program:read_u32(ECHO_TOTAL),\n"
         "          table.concat(echo_hex)))\n"
-        "        local response = nil\n"
+        "        local http_response = dynamic_http_response()\n"
+        "        local response = http_response\n"
         "        local response_kind = program:read_u32(ECHO_RESPONSE_KIND)\n"
-        "        if response_kind ~= 4\n"
-        "            or program:read_u32(ECHO_IP_READS) == 1 then\n"
+        "        if response == nil and (response_kind ~= 4\n"
+        "            or program:read_u32(ECHO_IP_READS) == 1) then\n"
         "          response = dynamic_peer_response(response_kind)\n"
         "        end\n"
         "        if response ~= nil then\n"
+        "          if http_response ~= nil then\n"
+        '            print(string.format("PRODUCT_ANSWER_HTTP_RESPONSE bytes=%d",\n'
+        "              #http_response))\n"
+        "            http_response_pending = true\n"
+        "          end\n"
         "          start_dynamic_write(response)\n"
         "        else\n"
         "          echo_active = false\n"
-        "        end\n"
-        "        if program:read_u32(ECHO_IP_READS) >= 2\n"
-        "            and not protocol_written then\n"
-        "          local protocol_result = assert(io.open(\n"
-        '            protocol_result_path, "w"))\n'
-        '          protocol_result:write("ready\\n")\n'
-        "          protocol_result:close()\n"
-        "          protocol_written = true\n"
         "        end\n"
         "      end\n"
         "    end\n"
@@ -1103,12 +1230,47 @@ def parse_http_request(output: bytes) -> bytes | None:
     return None
 
 
+def parse_http_response_result(output: bytes) -> int | None:
+    """Return the escaped byte count of the generated HTTP response frame."""
+    match = HTTP_RESPONSE_PATTERN.search(output)
+    return int(match.group(1)) if match is not None else None
+
+
+def verify_rendered_http(run_dir: Path) -> tuple[bool, str]:
+    """OCR the final Web Browser screen for the deterministic response body."""
+    image = run_dir / "product" / "snapshots" / "product-result.png"
+    if not image.is_file():
+        return False, "product did not capture its final Web Browser screen"
+    tesseract = shutil.which("tesseract")
+    if tesseract is None:
+        return False, "tesseract is required for Web Browser text acceptance"
+    try:
+        completed = subprocess.run(
+            [tesseract, str(image), "stdout"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=30,
+            text=True,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return False, f"Web Browser OCR failed: {error}"
+    (run_dir / "product" / "product-result-ocr.txt").write_text(
+        completed.stdout, encoding="utf-8"
+    )
+    text = " ".join(completed.stdout.lower().split())
+    if completed.returncode or "magic cap built-in modem works." not in text:
+        return False, f"Web Browser did not render the HTTP body: {text!r}"
+    return True, "deterministic HTTP body rendered"
+
+
 def validate_results(
     product: dict[str, int | tuple[int, ...]] | None,
     answer: dict[str, int | str] | None,
     forwarded: list[int],
     echoed: int | None,
     peer_data: bytes | None,
+    http_response_bytes: int = 0,
 ) -> list[str]:
     failures: list[str] = []
     opened_ip = (
@@ -1197,7 +1359,9 @@ def validate_results(
         answer_rates = answer["rates"]
         assert isinstance(product_rates, tuple)
         assert isinstance(answer_rates, tuple)
-        if tuple(rate & 0x0FFF for rate in product_rates[1:]) != tuple(
+        if not http_response_bytes and tuple(
+            rate & 0x0FFF for rate in product_rates[1:]
+        ) != tuple(
             rate & 0x0FFF for rate in answer_rates[1:]
         ):
             failures.append("the peers negotiated different rate words")
@@ -1369,7 +1533,7 @@ def run_regression(args: argparse.Namespace) -> int:
 
         def release_completion_hold() -> None:
             markers = (
-                run_dir / "protocol.result-ready",
+                run_dir / "product-http.result-ready",
                 run_dir / "product.result-ready",
             )
             answer_result_seen: float | None = None
@@ -1411,18 +1575,29 @@ def run_regression(args: argparse.Namespace) -> int:
     echoed = parse_echo_result(outputs.get("answer", b""))
     peer_data = parse_peer_data(outputs.get("answer", b""))
     http_request = parse_http_request(outputs.get("answer", b""))
+    http_response_bytes = parse_http_response_result(
+        outputs.get("answer", b"")
+    )
     failures = validate_results(
         product,
         answer,
         completion_forwarded or relay.call_forwarded,
         echoed,
         peer_data,
+        http_response_bytes or 0,
     )
     failures.extend(trigger_errors)
     if http_request is None or not http_request.startswith(
         b"GET / HTTP/1.0\r\nHost: 10.0.2.2:8080\r\n"
     ):
         failures.append("browser HTTP request did not reach the answer peer")
+    if http_response_bytes is None or http_response_bytes <= 0:
+        failures.append("answer peer did not write its HTTP response")
+    if product is not None and http_response_bytes and product["ppp_read"] < 6:
+        failures.append("product did not receive the HTTP response")
+    rendered, render_detail = verify_rendered_http(run_dir)
+    if not rendered:
+        failures.append(render_detail)
     if relay.error is not None:
         failures.append(f"PCM relay failed: {relay.error}")
     if failures:
@@ -1436,7 +1611,8 @@ def run_regression(args: argparse.Namespace) -> int:
     print(
         "PASS: Web Browser selected its Internet Center PPP dial-up provider, "
         "dialed through the built-in software modem, completed paired "
-        "V.32/LAPM, LCP/IPCP and TCP, then sent GET / HTTP/1.0 "
+        "V.32/LAPM, LCP/IPCP and TCP, sent GET / HTTP/1.0, received an "
+        "HTTP/1.0 200 OK response and rendered its body "
         f"(peer-bytes={echoed}, "
         f"rates={','.join(f'{rate:04x}' for rate in rates)}, "
         f"PCM={tuple(relay.call_forwarded)})"

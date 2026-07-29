@@ -18,7 +18,7 @@ The full regression list and expected checkpoints are in
 | Battery & supply inputs | Both ADC channels answer within the ROM's own calibration thresholds, so the spurious backup-battery warning is gone; battery levels, AC adapter and battery cover are selectable, and removing the cover raises the IO interrupt the OS services | [`power-wake.md`](docs/power-wake.md#battery-levels) |
 | Power outputs, charging & policy | MFIO LCD power blanks scanout without destroying the framebuffer; active-high Magic Bus Vcc-off removes and rediscovers its peripheral; AC plus charger enable advances the main-battery ADC; the real Power Controls clamp 1–60 minutes and automatic AC idle shutoff follows its checkbox | [`power-wake.md`](docs/power-wake.md#outputs-the-os-writes) |
 | Sound I/O | ROM's startup tone (unbuffered hold register), buffered SIB sound-TX/RX DMA, host or deterministic microphone input, and Magic Cap's sound-stamp record/stop/play workflow | [`betty-registers.md`](docs/betty-registers.md) |
-| Built-in software modem | Continuous 48-word SIB telecom DMA drives the ROM's V.32 and fax paths through TX39 DSP extensions; the Betty DAA hookswitch/line input and Dino ring detector are modelled; a held ring opens Phone Status, whose real **receive fax** action reaches `AnswerModem`, fax HDLC and non-silent PCM; the visible outbound Fax workflow creates a recipient, renders a screen and dials `5551212`; a clocked two-DataRover exchange runs both product fax roles through retained In-box storage, stationery and a reopened rendered page; the deterministic exchange also supplies dial tone and decodes DTMF/pulse dialing; the visible Telephone output decodes as `580`; Web Browser selects an Internet Center provider mapped to `PPP dialup`, completes V.32/LAPM, LCP/IPCP and a dynamic TCP handshake, then sends `GET / HTTP/1.0` to `10.0.2.2:8080` | [`builtin-modem.md`](docs/builtin-modem.md) |
+| Built-in software modem | Continuous 48-word SIB telecom DMA drives the ROM's V.32 and fax paths through TX39 DSP extensions; the Betty DAA hookswitch/line input and Dino ring detector are modelled; a held ring opens Phone Status, whose real **receive fax** action reaches `AnswerModem`, fax HDLC and non-silent PCM; the visible outbound Fax workflow creates a recipient, renders a screen and dials `5551212`; a clocked two-DataRover exchange runs both product fax roles through retained In-box storage, stationery and a reopened rendered page; the deterministic exchange also supplies dial tone and decodes DTMF/pulse dialing; the visible Telephone output decodes as `580`; Web Browser selects an Internet Center provider mapped to `PPP dialup`, completes V.32/LAPM and LCP/IPCP, exchanges dynamic TCP, sends `GET / HTTP/1.0`, receives `HTTP/1.0 200 OK`, and renders the response body | [`builtin-modem.md`](docs/builtin-modem.md) |
 | Magic Bus | Address assignment and reinitialization, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | TX39 extensions | `MADD`/`MADDU` plus three-operand `MULT`/`MULTU` implemented; all four verify `rd`, `HI`, and `LO`, covering 792 multiply/add and 89 destination-writing multiply uses in the SDK ELF | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core, completes TCP through rootless libslirp, renders deterministic local HTTP, carries Browser 3.5's native HTTPS Rule through a host TLS proxy, and can browse public HTTPS sites through a guarded loopback launcher | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
@@ -85,8 +85,13 @@ The full regression list and expected checkpoints are in
   concatenated retransmissions. It preserves live LCP/IPCP identifiers and
   options, derives the SYN acknowledgement from the randomized sequence, and
   computes IP/TCP checksums plus PPP FCS. Magic Cap accepts the SYN-ACK and
-  sends `GET / HTTP/1.0` with `Host: 10.0.2.2:8080`. The remaining line-side
-  target is returning HTTP data and bridging to a host endpoint. This is
+  sends `GET / HTTP/1.0` with `Host: 10.0.2.2:8080`. The peer reassembles the
+  request across ROM reads, returns a checksum-valid `HTTP/1.0 200 OK` with a
+  deterministic HTML body, and waits until the product PPP reader consumes
+  it. OCR verifies that Web Browser renders `Magic Cap built-in modem works.`;
+  its current one-segment FIN produces the browser's dropped-connection
+  notice after rendering. The remaining line-side target is a general host
+  endpoint bridge and graceful TCP close. This is
   separate from the working PC Card PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 

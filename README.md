@@ -55,8 +55,11 @@ also receives that LAPM-connect status, sends its first PPP bytes through the
 ROM modem, negotiates LCP with an answer-side peer, accepts an IPCP peer
 address, completes IPCP with its assigned `10.0.2.15` guest address, and sends
 a randomized IPv4/TCP SYN to `10.0.2.2:8080`. The answer peer derives the
-matching SYN-ACK and Magic Cap sends `GET / HTTP/1.0`. The remaining
-built-in-modem gap is returning HTTP data and bridging to a host endpoint.
+matching SYN-ACK, reassembles Magic Cap's split `GET / HTTP/1.0`, and returns
+a checksum-valid `HTTP/1.0 200 OK` response through the answer ROM. Web
+Browser renders `Magic Cap built-in modem works.` before reporting the
+deliberately closed deterministic connection. The remaining built-in-modem
+gap is a general host endpoint bridge and graceful TCP session teardown.
 The full status table and roadmap are in [`PLAN.md`](PLAN.md); the machine's
 hardware, history, and verification approach are in
 [`docs/background.md`](docs/background.md).

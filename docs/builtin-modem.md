@@ -420,11 +420,20 @@ immediately sends PPP protocol `0x0021`: an IPv4/TCP SYN from
 `10.0.2.15:1024` to `10.0.2.2:8080`. The peer derives its acknowledgement
 from the randomized sequence and computes fresh IP/TCP checksums and PPP FCS.
 Magic Cap accepts the SYN-ACK and sends `GET / HTTP/1.0` with
-`Host: 10.0.2.2:8080`. The product calls
+`Host: 10.0.2.2:8080`. The peer reassembles the request across multiple ROM
+reads, derives the acknowledgement from the complete TCP payload, and returns
+a checksum-valid `HTTP/1.0 200 OK` response with a deterministic HTML body.
+The harness keeps both modem processes on the same PCM clock until the
+product's own PPP-read counter confirms receipt. Tesseract then verifies
+`Magic Cap built-in modem works.` in the final Web Browser snapshot. The
+current combined data/FIN segment also causes the browser's
+`The connection was unexpectedly dropped.` notice after the body renders;
+graceful close sequencing remains part of the general bridge work. The
+product calls
 `SoftwareModem_Read`, `PPPServer_ReadPDU` and `LCP_ProcessFrame` throughout.
-This proves LCP/IPCP and the first IP packet across the complete ROM stack.
-Answering and bridging IP remain separate from the already working PC Card
-PPP path.
+This proves LCP/IPCP, bidirectional TCP and rendered HTTP across the complete
+ROM stack. A general host bridge remains separate from the already working
+PC Card PPP path.
 
 ROM reads are not packet-aligned: one observed 58-byte read contained an LCP
 Configure-Ack followed by an IPCP Configure-Request, while another contained
@@ -434,9 +443,12 @@ round number. Per-read logs record the selected protocol kind, exact escaped
 bytes and cumulative reply count. All responses are generated from the
 decoded live frame: retransmitted control IDs remain matched, IPCP is NAKed
 until the guest address really changes, and the TCP acknowledgement follows
-the randomized SYN. The captured HTTP request is split across ROM reads, so
-the next peer stage must reassemble it and return a deterministic response
-before a general host bridge is added.
+the randomized SYN. The captured HTTP request is split across ROM reads; the
+peer retains partial async-PPP frames, reconstructs the complete request and
+generates fresh IPv4, TCP and PPP checksums for its response. Its completion
+barrier distinguishes answer-side write return from product-side PPP
+consumption, avoiding a host-scheduling race that previously captured the
+screen before delivery.
 
 The live Dino SIB control value is `0x00a79923`: telecom 16-bit mode is set
 and divisor `0x27` selects 7,200 samples/s. Telecom size `0x00bc` describes
@@ -568,10 +580,11 @@ The product-level target is more specific. *Using Magic Cap*, pp. 135–163 and
 216, documents the built-in fax modem on a telephone line, including selectable
 tone/pulse dialing and fax workflows. The real Telephone now reaches its call
 screen, generates its tone-dialed number and crosses the line hardware.
-The product regression now drives the Internet Center through carrier, LAPM
-and a bidirectional PPP/LCP data unit, and the fax pair covers the complete
-send/receive workflow. Closing the remaining gap means replacing the
-diagnostic echo with a protocol-aware PPP peer and host-network bridge—not
-merely making the lower-level DSP or digital-DAA probes count more functions.
+The product regression now drives the Internet Center through carrier, LAPM,
+LCP/IPCP, TCP and a rendered deterministic HTTP response, and the fax pair
+covers the complete send/receive workflow. Closing the remaining gap means
+connecting the protocol-aware PPP peer to a general host-network endpoint and
+performing graceful TCP teardown—not merely making the lower-level DSP or
+digital-DAA probes count more functions.
 See
 [`user-guide.md`](user-guide.md).

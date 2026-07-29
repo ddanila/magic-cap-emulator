@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from tools.product_data_modem_regression import (
     HALF_DMA_BYTES,
@@ -14,12 +15,14 @@ from tools.product_data_modem_regression import (
     machine_config,
     parse_echo_result,
     parse_http_request,
+    parse_http_response_result,
     parse_peer_data,
     parse_product_result,
     ppp_fcs,
     product_automation_script,
     tcp_syn_ack_response,
     validate_results,
+    verify_rendered_http,
 )
 
 
@@ -38,8 +41,11 @@ class ProductDataModemScriptTests(unittest.TestCase):
         )
         self.assertNotIn("frames == 5100", script)
         self.assertIn("product.result-ready", script)
+        self.assertIn("product-http.result-ready", script)
         self.assertIn("answer.result-ready", script)
         self.assertIn("PRODUCT_DATA_MODEM_RESULT", script)
+        self.assertIn('screen:snapshot("product-result.png")', script)
+        self.assertIn("PRODUCT_PPP_READ_COUNTER) >= 6", script)
         self.assertNotIn("0x13c29434", script)
 
     def test_configs_select_exchange_for_product_and_bridge_for_answer(self) -> None:
@@ -70,7 +76,9 @@ class ProductDataModemScriptTests(unittest.TestCase):
         self.assertIn("PRODUCT_ANSWER_PEER_DATA", script)
         self.assertIn("dynamic_syn_ack", script)
         self.assertIn("dynamic_control_response", script)
+        self.assertIn("0x50, 0x19", script)
         self.assertIn("PRODUCT_ANSWER_DYNAMIC_WRITE_RETURN", script)
+        self.assertIn("PRODUCT_ANSWER_HTTP_RESPONSE", script)
         self.assertIn("PRODUCT_ANSWER_ECHO bytes=", script)
         self.assertIn("PRODUCT_ANSWER_ECHO_DATA hex=", script)
         self.assertIn("PRODUCT_ANSWER_LCP_REPLY read=", script)
@@ -120,6 +128,12 @@ class ProductDataModemScriptTests(unittest.TestCase):
 
 
 class ProductDataModemResultTests(unittest.TestCase):
+    def test_missing_http_result_image_is_rejected(self) -> None:
+        rendered, detail = verify_rendered_http(Path("/does/not/exist"))
+
+        self.assertFalse(rendered)
+        self.assertIn("final Web Browser screen", detail)
+
     PEER_IP_DATA = bytes.fromhex(
         "ff0300214500002c7c7300004006e648"
         "0a00020f0a00020204001f903f999b"
@@ -336,6 +350,12 @@ class ProductDataModemResultTests(unittest.TestCase):
         assert request is not None
         self.assertTrue(request.startswith(b"GET / HTTP/1.0\r\n"))
         self.assertIn(b"Host: 10.0.2.2:8080\r\n", request)
+        self.assertEqual(
+            parse_http_response_result(
+                b"PRODUCT_ANSWER_HTTP_RESPONSE bytes=231\n"
+            ),
+            231,
+        )
 
 
 if __name__ == "__main__":
