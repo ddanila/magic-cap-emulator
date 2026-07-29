@@ -223,6 +223,7 @@ python3 tools/fax_origin_regression.py \
 # Complete two-DataRover product fax path; same retained-state requirement:
 python3 tools/fax_pair_regression.py \
   --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
+# Add --verify-stored-page to relaunch and open the received In-box page.
 ```
 
 The loopback run requires all 64 words to arrive, the half, end and pointer
@@ -253,7 +254,9 @@ workflow, creates and selects a fax recipient, requires the exchange to decode
 real incoming-call/**receive fax** workflow. Its byte-gated, clocked exchange
 requires fax receive/transmit and HDLC in both ROMs, at least 64 sender and
 receiver image callbacks without a protocol error, and non-silent PCM in both
-directions.
+directions. Its longer `--verify-stored-page` mode requires an image-helper
+completion, then relaunches copied answer state and OCR-verifies the new
+In-box fax, its one-page stationery and rendered page.
 
 ## Verifying the sound path
 

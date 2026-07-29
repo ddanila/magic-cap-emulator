@@ -133,6 +133,19 @@ catches up. This prevents a virtual modem from advancing its timers through
 bytes still buffered in the host socket. Result markers release clock control
 and keep each emulator alive until both have recorded their counters.
 
+Add `--verify-stored-page` for the longer persistence acceptance. It waits for
+the image helper to complete, launches a third MAME process from a copy of the
+answerer's resulting NVRAM, and follows the user-guide sequence: Desk → In box
+→ newest fax → page thumbnail. Tesseract must recognize the `a fax` row,
+one-page received-fax stationery, `Fax page 1`, and `555-1212` in the rendered
+page:
+
+```sh
+python3 tools/fax_pair_regression.py \
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram" \
+  --verify-stored-page
+```
+
 The automatic exchange supplies the North American continuous dial tone,
 350 Hz plus 440 Hz, only while the line is connected and Betty is off-hook.
 It uses phase accumulators at Dino's programmed telecom rate, so its samples
@@ -355,9 +368,15 @@ The answer UI remained in `Receiving page 1` instead of showing the earlier
 image callbacks in each direction plus those zero-error conditions.
 
 This proves sustained real product-to-product transfer through receiver image
-mode. It does not yet claim that Magic Cap committed the completed fax object
-to storage or rendered the received page after reopening it; that
-persisted-page check is the next fax acceptance layer.
+mode. The extended run additionally sees one successful image-helper return.
+That session can contain a retried line error before successful cleanup, so
+the stored-page mode does not label every internal attempt error-free; instead
+it requires the successful completion and the stronger persisted result. On
+relaunch Magic Cap finishes `Cleaning up...`, the Desk shows a new In-box
+item, its top row is from DANILA SUKHAREV with subject `a fax`, the stationery
+says one page was received, and its thumbnail opens as a rendered `Fax page
+1`. This closes received-fax delivery from visible send through retained
+object and reopened page.
 
 ## Published design cross-check
 

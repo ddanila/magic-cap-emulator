@@ -56,6 +56,7 @@ RESULT_PATTERN = re.compile(
     + rb" telecom_words=(\d+) telecom_enables=(\d+)"
     + rb" protocol_errors=(\d+) last_error=(\d+) last_detail=(\d+)"
     + rb" image_zero_reads=(\d+) image_failures=(\d+) image_pages=(\d+)"
+    + rb" image_completions=(\d+)"
 )
 DIAGNOSTIC_NAMES = (
     "protocol_errors",
@@ -64,6 +65,7 @@ DIAGNOSTIC_NAMES = (
     "image_zero_reads",
     "image_failures",
     "image_pages",
+    "image_completions",
 )
 REQUIRED = {
     "origin": (
@@ -271,6 +273,7 @@ def automation_script(
     ring_trigger_path: Path,
     origin_result_frame: int = 9000,
     answer_result_offset: int = 3600,
+    origin_ready: bool = False,
 ) -> str:
     """Drive the visible origin or answer workflow and trace its fax path."""
     if role not in ("origin", "answer"):
@@ -325,6 +328,14 @@ def automation_script(
     elseif frames == 6000 then snapshot("fax-origin-active.png")
     end
 """
+    origin_ready_steps = """
+    -- Diagnostic shortcut for retained state already at the addressed Fax.
+    if frames == 1200 then snapshot("fax-addressed.png")
+    elseif frames == 1600 then press(326, 210)
+    elseif frames == 1620 then release()
+    elseif frames == 2000 then snapshot("fax-origin-active.png")
+    end
+"""
     answer_steps = """
     if ring_start == 0 then
       local trigger_file = io.open(ring_trigger_path, "r")
@@ -348,7 +359,10 @@ def automation_script(
       snapshot("fax-answer-active.png")
     end
 """
-    steps = origin_steps if role == "origin" else answer_steps
+    if role == "origin":
+        steps = origin_ready_steps if origin_ready else origin_steps
+    else:
+        steps = answer_steps
     finish = (
         f"frames == {origin_result_frame}"
         if role == "origin"
@@ -397,7 +411,7 @@ for index, address in ipairs(addresses) do
     string.format(
       "do d@0x%08x=d@0x%08x+1; g", counter, counter))
 end
-for index = 0, 5 do
+for index = 0, 6 do
   program:write_u32(DIAGNOSTICS + index * 4, 0)
 end
 cpu.debug:bpset(
@@ -422,6 +436,11 @@ cpu.debug:bpset(
   string.format(
     "do d@0x%08x=d@0x%08x+1; g",
     DIAGNOSTICS + 20, DIAGNOSTICS + 20))
+cpu.debug:bpset(
+  0x13e8bc8c, "R2==0",
+  string.format(
+    "do d@0x%08x=d@0x%08x+1; g",
+    DIAGNOSTICS + 24, DIAGNOSTICS + 24))
 cpu.debug:go()
 
 emu.register_frame_done(function()
@@ -434,7 +453,8 @@ emu.register_frame_done(function()
       "FAX_PAIR_RESULT role={role} {fields} "
       .. "telecom_words=%d telecom_enables=%d "
       .. "protocol_errors=%d last_error=%d last_detail=%d "
-      .. "image_zero_reads=%d image_failures=%d image_pages=%d",
+      .. "image_zero_reads=%d image_failures=%d image_pages=%d "
+      .. "image_completions=%d",
       {reads},
       ((size & 0x00003ffc) >> 2) + 1, dma & 3,
       program:read_u32(DIAGNOSTICS),
@@ -442,7 +462,8 @@ emu.register_frame_done(function()
       program:read_u32(DIAGNOSTICS + 8),
       program:read_u32(DIAGNOSTICS + 12),
       program:read_u32(DIAGNOSTICS + 16),
-      program:read_u32(DIAGNOSTICS + 20)))
+      program:read_u32(DIAGNOSTICS + 20),
+      program:read_u32(DIAGNOSTICS + 24)))
     local result_file = assert(io.open(result_path, "w"))
     result_file:write("ready\\n")
     result_file:close()
@@ -495,6 +516,151 @@ def parse_result(output: bytes, role: str) -> dict[str, int] | None:
     return None
 
 
+def stored_fax_script(result_frame: int = 3800) -> str:
+    """Reopen the newest In-box fax and its first rendered page."""
+    return f"""local machine = manager.machine
+local ports = machine.ioport.ports
+local touch_x = ports[":TOUCH_X"]:field(0xffff)
+local touch_y = ports[":TOUCH_Y"]:field(0xffff)
+local touch_button = ports[":TOUCH_BUTTON"]:field(0x01)
+local screen = machine.screens[":screen"]
+local frames = 0
+
+local function press(x, y)
+  touch_x:set_value(math.floor((x * 0xffff) / 479))
+  touch_y:set_value(math.floor((y * 0xffff) / 319))
+  touch_button:set_value(1)
+end
+
+local function release()
+  touch_button:set_value(0)
+end
+
+emu.register_frame_done(function()
+  frames = frames + 1
+  if frames == 600 then screen:snapshot("01-resumed.png")
+  elseif frames == 800 then press(414, 61)
+  elseif frames == 820 then release()
+  elseif frames == 1100 then press(34, 302)
+  elseif frames == 1120 then release()
+  elseif frames == 1500 then screen:snapshot("02-desk.png")
+  elseif frames == 1700 then press(205, 91)
+  elseif frames == 1720 then release()
+  elseif frames == 2200 then screen:snapshot("03-inbox.png")
+  elseif frames == 2400 then press(155, 57)
+  elseif frames == 2420 then release()
+  elseif frames == 2900 then screen:snapshot("04-fax-stationery.png")
+  elseif frames == 3100 then press(92, 230)
+  elseif frames == 3120 then release()
+  elseif frames == 3600 then screen:snapshot("05-fax-page.png")
+  elseif frames == {result_frame} then
+    print("FAX_STORED_RESULT completed=1")
+    machine:exit()
+  end
+end)
+"""
+
+
+def verify_stored_fax(args: argparse.Namespace, run_dir: Path) -> tuple[bool, str]:
+    """Relaunch the answer state and OCR its In-box fax stationery/page."""
+    tesseract = shutil.which("tesseract")
+    if tesseract is None:
+        return False, "tesseract executable is required for stored-page OCR"
+
+    verify_dir = run_dir / "stored-page-verification"
+    cfg_dir = verify_dir / "cfg"
+    nvram_dir = verify_dir / "nvram"
+    snapshot_dir = verify_dir / "snapshots"
+    cfg_dir.mkdir(parents=True)
+    snapshot_dir.mkdir()
+    shutil.copytree(run_dir / "answer" / "nvram", nvram_dir)
+    (cfg_dir / f"{args.system}.cfg").write_text(
+        deterministic_machine_config("answer"), encoding="utf-8"
+    )
+    script = verify_dir / "stored-fax.lua"
+    script.write_text(stored_fax_script(), encoding="utf-8")
+    command = [
+        str(args.mame),
+        args.system,
+        "-rompath",
+        str(args.rompath),
+        "-cfg_directory",
+        str(cfg_dir),
+        "-nvram_directory",
+        str(nvram_dir),
+        "-snapshot_directory",
+        str(snapshot_dir),
+        "-snapview",
+        "native",
+        "-autoboot_script",
+        str(script),
+        "-autoboot_delay",
+        "0",
+        "-video",
+        "none",
+        "-sound",
+        "none",
+        "-videodriver",
+        "dummy",
+        "-audiodriver",
+        "dummy",
+        "-nothrottle",
+        "-sleep",
+        "-skip_gameinfo",
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=args.mame.parent,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+            timeout=180,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return False, f"stored-page relaunch failed: {error}"
+    (verify_dir / "mame-output.txt").write_bytes(completed.stdout)
+
+    images = {
+        "inbox": snapshot_dir / "03-inbox.png",
+        "stationery": snapshot_dir / "04-fax-stationery.png",
+        "page": snapshot_dir / "05-fax-page.png",
+    }
+    if completed.returncode or any(not path.is_file() for path in images.values()):
+        return (
+            False,
+            "stored-page relaunch did not produce all three UI checkpoints",
+        )
+
+    texts: dict[str, str] = {}
+    for name, image in images.items():
+        try:
+            ocr = subprocess.run(
+                [tesseract, str(image), "stdout"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=30,
+                text=True,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return False, f"Tesseract failed for {name}: {error}"
+        text = " ".join(ocr.stdout.lower().split())
+        texts[name] = text
+        (verify_dir / f"{name}-ocr.txt").write_text(ocr.stdout, encoding="utf-8")
+
+    checks = (
+        "a fax" in texts["inbox"],
+        "one page fax was received" in texts["stationery"],
+        "danila sukharev" in texts["stationery"],
+        "fax page 1" in texts["page"],
+        "555-1212" in texts["page"],
+    )
+    if not all(checks):
+        return False, f"stored-page OCR mismatch: {texts!r}"
+    return True, "In-box row, one-page stationery, and rendered page verified"
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mame", type=Path, default=DEFAULT_MAME)
@@ -507,6 +673,27 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help=(
             "calibrated datarover840 NVRAM directory copied for both peers; "
             "the source is never modified"
+        ),
+    )
+    parser.add_argument(
+        "--origin-nvram-source",
+        type=Path,
+        help=(
+            "optional distinct origin NVRAM; useful with --origin-ready for "
+            "retained state already at the addressed Fax window"
+        ),
+    )
+    parser.add_argument(
+        "--origin-ready",
+        action="store_true",
+        help="origin NVRAM already resumes at the addressed Fax window",
+    )
+    parser.add_argument(
+        "--verify-stored-page",
+        action="store_true",
+        help=(
+            "wait for image completion, relaunch the answer NVRAM, and use "
+            "Tesseract to verify its In-box stationery and rendered page"
         ),
     )
     parser.add_argument("--system", default="datarover840")
@@ -565,6 +752,11 @@ def run_regression(args: argparse.Namespace) -> int:
     args.mame = args.mame.expanduser().resolve()
     args.rompath = args.rompath.expanduser().resolve()
     source = args.nvram_source.expanduser().resolve()
+    origin_source = (
+        args.origin_nvram_source.expanduser().resolve()
+        if args.origin_nvram_source is not None
+        else source
+    )
     if not args.mame.is_file():
         print(f"error: MAME executable not found: {args.mame}", file=sys.stderr)
         return 2
@@ -580,6 +772,12 @@ def run_regression(args: argparse.Namespace) -> int:
     if not (source / args.system / "ram").is_file():
         print(
             f"error: calibrated NVRAM not found under {source}",
+            file=sys.stderr,
+        )
+        return 2
+    if not (origin_source / args.system / "ram").is_file():
+        print(
+            f"error: origin NVRAM not found under {origin_source}",
             file=sys.stderr,
         )
         return 2
@@ -605,12 +803,22 @@ def run_regression(args: argparse.Namespace) -> int:
             role_dir = run_dir / role
             (role_dir / "cfg").mkdir(parents=True)
             (role_dir / "snapshots").mkdir()
-            shutil.copytree(source, role_dir / "nvram")
+            role_source = origin_source if role == "origin" else source
+            shutil.copytree(role_source, role_dir / "nvram")
             (role_dir / "cfg" / f"{args.system}.cfg").write_text(
                 deterministic_machine_config(role), encoding="utf-8"
             )
             script = role_dir / f"{role}.lua"
-            script.write_text(automation_script(role, ring_trigger), encoding="utf-8")
+            script.write_text(
+                automation_script(
+                    role,
+                    ring_trigger,
+                    origin_result_frame=5000 if args.origin_ready else 9000,
+                    answer_result_offset=(4800 if args.verify_stored_page else 3600),
+                    origin_ready=args.origin_ready,
+                ),
+                encoding="utf-8",
+            )
             processes[role] = subprocess.Popen(
                 _machine_command(args, role_dir, script, exchange.port),
                 cwd=args.mame.parent,
@@ -712,6 +920,15 @@ def run_regression(args: argparse.Namespace) -> int:
         (run_dir / f"line-peer-{index}.pcm").write_bytes(pcm)
 
     results = {role: parse_result(output, role) for role, output in outputs.items()}
+    stored_page_ok = not args.verify_stored_page
+    stored_page_detail = "not requested"
+    if args.verify_stored_page:
+        answer_result = results.get("answer")
+        if answer_result is None or answer_result["image_completions"] == 0:
+            stored_page_ok = False
+            stored_page_detail = "receiver image helper never completed"
+        else:
+            stored_page_ok, stored_page_detail = verify_stored_fax(args, run_dir)
     missing = {
         role: (
             list(REQUIRED[role])
@@ -729,11 +946,20 @@ def run_regression(args: argparse.Namespace) -> int:
         result is not None and result["telecom_words"] == 48
         for result in results.values()
     )
-    protocol_ok = all(
+    clean_protocol = all(
         result is not None
         and result["protocol_errors"] == 0
         and result["image_failures"] == 0
         for result in results.values()
+    )
+    protocol_ok = clean_protocol or (
+        args.verify_stored_page
+        and results.get("origin") is not None
+        and results.get("answer") is not None
+        and results["origin"]["protocol_errors"] == 0
+        and results["origin"]["image_failures"] == 0
+        and results["answer"]["image_completions"] > 0
+        and stored_page_ok
     )
     sustained_image_ok = (
         results.get("origin") is not None
@@ -766,6 +992,7 @@ def run_regression(args: argparse.Namespace) -> int:
         or digits[:7] != "5551212"
         or not dma_ok
         or not protocol_ok
+        or not stored_page_ok
         or not sustained_image_ok
         or not pcm_ok
         or not ui_ok
@@ -779,6 +1006,8 @@ def run_regression(args: argparse.Namespace) -> int:
             f"(results={results!r}, missing={missing!r}, "
             f"digits={digits!r}, dma_ok={dma_ok}, pcm_ok={pcm_ok}, "
             f"protocol_ok={protocol_ok}, "
+            f"stored_page_ok={stored_page_ok}, "
+            f"stored_page_detail={stored_page_detail!r}, "
             f"sustained_image_ok={sustained_image_ok}, ui_ok={ui_ok}, "
             f"trigger={trigger_state!r}, "
             f"ready={ready_state!r}, trigger_error={trigger_error!r}, "
@@ -787,11 +1016,17 @@ def run_regression(args: argparse.Namespace) -> int:
         )
         return 1
 
-    print(
-        "PASS: two visible Magic Cap Fax workflows dialed 555-1212, "
-        "negotiated bidirectional fax/HDLC, and sustained error-free sender "
-        "and receiver image transfer"
-    )
+    if args.verify_stored_page:
+        print(
+            "PASS: paired Fax stored one received page in the In box and "
+            "reopened its stationery and rendered page"
+        )
+    else:
+        print(
+            "PASS: two visible Magic Cap Fax workflows dialed 555-1212, "
+            "negotiated bidirectional fax/HDLC, and sustained error-free "
+            "sender and receiver image transfer"
+        )
     print(f"Artifacts: {run_dir}")
     return 0
 

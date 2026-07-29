@@ -41,6 +41,15 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("press(220, 156)", script)
         self.assertIn('snapshot("fax-answer-active.png")', script)
 
+    def test_origin_ready_shortcut_still_presses_visible_send(self) -> None:
+        script = fax_pair.automation_script(
+            "origin", Path("/tmp/ring.trigger"), origin_ready=True
+        )
+
+        self.assertIn("press(326, 210)", script)
+        self.assertIn('snapshot("fax-addressed.png")', script)
+        self.assertNotIn('emu.keypost("5551212")', script)
+
     def test_both_roles_trace_image_and_fax_paths(self) -> None:
         for role in ("origin", "answer"):
             script = fax_pair.automation_script(role, Path("/tmp/ring.trigger"))
@@ -58,6 +67,20 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('value="3"', fax_pair.deterministic_machine_config("origin"))
         self.assertIn('value="2"', fax_pair.deterministic_machine_config("answer"))
 
+    def test_stored_fax_relaunch_opens_inbox_row_and_page(self) -> None:
+        script = fax_pair.stored_fax_script()
+
+        for action in (
+            "press(34, 302)",
+            "press(205, 91)",
+            "press(155, 57)",
+            "press(92, 230)",
+        ):
+            self.assertIn(action, script)
+        self.assertIn('snapshot("03-inbox.png")', script)
+        self.assertIn('snapshot("04-fax-stationery.png")', script)
+        self.assertIn('snapshot("05-fax-page.png")', script)
+
 
 class ResultTests(unittest.TestCase):
     def test_complete_role_result_parses(self) -> None:
@@ -68,7 +91,8 @@ class ResultTests(unittest.TestCase):
             f"FAX_PAIR_RESULT role=origin {values} "
             "telecom_words=48 telecom_enables=0 "
             "protocol_errors=2 last_error=10 last_detail=1 "
-            "image_zero_reads=3 image_failures=4 image_pages=5\n"
+            "image_zero_reads=3 image_failures=4 image_pages=5 "
+            "image_completions=6\n"
         ).encode()
 
         result = fax_pair.parse_result(output, "origin")
@@ -80,6 +104,7 @@ class ResultTests(unittest.TestCase):
         self.assertEqual(result["telecom_words"], 48)
         self.assertEqual(result["last_error"], 10)
         self.assertEqual(result["image_pages"], 5)
+        self.assertEqual(result["image_completions"], 6)
         self.assertIsNone(fax_pair.parse_result(output, "answer"))
 
 

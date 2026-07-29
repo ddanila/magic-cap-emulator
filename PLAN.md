@@ -18,7 +18,7 @@ The full regression list and expected checkpoints are in
 | Battery & supply inputs | Both ADC channels answer within the ROM's own calibration thresholds, so the spurious backup-battery warning is gone; battery levels, AC adapter and battery cover are selectable, and removing the cover raises the IO interrupt the OS services | [`power-wake.md`](docs/power-wake.md#battery-levels) |
 | Power outputs, charging & policy | MFIO LCD power blanks scanout without destroying the framebuffer; active-high Magic Bus Vcc-off removes and rediscovers its peripheral; AC plus charger enable advances the main-battery ADC; the real Power Controls clamp 1–60 minutes and automatic AC idle shutoff follows its checkbox | [`power-wake.md`](docs/power-wake.md#outputs-the-os-writes) |
 | Sound I/O | ROM's startup tone (unbuffered hold register), buffered SIB sound-TX/RX DMA, host or deterministic microphone input, and Magic Cap's sound-stamp record/stop/play workflow | [`betty-registers.md`](docs/betty-registers.md) |
-| Built-in software modem | Continuous 48-word SIB telecom DMA drives the ROM's V.32 and fax paths through TX39 DSP extensions; the Betty DAA hookswitch/line input and Dino ring detector are modelled; a held ring opens Phone Status, whose real **receive fax** action reaches `AnswerModem`, fax HDLC and non-silent PCM; the visible outbound Fax workflow creates a recipient, renders a screen and dials `5551212`; a clocked two-DataRover exchange runs both product fax roles, bidirectional fax/HDLC, sender image data and receiver image-data callbacks; the deterministic exchange also supplies dial tone and decodes DTMF/pulse dialing; the visible Telephone output decodes as `580` | [`builtin-modem.md`](docs/builtin-modem.md) |
+| Built-in software modem | Continuous 48-word SIB telecom DMA drives the ROM's V.32 and fax paths through TX39 DSP extensions; the Betty DAA hookswitch/line input and Dino ring detector are modelled; a held ring opens Phone Status, whose real **receive fax** action reaches `AnswerModem`, fax HDLC and non-silent PCM; the visible outbound Fax workflow creates a recipient, renders a screen and dials `5551212`; a clocked two-DataRover exchange runs both product fax roles through retained In-box storage, stationery and a reopened rendered page; the deterministic exchange also supplies dial tone and decodes DTMF/pulse dialing; the visible Telephone output decodes as `580` | [`builtin-modem.md`](docs/builtin-modem.md) |
 | Magic Bus | Address assignment and reinitialization, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | TX39 extensions | `MADD`/`MADDU` plus three-operand `MULT`/`MULTU` implemented; all four verify `rd`, `HI`, and `LO`, covering 792 multiply/add and 89 destination-writing multiply uses in the SDK ELF | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core, completes TCP through rootless libslirp, renders deterministic local HTTP, carries Browser 3.5's native HTTPS Rule through a host TLS proxy, and can browse public HTTPS sites through a guarded loopback launcher | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
@@ -59,9 +59,13 @@ The full regression list and expected checkpoints are in
   OS-pauses whichever emulator leads the shared PCM timeline until its peer
   catches up. Both product roles initialize fax, exchange HDLC, run fax RX/TX,
   sustain more than 64 sender/receiver image callbacks with no ROM protocol
-  error, and visibly show `Receiving page 1`. Persisting and visibly rendering
-  the received page remains the next missing layer. This is separate from the
-  working PC Card PPP path
+  error, and visibly show `Receiving page 1`. The extended acceptance observes
+  an image-helper completion, relaunches copied receiver state, finds the new
+  `a fax` In-box row, opens its one-page stationery, and renders the received
+  page. Fax transfer is therefore covered end to end; establishing
+  application-level carrier between the two generic V.32 data-modem roles is
+  the remaining line-side target. This is separate from the working PC Card
+  PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 
 - **Expand Magic Bus beyond one keyboard.** The product connector supports
