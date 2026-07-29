@@ -44,10 +44,12 @@ The full regression list and expected checkpoints are in
   originating/answering roles, active V.32 receive/transmit paths, and
   non-silent PCM in both directions; Dino's 16-bit sample framing is
   confirmed. The high-level answer method still needs a genuine live call
-  object, not just a hardware ring edge. Carrier acquisition through that
-  product call sequence or analog line gain/polarity behavior is the next
-  missing layer. Fax is the final documented product behavior beyond that
-  boundary. This is separate from the working PC Card PPP path
+  object, not just a hardware ring edge. Word-aligned tests also exclude
+  simple polarity and direct through 12 dB-attenuated line gain. Carrier
+  acquisition through the product call sequence or more complex analog-line
+  behavior is the next missing layer. Fax is the final documented product
+  behavior beyond that boundary. This is separate from the working PC Card
+  PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 
 - **Expand Magic Bus beyond one keyboard.** The product connector supports
