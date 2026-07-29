@@ -63,8 +63,11 @@ can instead fetch an explicitly configured HTTP(S) URL, normalize its small
 response to HTTP/1.0, and carry that host-supplied body through the same path.
 It can also wait for Magic Cap's live request, map its path and query onto an
 explicit host base URL, forward its `Accept` and `User-Agent` headers, and
-return the fetched body through the modem. The remaining built-in-modem HTTP
-gap is multi-segment responses larger than 4 KiB.
+return the fetched body through the modem. Responses up to 16 KiB are split at
+the MSS advertised by Magic Cap, advanced by cumulative TCP acknowledgements,
+and closed only after the browser has had time to consume the final segment.
+The remaining built-in-modem network gap is an unrestricted, multi-request
+host bridge rather than the bounded regression adapter.
 The full status table and roadmap are in [`PLAN.md`](PLAN.md); the machine's
 hardware, history, and verification approach are in
 [`docs/background.md`](docs/background.md).

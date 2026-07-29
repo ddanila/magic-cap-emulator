@@ -18,7 +18,7 @@ The full regression list and expected checkpoints are in
 | Battery & supply inputs | Both ADC channels answer within the ROM's own calibration thresholds, so the spurious backup-battery warning is gone; battery levels, AC adapter and battery cover are selectable, and removing the cover raises the IO interrupt the OS services | [`power-wake.md`](docs/power-wake.md#battery-levels) |
 | Power outputs, charging & policy | MFIO LCD power blanks scanout without destroying the framebuffer; active-high Magic Bus Vcc-off removes and rediscovers its peripheral; AC plus charger enable advances the main-battery ADC; the real Power Controls clamp 1–60 minutes and automatic AC idle shutoff follows its checkbox | [`power-wake.md`](docs/power-wake.md#outputs-the-os-writes) |
 | Sound I/O | ROM's startup tone (unbuffered hold register), buffered SIB sound-TX/RX DMA, host or deterministic microphone input, and Magic Cap's sound-stamp record/stop/play workflow | [`betty-registers.md`](docs/betty-registers.md) |
-| Built-in software modem | Continuous 48-word SIB telecom DMA drives the ROM's V.32 and fax paths through TX39 DSP extensions; the Betty DAA hookswitch/line input and Dino ring detector are modelled; a held ring opens Phone Status, whose real **receive fax** action reaches `AnswerModem`, fax HDLC and non-silent PCM; the visible outbound Fax workflow creates a recipient, renders a screen and dials `5551212`; a clocked two-DataRover exchange runs both product fax roles through retained In-box storage, stationery and a reopened rendered page; the deterministic exchange also supplies dial tone and decodes DTMF/pulse dialing; the visible Telephone output decodes as `580`; Web Browser selects an Internet Center provider mapped to `PPP dialup`, completes V.32/LAPM and LCP/IPCP, exchanges dynamic TCP, sends `GET / HTTP/1.0`, receives `HTTP/1.0 200 OK`, and renders the response body | [`builtin-modem.md`](docs/builtin-modem.md) |
+| Built-in software modem | Continuous 48-word SIB telecom DMA drives the ROM's V.32 and fax paths through TX39 DSP extensions; the Betty DAA hookswitch/line input and Dino ring detector are modelled; a held ring opens Phone Status, whose real **receive fax** action reaches `AnswerModem`, fax HDLC and non-silent PCM; the visible outbound Fax workflow creates a recipient, renders a screen and dials `5551212`; a clocked two-DataRover exchange runs both product fax roles through retained In-box storage, stationery and a reopened rendered page; the deterministic exchange also supplies dial tone and decodes DTMF/pulse dialing; the visible Telephone output decodes as `580`; Web Browser selects an Internet Center provider mapped to `PPP dialup`, completes V.32/LAPM and LCP/IPCP, exchanges dynamic TCP, forwards its live `GET` to an explicit host base, and renders an MSS-segmented response through an orderly close | [`builtin-modem.md`](docs/builtin-modem.md) |
 | Magic Bus | Address assignment and reinitialization, request-line edges, PIO/DMA transfers, checksummed peripheral discovery, and a bidirectional `ATKB` Set-2 keyboard accessory | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | TX39 extensions | `MADD`/`MADDU` plus three-operand `MULT`/`MULTU` implemented; all four verify `rd`, `HI`, and `LO`, covering 792 multiply/add and 89 destination-writing multiply uses in the SDK ELF | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core, completes TCP through rootless libslirp, renders deterministic local HTTP, carries Browser 3.5's native HTTPS Rule through a host TLS proxy, and can browse public HTTPS sites through a guarded loopback launcher | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
@@ -93,15 +93,20 @@ The full regression list and expected checkpoints are in
   acknowledges Magic Cap's FIN. The clean final screen proves that the
   four-way close avoids the dropped-connection notice. With
   `--http-upstream-url`, the host prefetches one explicitly configured
-  HTTP(S) endpoint, normalizes a response of at most 4 KiB of application data,
+  HTTP(S) endpoint, normalizes a response of at most 16 KiB of application data,
   and OCR-verifies its distinct body after the same modem path.
   `--http-upstream-base-url` instead waits for the request produced by Magic
   Cap, maps its origin-form path and query onto an explicit HTTP(S) base,
   forwards its `Accept` and `User-Agent` headers, fetches only then, and
   returns the normalized response through the answer ROM queue. Its artifacts
   retain the guest request, resolved target and exact normalized response.
-  The remaining line-side target is segmenting host responses larger than
-  4 KiB. This is
+  The answer peer extracts Magic Cap's advertised MSS, divides the response
+  into acknowledged TCP segments, retains the last packet for retransmission,
+  waits briefly after the final data ACK before FIN, and gates the final
+  screenshot on the complete close. A 9,120-byte live response passed in 18
+  segments without the disconnect warning. The remaining line-side target is
+  an unrestricted, multi-request network bridge rather than this explicit,
+  16 KiB regression adapter. This is
   separate from the working PC Card PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 

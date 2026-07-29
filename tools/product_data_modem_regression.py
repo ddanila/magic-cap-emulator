@@ -70,15 +70,14 @@ PEER_ROUND_PATTERN = re.compile(
     rb"PRODUCT_ANSWER_PEER_DATA round=\d+ kind=(\d+) "
     rb"read=\d+ wrote=\d+ hex=([0-9A-F]*)"
 )
-HTTP_RESPONSE_PATTERN = re.compile(
-    rb"PRODUCT_ANSWER_HTTP_RESPONSE bytes=(\d+)"
-)
+HTTP_RESPONSE_PATTERN = re.compile(rb"PRODUCT_ANSWER_HTTP_RESPONSE bytes=(\d+)")
 HTTP_FIN_PATTERN = re.compile(rb"PRODUCT_ANSWER_HTTP_FIN bytes=(\d+)")
-HTTP_CLOSE_ACK_PATTERN = re.compile(
-    rb"PRODUCT_ANSWER_HTTP_CLOSE_ACK bytes=(\d+)"
-)
+HTTP_CLOSE_ACK_PATTERN = re.compile(rb"PRODUCT_ANSWER_HTTP_CLOSE_ACK bytes=(\d+)")
 DEFAULT_HTTP_TEXT = "Magic Cap built-in modem works."
-MAX_HTTP_APPLICATION = 4_096
+MAX_HTTP_SEGMENT = 4_096
+MAX_HTTP_RESPONSE = 16_384
+HTTP_FIN_GRACE_FRAMES = 300
+HTTP_RESULT_SETTLE_FRAMES = 120
 
 PRODUCT_SYMBOLS = (
     (0x13D4_DD08, "new_dialup_link"),
@@ -106,12 +105,10 @@ CALL_READY_COUNTER = COUNTERS + next(
     if name == "connect_number"
 )
 PRODUCT_PPP_READ_COUNTER = COUNTERS + next(
-    index * 4
-    for index, (_, name) in enumerate(PRODUCT_SYMBOLS)
-    if name == "ppp_read"
+    index * 4 for index, (_, name) in enumerate(PRODUCT_SYMBOLS) if name == "ppp_read"
 )
 CALL_SETTLE_FRAMES = 240
-MAX_PEER_READS = 20
+MAX_PEER_READS = 48
 PRODUCT_PATTERN = re.compile(
     rb"PRODUCT_DATA_MODEM_RESULT "
     + rb" ".join(name.encode() + rb"=(\d+)" for _, name in PRODUCT_SYMBOLS)
@@ -214,21 +211,14 @@ def tcp_syn_ack_response(client_sequence: int = 0x3F99_9B00) -> bytes:
     """Answer the deterministic browser SYN at the negotiated peer address."""
     source_ip = bytes.fromhex("0a000202")
     destination_ip = bytes.fromhex("0a00020f")
-    tcp = bytearray.fromhex(
-        "1f9004000102030400000000601210000000000002040218"
-    )
+    tcp = bytearray.fromhex("1f9004000102030400000000601210000000000002040218")
     acknowledgement = (client_sequence + 1) & 0xFFFF_FFFF
     tcp[8:12] = acknowledgement.to_bytes(4, "big")
     pseudo_header = (
-        source_ip
-        + destination_ip
-        + bytes((0, 6))
-        + len(tcp).to_bytes(2, "big")
+        source_ip + destination_ip + bytes((0, 6)) + len(tcp).to_bytes(2, "big")
     )
     tcp[16:18] = internet_checksum(pseudo_header + tcp).to_bytes(2, "big")
-    ip = bytearray.fromhex(
-        "4500002c12340000400600000a0002020a00020f"
-    )
+    ip = bytearray.fromhex("4500002c12340000400600000a0002020a00020f")
     ip[10:12] = internet_checksum(ip).to_bytes(2, "big")
     return async_ppp_frame(bytes.fromhex("ff030021") + ip + tcp)
 
@@ -385,12 +375,8 @@ def echo_responder_words() -> list[int]:
         0,
     ]
     words[empty] = op(0x06, rs=2, immediate=done - (empty + 1))
-    words[read_failed] = op(
-        0x06, rs=2, immediate=done - (read_failed + 1)
-    )
-    words[no_response] = op(
-        0x06, rs=4, immediate=done - (no_response + 1)
-    )
+    words[read_failed] = op(0x06, rs=2, immediate=done - (read_failed + 1))
+    words[no_response] = op(0x06, rs=4, immediate=done - (no_response + 1))
     for index, label in branches:
         words[index] = (words[index] & 0xFFFF_0000) | (
             (labels[label] - (index + 1)) & 0xFFFF
@@ -442,16 +428,12 @@ def build_http_application(
         "Connection: close\r\n\r\n"
     ).encode("ascii")
     application = headers + body
-    if len(application) > MAX_HTTP_APPLICATION:
-        raise ValueError(
-            f"normalized HTTP response exceeds {MAX_HTTP_APPLICATION} bytes"
-        )
+    if len(application) > MAX_HTTP_RESPONSE:
+        raise ValueError(f"normalized HTTP response exceeds {MAX_HTTP_RESPONSE} bytes")
     return application
 
 
-def fetch_http_application(
-    url: str, headers: dict[str, str] | None = None
-) -> bytes:
+def fetch_http_application(url: str, headers: dict[str, str] | None = None) -> bytes:
     """Fetch and normalize one explicitly configured host HTTP endpoint."""
     request_headers = {"User-Agent": "magic-cap-emulator-host-bridge/1"}
     if headers:
@@ -462,13 +444,13 @@ def fetch_http_application(
     )
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
-            body = response.read(MAX_HTTP_APPLICATION + 1)
+            body = response.read(MAX_HTTP_RESPONSE + 1)
             status = response.status
             reason = response.reason or ""
             content_type = response.headers.get_content_type()
     except (OSError, urllib.error.URLError) as error:
         raise ValueError(f"unable to fetch HTTP upstream: {error}") from error
-    if len(body) > MAX_HTTP_APPLICATION:
+    if len(body) > MAX_HTTP_RESPONSE:
         raise ValueError("HTTP upstream body exceeds the bridge limit")
     return build_http_application(body, status, reason, content_type)
 
@@ -483,9 +465,7 @@ def resolve_guest_http_request(
         raise ValueError("guest HTTP bridge supports GET over HTTP/1.x only")
     guest_target = match.group(1).decode("ascii", "strict")
     guest_parts = urllib.parse.urlsplit(guest_target)
-    if guest_parts.scheme or guest_parts.netloc or not guest_parts.path.startswith(
-        "/"
-    ):
+    if guest_parts.scheme or guest_parts.netloc or not guest_parts.path.startswith("/"):
         raise ValueError("guest HTTP request must use an origin-form target")
     base = urllib.parse.urlsplit(base_url)
     if base.scheme not in ("http", "https") or not base.netloc:
@@ -509,9 +489,7 @@ def resolve_guest_http_request(
         name, value = line.split(b":", 1)
         decoded_name = name.decode("ascii", "ignore").strip()
         if decoded_name.lower() in ("accept", "user-agent"):
-            forwarded[decoded_name] = value.decode(
-                "latin-1", "replace"
-            ).strip()
+            forwarded[decoded_name] = value.decode("latin-1", "replace").strip()
     return target, forwarded
 
 
@@ -548,9 +526,7 @@ class GuestHttpBridge:
             return
         try:
             request = self.request_path.read_bytes()
-            target, headers = resolve_guest_http_request(
-                self.base_url, request
-            )
+            target, headers = resolve_guest_http_request(self.base_url, request)
             application = fetch_http_application(target, headers)
             self.target_url = target
             self.target_path.write_text(target + "\n", encoding="utf-8")
@@ -567,30 +543,23 @@ def tcp_peer_lua(
     host_response_path: Path | None = None,
 ) -> str:
     """Return Lua helpers that build a SYN-ACK from the live browser SYN."""
-    live_host_bridge = (
-        host_request_path is not None and host_response_path is not None
-    )
+    live_host_bridge = host_request_path is not None and host_response_path is not None
     if (host_request_path is None) != (host_response_path is None):
         raise ValueError("host request and response paths must be paired")
     if http_application is None and not live_host_bridge:
-        body = (
-            f"<html><body>{DEFAULT_HTTP_TEXT}</body></html>\r\n".encode()
-        )
+        body = f"<html><body>{DEFAULT_HTTP_TEXT}</body></html>\r\n".encode()
         http_application = build_http_application(body)
     if http_application is None:
         http_application = b""
-    if len(http_application) > MAX_HTTP_APPLICATION:
+    if len(http_application) > MAX_HTTP_RESPONSE:
         raise ValueError("HTTP application exceeds the bridge limit")
-    application_lua = "{ " + ", ".join(
-        f"0x{byte:02x}" for byte in http_application
-    ) + " }"
-    request_path_lua = (
-        _lua_path(host_request_path) if host_request_path else ""
+    application_lua = (
+        "{ " + ", ".join(f"0x{byte:02x}" for byte in http_application) + " }"
     )
-    response_path_lua = (
-        _lua_path(host_response_path) if host_response_path else ""
-    )
-    return r"""
+    request_path_lua = _lua_path(host_request_path) if host_request_path else ""
+    response_path_lua = _lua_path(host_response_path) if host_response_path else ""
+    return (
+        r"""
 local function append_bytes(target, source)
   for _, byte in ipairs(source) do table.insert(target, byte) end
 end
@@ -656,11 +625,39 @@ local function read_ppp_frames()
   return frames
 end
 
+local http_peer_mss = 536
+
 local function dynamic_syn_ack()
   for _, frame in ipairs(read_ppp_frames()) do
     if #frame >= 44 and frame[1] == 0xff and frame[2] == 0x03
         and frame[3] == 0x00 and frame[4] == 0x21
         and frame[5] == 0x45 and (frame[38] & 0x02) ~= 0 then
+      local tcp_header = (frame[37] >> 4) * 4
+      local option, option_end = 45, 24 + tcp_header
+      while option <= option_end do
+        local kind = frame[option]
+        if kind == 0 then
+          break
+        elseif kind == 1 then
+          option = option + 1
+        else
+          local length = frame[option + 1]
+          if length == nil or length < 2
+              or option + length - 1 > option_end then
+            break
+          end
+          if kind == 2 and length == 4 then
+            local advertised =
+              frame[option + 2] * 256 + frame[option + 3]
+            if advertised >= 64 then
+              http_peer_mss = math.min(
+                advertised, __MAX_HTTP_SEGMENT__
+              )
+            end
+          end
+          option = option + length
+        end
+      end
       local sequence =
         ((frame[29] * 256 + frame[30]) * 256 + frame[31]) * 256 + frame[32]
       local acknowledgement = (sequence + 1) & 0xffffffff
@@ -739,6 +736,13 @@ local host_request_path = "__HOST_REQUEST_PATH__"
 local host_response_path = "__HOST_RESPONSE_PATH__"
 local host_response_pending = false
 local host_client_next_sequence = nil
+local http_application_offset = 1
+local http_segment_index = 0
+local http_last_segment_length = 0
+local http_last_packet = nil
+local http_fin_pending = false
+local http_fin_ready_frame = nil
+local http_fin_client_next_sequence = nil
 
 local function build_http_packet(
     sequence, acknowledgement, flags, application, identification)
@@ -778,13 +782,60 @@ local function build_http_packet(
   return async_ppp_frame(payload)
 end
 
+local function next_http_segment(client_next_sequence)
+  if http_application_offset > #http_application then return nil end
+  local application = {}
+  local last = math.min(
+    http_application_offset + http_peer_mss - 1,
+    #http_application
+  )
+  for index = http_application_offset, last do
+    table.insert(application, http_application[index])
+  end
+  local sequence =
+    (0x01020305 + http_application_offset - 1) & 0xffffffff
+  http_application_offset = last + 1
+  http_segment_index = http_segment_index + 1
+  http_last_segment_length = #application
+  http_server_next_sequence =
+    (sequence + #application) & 0xffffffff
+  http_last_packet = build_http_packet(
+    sequence, client_next_sequence, 0x18, application,
+    0x1234 + http_segment_index
+  )
+  return http_last_packet
+end
+
+local function start_http_response(client_next_sequence)
+  http_application_offset = 1
+  http_segment_index = 0
+  http_server_next_sequence = nil
+  http_fin_sent = false
+  http_close_ack_sent = false
+  http_last_packet = nil
+  http_fin_pending = false
+  http_fin_ready_frame = nil
+  http_fin_client_next_sequence = nil
+  return next_http_segment(client_next_sequence)
+end
+
+local function pending_http_fin()
+  if not http_fin_pending or frames < http_fin_ready_frame then return nil end
+  http_fin_pending = false
+  http_fin_sent = true
+  return build_http_packet(
+    http_server_next_sequence, http_fin_client_next_sequence,
+    0x11, {}, 0x1236
+  )
+end
+
 local function pending_host_http_response()
   if not host_response_pending then return nil, nil end
   local response_file = io.open(host_response_path, "rb")
   if response_file == nil then return nil, nil end
   local response = response_file:read("*a")
   response_file:close()
-  if #response == 0 or #response > __MAX_HTTP_APPLICATION__ then
+  if #response == 0 or #response > __MAX_HTTP_RESPONSE__ then
     return nil, nil
   end
   http_application = {}
@@ -792,12 +843,7 @@ local function pending_host_http_response()
     http_application[index] = string.byte(response, index)
   end
   host_response_pending = false
-  http_server_next_sequence =
-    (0x01020305 + #http_application) & 0xffffffff
-  return build_http_packet(
-    0x01020305, host_client_next_sequence,
-    0x18, http_application, 0x1235
-  ), "response"
+  return start_http_response(host_client_next_sequence), "response"
 end
 
 local function dynamic_http_response()
@@ -827,18 +873,30 @@ local function dynamic_http_response()
       client_next_sequence, 0x10, {}, 0x1237
     ), "close_ack"
   end
-  if http_server_next_sequence ~= nil and not http_fin_sent
+  if http_server_next_sequence ~= nil
+      and http_application_offset <= #http_application
       and (flags & 0x10) ~= 0
       and client_acknowledgement == http_server_next_sequence then
-    http_fin_sent = true
-    return build_http_packet(
-      http_server_next_sequence, client_next_sequence, 0x11, {}, 0x1236
-    ), "fin"
+    return next_http_segment(client_next_sequence), "segment"
+  end
+  if http_server_next_sequence ~= nil and not http_fin_sent
+      and http_application_offset > #http_application
+      and (flags & 0x10) ~= 0
+      and client_acknowledgement == http_server_next_sequence then
+    if not http_fin_pending then
+      http_fin_pending = true
+      http_fin_ready_frame = frames + __HTTP_FIN_GRACE_FRAMES__
+      http_fin_client_next_sequence = client_next_sequence
+    end
+    return nil, nil
   end
   if frame[data_start] ~= string.byte("G")
       or frame[data_start + 1] ~= string.byte("E")
       or frame[data_start + 2] ~= string.byte("T") then
     return nil, nil
+  end
+  if http_server_next_sequence ~= nil and http_last_packet ~= nil then
+    return http_last_packet, "retransmit"
   end
   if host_bridge_enabled then
     local temporary_path = host_request_path .. ".partial"
@@ -852,11 +910,7 @@ local function dynamic_http_response()
     host_response_pending = true
     return nil, nil
   end
-  http_server_next_sequence =
-    (0x01020305 + #http_application) & 0xffffffff
-  return build_http_packet(
-    0x01020305, client_next_sequence, 0x18, http_application, 0x1235
-  ), "response"
+  return start_http_response(client_next_sequence), "response"
 end
 
 local function join_frames(first, second)
@@ -905,16 +959,13 @@ local function dynamic_peer_response(kind)
   end
   return dynamic_control_response(kind)
 end
-""".replace(
-        "__HTTP_APPLICATION__", application_lua
-    ).replace(
-        "__HOST_BRIDGE_ENABLED__", "true" if live_host_bridge else "false"
-    ).replace(
-        "__HOST_REQUEST_PATH__", request_path_lua
-    ).replace(
-        "__HOST_RESPONSE_PATH__", response_path_lua
-    ).replace(
-        "__MAX_HTTP_APPLICATION__", str(MAX_HTTP_APPLICATION)
+""".replace("__HTTP_APPLICATION__", application_lua)
+        .replace("__HOST_BRIDGE_ENABLED__", "true" if live_host_bridge else "false")
+        .replace("__HOST_REQUEST_PATH__", request_path_lua)
+        .replace("__HOST_RESPONSE_PATH__", response_path_lua)
+        .replace("__MAX_HTTP_RESPONSE__", str(MAX_HTTP_RESPONSE))
+        .replace("__MAX_HTTP_SEGMENT__", str(MAX_HTTP_SEGMENT))
+        .replace("__HTTP_FIN_GRACE_FRAMES__", str(HTTP_FIN_GRACE_FRAMES))
     )
 
 
@@ -932,9 +983,8 @@ def product_automation_script(
     )
     trigger = _lua_path(call_trigger_path)
     result_path = _lua_path(call_trigger_path.parent / "product.result-ready")
-    http_result_path = _lua_path(
-        call_trigger_path.parent / "product-http.result-ready"
-    )
+    http_result_path = _lua_path(call_trigger_path.parent / "product-http.result-ready")
+    close_result_path = _lua_path(call_trigger_path.parent / "close.result-ready")
     peer_result_path = _lua_path(call_trigger_path.parent / "answer.result-ready")
     script = f"""local machine = manager.machine
 local cpu = machine.devices[":maincpu"]
@@ -959,7 +1009,9 @@ local addresses = {{ {addresses} }}
 local call_trigger_path = "{trigger}"
 local result_path = "{result_path}"
 local http_result_path = "{http_result_path}"
+local close_result_path = "{close_result_path}"
 local peer_result_path = "{peer_result_path}"
+local close_ready_frame = nil
 
 local function press(x, y)
   touch_x:set_value(math.floor(x * 65535 / 479))
@@ -1044,7 +1096,9 @@ emu.register_frame_done(function()
   elseif frames == 4720 then release()
 
   elseif frames >= {result_frame}
-      and (http_result_written or frames >= {result_frame + 1200}) then
+      and ((close_ready_frame ~= nil
+          and frames >= close_ready_frame + {HTTP_RESULT_SETTLE_FRAMES})
+        or frames >= {result_frame + 1200}) then
     screen:snapshot("product-result.png")
     local v32 = program:read_u32(V32_POINTER)
     local detector, rate0, rate1, rate2, rate3 = 0, 0, 0, 0, 0
@@ -1094,6 +1148,13 @@ emu.register_frame_done(function()
     http_result:write("received\\n")
     http_result:close()
     http_result_written = true
+  end
+  if close_ready_frame == nil then
+    local close_result = io.open(close_result_path, "r")
+    if close_result ~= nil then
+      close_result:close()
+      close_ready_frame = frames
+    end
   end
   if call_ready_frame == nil
       and program:read_u32(CALL_READY_COUNTER) > 0 then
@@ -1145,9 +1206,7 @@ def answer_automation_script(
     echo_words = echo_responder_words()
     write_words = write_responder_words()
     echo_loop = 0xA000_0000 + ECHO_STUB + (len(echo_words) - 2) * 4
-    write_loop = (
-        0xA000_0000 + ECHO_WRITE_STUB + (len(write_words) - 2) * 4
-    )
+    write_loop = 0xA000_0000 + ECHO_WRITE_STUB + (len(write_words) - 2) * 4
     echo_writes = "\n".join(
         f"  program:write_u32(ECHO_STUB + {index * 4}, 0x{word:08x})"
         for index, word in enumerate(echo_words)
@@ -1159,21 +1218,17 @@ def answer_automation_script(
     trigger = _lua_path(call_trigger_path)
     result_path = _lua_path(call_trigger_path.parent / "answer.result-ready")
     peer_result_path = _lua_path(call_trigger_path.parent / "product.result-ready")
-    protocol_result_path = _lua_path(
-        call_trigger_path.parent / "protocol.result-ready"
-    )
-    close_result_path = _lua_path(
-        call_trigger_path.parent / "close.result-ready"
-    )
+    protocol_result_path = _lua_path(call_trigger_path.parent / "protocol.result-ready")
+    close_result_path = _lua_path(call_trigger_path.parent / "close.result-ready")
     script = script.replace(
         "local saved_state = nil\n",
-        'local saved_state = nil\n'
+        "local saved_state = nil\n"
         f'local call_trigger_path = "{trigger}"\n'
         f'local result_path = "{result_path}"\n'
         f'local peer_result_path = "{peer_result_path}"\n'
         f'local protocol_result_path = "{protocol_result_path}"\n'
         f'local close_result_path = "{close_result_path}"\n'
-        'local ports = machine.ioport.ports\n'
+        "local ports = machine.ioport.ports\n"
         'local power_button = ports[":POWER_BUTTON"]:field(0x01)\n'
         'local touch_x = ports[":TOUCH_X"]:field(0xffff)\n'
         'local touch_y = ports[":TOUCH_Y"]:field(0xffff)\n'
@@ -1276,11 +1331,19 @@ def answer_automation_script(
         "  end\n"
         "  if restored and not echo_active then\n"
         "    local host_response = pending_host_http_response()\n"
+        "    local delayed_fin = pending_http_fin()\n"
         "    if host_response ~= nil then\n"
         '      print(string.format("PRODUCT_ANSWER_HTTP_RESPONSE bytes=%d",\n'
         "        #host_response))\n"
+        "      print(string.format(\n"
+        '        "PRODUCT_ANSWER_HTTP_SEGMENT index=%d bytes=%d",\n'
+        "        http_segment_index, http_last_segment_length))\n"
         "      http_response_pending = true\n"
         "      start_dynamic_write(host_response)\n"
+        "    elseif delayed_fin ~= nil then\n"
+        '      print(string.format("PRODUCT_ANSWER_HTTP_FIN bytes=%d",\n'
+        "        #delayed_fin))\n"
+        "      start_dynamic_write(delayed_fin)\n"
         f"    elseif echo_round < {MAX_PEER_READS}\n"
         "        and program:read_u32(ANSWER_DELIVER_COUNTER)\n"
         "          > echo_deliver_seen then\n"
@@ -1309,7 +1372,7 @@ def answer_automation_script(
         "          http_response_pending = false\n"
         "        end\n"
         "        if http_close_pending and not close_written then\n"
-        "          local close_result = assert(io.open(close_result_path, \"w\"))\n"
+        '          local close_result = assert(io.open(close_result_path, "w"))\n'
         '          close_result:write("ready\\n")\n'
         "          close_result:close()\n"
         "          close_written = true\n"
@@ -1339,7 +1402,18 @@ def answer_automation_script(
         '          if http_kind == "response" then\n'
         '            print(string.format("PRODUCT_ANSWER_HTTP_RESPONSE bytes=%d",\n'
         "              #http_response))\n"
+        "            print(string.format(\n"
+        '              "PRODUCT_ANSWER_HTTP_SEGMENT index=%d bytes=%d",\n'
+        "              http_segment_index, http_last_segment_length))\n"
         "            http_response_pending = true\n"
+        '          elseif http_kind == "segment" then\n'
+        "            print(string.format(\n"
+        '              "PRODUCT_ANSWER_HTTP_SEGMENT index=%d bytes=%d",\n'
+        "              http_segment_index, http_last_segment_length))\n"
+        '          elseif http_kind == "retransmit" then\n'
+        "            print(string.format(\n"
+        '              "PRODUCT_ANSWER_HTTP_RETRANSMIT index=%d bytes=%d",\n'
+        "              http_segment_index, http_last_segment_length))\n"
         '          elseif http_kind == "fin" then\n'
         '            print(string.format("PRODUCT_ANSWER_HTTP_FIN bytes=%d",\n'
         "              #http_response))\n"
@@ -1422,9 +1496,7 @@ def parse_product_result(output: bytes) -> dict[str, int | tuple[int, ...]] | No
         result[name] = int(values[offset])
         offset += 1
     result["detector"] = int(values[offset])
-    result["rates"] = tuple(
-        int(value, 16) for value in values[offset + 1 : offset + 5]
-    )
+    result["rates"] = tuple(int(value, 16) for value in values[offset + 1 : offset + 5])
     result["enables"] = int(values[offset + 5])
     result["size"] = int(values[offset + 6])
     result["initargs"] = tuple(
@@ -1450,9 +1522,7 @@ def parse_echo_result(output: bytes) -> int | None:
 def parse_peer_data(output: bytes) -> bytes | None:
     """Return the first unescaped payload from the answer's final ROM read."""
     matches = [
-        framed
-        for kind, framed in PEER_ROUND_PATTERN.findall(output)
-        if kind == b"4"
+        framed for kind, framed in PEER_ROUND_PATTERN.findall(output) if kind == b"4"
     ]
     if not matches:
         match = PEER_DATA_PATTERN.search(output)
@@ -1607,10 +1677,7 @@ def validate_results(
                 failures.append(f"product missed {name}")
         if product["ppp_read"] < 4 or product["lcp_frame"] < 5:
             failures.append("product did not complete IPCP")
-        if (
-            (product["enables"] != 3 or product["size"] != 48)
-            and not opened_ip
-        ):
+        if (product["enables"] != 3 or product["size"] != 48) and not opened_ip:
             failures.append("product lost its 48-word RX/TX DMA ring")
     if answer is None:
         failures.append("answer did not report a result")
@@ -1656,9 +1723,7 @@ def validate_results(
         assert isinstance(answer_rates, tuple)
         if not http_response_bytes and tuple(
             rate & 0x0FFF for rate in product_rates[1:]
-        ) != tuple(
-            rate & 0x0FFF for rate in answer_rates[1:]
-        ):
+        ) != tuple(rate & 0x0FFF for rate in answer_rates[1:]):
             failures.append("the peers negotiated different rate words")
     if min(forwarded, default=0) < MIN_PCM_BYTES:
         failures.append(f"insufficient paired PCM: {tuple(forwarded)}")
@@ -1773,9 +1838,7 @@ def run_regression(args: argparse.Namespace) -> int:
             else None
             if args.http_upstream_base_url
             else build_http_application(
-                (
-                    f"<html><body>{DEFAULT_HTTP_TEXT}</body></html>\r\n"
-                ).encode()
+                (f"<html><body>{DEFAULT_HTTP_TEXT}</body></html>\r\n").encode()
             )
         )
     except ValueError as error:
@@ -1827,9 +1890,7 @@ def run_regression(args: argparse.Namespace) -> int:
                     answer_automation_script(
                         answer_trigger,
                         http_application=http_application,
-                        host_request_path=(
-                            host_request_path if host_bridge else None
-                        ),
+                        host_request_path=(host_request_path if host_bridge else None),
                         host_response_path=(
                             host_response_path if host_bridge else None
                         ),
@@ -1941,13 +2002,9 @@ def run_regression(args: argparse.Namespace) -> int:
     echoed = parse_echo_result(outputs.get("answer", b""))
     peer_data = parse_peer_data(outputs.get("answer", b""))
     http_request = parse_http_request(outputs.get("answer", b""))
-    http_response_bytes = parse_http_response_result(
-        outputs.get("answer", b"")
-    )
+    http_response_bytes = parse_http_response_result(outputs.get("answer", b""))
     http_fin_bytes = parse_http_fin_result(outputs.get("answer", b""))
-    http_close_ack_bytes = parse_http_close_ack_result(
-        outputs.get("answer", b"")
-    )
+    http_close_ack_bytes = parse_http_close_ack_result(outputs.get("answer", b""))
     failures = validate_results(
         product,
         answer,
@@ -1974,9 +2031,7 @@ def run_regression(args: argparse.Namespace) -> int:
         failures.append("answer peer did not acknowledge the product TCP FIN")
     if product is not None and http_close_ack_bytes and product["ppp_read"] < 8:
         failures.append("product did not receive the HTTP response")
-    rendered, render_detail = verify_rendered_http(
-        run_dir, expected_http_text
-    )
+    rendered, render_detail = verify_rendered_http(run_dir, expected_http_text)
     if not rendered:
         failures.append(render_detail)
     if relay.error is not None:

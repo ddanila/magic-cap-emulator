@@ -43,9 +43,7 @@ class ProductDataModemScriptTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(
-            target, "https://example.com/base/folder/page?q=1"
-        )
+        self.assertEqual(target, "https://example.com/base/folder/page?q=1")
         self.assertEqual(
             headers,
             {"Accept": "text/html", "User-Agent": "Magic Cap"},
@@ -66,8 +64,13 @@ class ProductDataModemScriptTests(unittest.TestCase):
         script = tcp_peer_lua(application)
         self.assertIn("0x48, 0x6f, 0x73, 0x74", script)
 
+        segmented = build_http_application(b"x" * 5_000)
+        self.assertGreater(len(segmented), 4_096)
+        segmented_script = tcp_peer_lua(segmented)
+        self.assertIn("http_application_offset + http_peer_mss - 1", segmented_script)
+        self.assertIn("advertised, 4096", segmented_script)
         with self.assertRaises(ValueError):
-            build_http_application(b"x" * 4_097)
+            build_http_application(b"x" * 16_385)
 
     def test_script_drives_browser_provider_and_reload(self) -> None:
         script = product_automation_script()
@@ -78,12 +81,12 @@ class ProductDataModemScriptTests(unittest.TestCase):
         self.assertIn("press(450, 250)", script)
         self.assertIn('trigger_file:write("dialed', script)
         self.assertIn("program:read_u32(CALL_READY_COUNTER) > 0", script)
-        self.assertIn(
-            "frames >= call_ready_frame + CALL_SETTLE_FRAMES", script
-        )
+        self.assertIn("frames >= call_ready_frame + CALL_SETTLE_FRAMES", script)
         self.assertNotIn("frames == 5100", script)
         self.assertIn("product.result-ready", script)
         self.assertIn("product-http.result-ready", script)
+        self.assertIn("close.result-ready", script)
+        self.assertIn("frames >= close_ready_frame + 120", script)
         self.assertIn("answer.result-ready", script)
         self.assertIn("PRODUCT_DATA_MODEM_RESULT", script)
         self.assertIn('screen:snapshot("product-result.png")', script)
@@ -118,7 +121,11 @@ class ProductDataModemScriptTests(unittest.TestCase):
         self.assertIn("PRODUCT_ANSWER_PEER_DATA", script)
         self.assertIn("dynamic_syn_ack", script)
         self.assertIn("dynamic_control_response", script)
-        self.assertIn("0x18, http_application, 0x1235", script)
+        self.assertIn("next_http_segment(client_next_sequence)", script)
+        self.assertIn("PRODUCT_ANSWER_HTTP_SEGMENT", script)
+        self.assertIn("PRODUCT_ANSWER_HTTP_RETRANSMIT", script)
+        self.assertIn("http_fin_ready_frame = frames + 300", script)
+        self.assertIn("pending_http_fin()", script)
         self.assertIn("0x11, {}, 0x1236", script)
         self.assertIn("PRODUCT_ANSWER_DYNAMIC_WRITE_RETURN", script)
         self.assertIn("PRODUCT_ANSWER_HTTP_RESPONSE", script)
@@ -155,9 +162,7 @@ class ProductDataModemScriptTests(unittest.TestCase):
         self.assertEqual(words[-2], 0x1000_FFFF)
 
     def test_ppp_fcs_and_initial_lcp_response(self) -> None:
-        request = bytes.fromhex(
-            "ff03c021011f000e02060000000007020802"
-        )
+        request = bytes.fromhex("ff03c021011f000e02060000000007020802")
         self.assertEqual(ppp_fcs(request), 0x5E26)
         self.assertEqual(
             async_ppp_frame(request),
@@ -196,8 +201,7 @@ class ProductDataModemResultTests(unittest.TestCase):
         self.assertIn("final Web Browser screen", detail)
 
     PEER_IP_DATA = bytes.fromhex(
-        "ff0300214500002c7c7300004006e648"
-        "0a00020f0a00020204001f903f999b"
+        "ff0300214500002c7c7300004006e6480a00020f0a00020204001f903f999b"
     )
 
     @staticmethod
@@ -266,9 +270,7 @@ class ProductDataModemResultTests(unittest.TestCase):
             ),
             [],
         )
-        self.assertEqual(
-            parse_echo_result(b"PRODUCT_ANSWER_ECHO bytes=37\n"), 37
-        )
+        self.assertEqual(parse_echo_result(b"PRODUCT_ANSWER_ECHO bytes=37\n"), 37)
 
     def test_missing_product_data_mode_is_rejected(self) -> None:
         product = parse_product_result(self.product_output())
@@ -412,9 +414,7 @@ class ProductDataModemResultTests(unittest.TestCase):
         self.assertTrue(request.startswith(b"GET / HTTP/1.0\r\n"))
         self.assertIn(b"Host: 10.0.2.2:8080\r\n", request)
         self.assertEqual(
-            parse_http_response_result(
-                b"PRODUCT_ANSWER_HTTP_RESPONSE bytes=231\n"
-            ),
+            parse_http_response_result(b"PRODUCT_ANSWER_HTTP_RESPONSE bytes=231\n"),
             231,
         )
         self.assertEqual(
@@ -422,9 +422,7 @@ class ProductDataModemResultTests(unittest.TestCase):
             53,
         )
         self.assertEqual(
-            parse_http_close_ack_result(
-                b"PRODUCT_ANSWER_HTTP_CLOSE_ACK bytes=52\n"
-            ),
+            parse_http_close_ack_result(b"PRODUCT_ANSWER_HTTP_CLOSE_ACK bytes=52\n"),
             52,
         )
 

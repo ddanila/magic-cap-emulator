@@ -386,10 +386,10 @@ python3 tools/product_data_modem_regression.py \
 ```
 
 The endpoint may use HTTP or HTTPS on the host side. Its response is fetched
-once before dialing, normalized to HTTP/1.0, limited to 4 KiB of application
-data for the enlarged single ROM-write scratch area, and saved with the run
-artifacts. The expected text is required so OCR proves that Web Browser
-rendered the host-supplied body rather than the deterministic fallback.
+once before dialing, normalized to HTTP/1.0, limited to 16 KiB of application
+data, and saved with the run artifacts. The expected text is required so OCR
+proves that Web Browser rendered the host-supplied body rather than the
+deterministic fallback.
 
 To forward the request actually sent by Magic Cap, use a base URL instead:
 
@@ -408,8 +408,19 @@ and query to the configured base path, and forwards only `Accept` and
 upstream host. The host fetch therefore cannot start before Magic Cap sends
 the request. `guest-http-request.bin`, `host-http-target.txt`, and the exact
 normalized `host-http-response.bin` remain in the run directory. The same
-4 KiB single-response bound applies; segmentation of larger responses remains
-future bridge work.
+16 KiB response bound applies. The answer peer reads the MSS option from Magic
+Cap's SYN, divides the response into no-larger segments, and waits for the
+exact cumulative ACK before advancing. It retains the last segment for a
+duplicate-request retransmission. Because the ROM queue accepted only 2,047
+bytes of one attempted 4 KiB payload, respecting the advertised MSS is also
+required at the ROM/LAPM boundary, not merely polite TCP behavior.
+
+The final data ACK starts a short grace interval so Web Browser can parse its
+queued body before the peer sends FIN. The final snapshot is held until the
+close ACK has returned through the answer ROM and two more seconds of guest
+time have elapsed. A live 9,120-byte response passed as seventeen 536-byte
+segments plus one 8-byte segment, rendered its expected text, and closed
+without the disconnect warning.
 
 The source is copied and never modified. One DataRover wakes from the
 Internet Center, returns through Downtown and Hallway to the Desk, opens Web
@@ -469,8 +480,8 @@ the final Web Browser snapshot. The product calls
 `SoftwareModem_Read`, `PPPServer_ReadPDU` and `LCP_ProcessFrame` throughout.
 This proves LCP/IPCP, bidirectional TCP and rendered HTTP across the complete
 ROM stack. The live base-URL mode additionally proves that the browser's
-request can drive a bounded host fetch; a general multi-segment bridge remains
-separate from the already working PC Card PPP path.
+request can drive a bounded host fetch; an unrestricted, multi-request proxy
+remains separate from the already working PC Card PPP path.
 
 ROM reads are not packet-aligned: one observed 58-byte read contained an LCP
 Configure-Ack followed by an IPCP Configure-Request, while another contained

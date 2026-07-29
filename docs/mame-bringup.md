@@ -401,7 +401,7 @@ scripted response sequence. Artifacts remain under
 `--http-upstream-url` replaces the deterministic body with a host-fetched
 HTTP(S) response. The adapter normalizes status, content type, length and
 connection headers to HTTP/1.0, caps the complete application response at
-4 KiB so it fits the enlarged single ROM-write scratch area, preserves the
+16 KiB, preserves the
 normalized bytes as `host-http-response.bin`, and requires caller-supplied
 OCR text. This fixed-URL mode fetches before dialing.
 
@@ -411,8 +411,14 @@ path and query onto the configured base path, forwards `Accept` and
 `User-Agent`, substitutes the upstream `Host`, and returns the same bounded
 normalized response. The artifacts include `guest-http-request.bin`,
 `host-http-target.txt`, and `host-http-response.bin`, proving the live
-request-to-fetch handoff. This is still a bounded single-response adapter, not
-a transparent proxy; segmenting responses larger than 4 KiB remains.
+request-to-fetch handoff. The answer extracts the MSS advertised in Magic
+Cap's SYN, sends no more than that many response bytes per packet, and advances
+only on the exact cumulative ACK. It retains the last packet for request
+retransmission, delays FIN briefly after the final data ACK, and holds the
+result capture until the close handshake and a guest-side settle interval
+complete. A 9,120-byte response passes in 18 segments without a disconnect
+warning. This remains a bounded, single-request adapter rather than a
+transparent network proxy.
 
 The paired-fax harness instead starts two ordinary retained-state machines,
 creates and selects `Fax Peer` through the visible origin UI, and rings the
@@ -639,8 +645,8 @@ the separate serial-terminal view.
 | Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
 
 The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
-still incomplete. The current gaps include a general host bridge for the
-now-connected built-in dial-up path, multi-device
+still incomplete. The current gaps include an unrestricted, multi-request host
+bridge beyond the bounded built-in dial-up regression adapter, multi-device
 Magic Bus topology, and hardware fidelity beyond the register behavior
 exercised by the ROM; see
 [`PLAN.md`](../PLAN.md#remaining-work). Magic Bus discovery and its
