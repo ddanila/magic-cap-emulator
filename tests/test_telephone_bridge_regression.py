@@ -85,6 +85,7 @@ class TelephoneBridgeRegressionTests(unittest.TestCase):
             self.assertEqual(second.recv(6), b"abcdef")
             self.assertEqual(relay.captured[0], b"abc")
             self.assertEqual(relay.captured[1], b"")
+            self.assertEqual(relay.started_at_peer_bytes, [0, None])
         finally:
             first.close()
             second.close()

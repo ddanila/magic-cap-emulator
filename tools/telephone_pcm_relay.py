@@ -38,6 +38,7 @@ class PcmRelay:
         self.capture_limit = capture_limit
         self.captured = [bytearray(), bytearray()]
         self.forwarded = [0, 0]
+        self.started_at_peer_bytes: list[int | None] = [None, None]
         self.error: Exception | None = None
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -100,6 +101,10 @@ class PcmRelay:
                         if not any(active):
                             return
                         continue
+                    if self.started_at_peer_bytes[index] is None:
+                        self.started_at_peer_bytes[index] = self.forwarded[
+                            1 - index
+                        ]
                     if len(self.captured[index]) < self.capture_limit:
                         remaining = self.capture_limit - len(self.captured[index])
                         self.captured[index].extend(data[:remaining])

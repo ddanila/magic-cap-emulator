@@ -255,7 +255,10 @@ wait is needed because the two emulators have nominally identical
 7,200-sample/s clocks but different host workloads; without it, the faster
 virtual modem can consume silence while its peer is still computing. The
 relay also bounds stream skew and permits a configurable, bounded diagnostic
-capture without changing the forwarded bytes.
+capture without changing the forwarded bytes. Its
+`started_at_peer_bytes` counters record how many bytes the opposite peer had
+already sent when each direction first became active, making pre-stream
+virtual-time skew measurable.
 
 The automated transport check uses two isolated monitor boots, distinct
 constant sample words and continuous 64-word RX/TX rings:
@@ -313,16 +316,21 @@ This narrows the remaining failure: raw full-duplex transport, scheduler
 skew, silent DSP output, answer-role selection, simple polarity, a broad
 direct-to-attenuated gain range, incoming call-object creation, and the real
 fax-answer and fax-origin startups have all been addressed or excluded. A
-paired product run also proves seven origin digits plus non-silent PCM in both
-directions, while the answer side repeatedly runs fax receive/transmit and
-both HDLC directions. A second run delays the physical ring until origin digit
-collection and selects **receive fax** immediately while its live call object
-is valid. The answerer enters `AnswerModem` and fax DSP as expected, but the
-originator remains in `Dialing` and never reaches `FaxModemInit`. This excludes
-switch sequencing and isolates answer-signal recognition across the digital
-line—likely framing, gain, echo, or another analog-line property—as the next
-boundary. Carrier, data transfer, and completed fax-page transfer are still
-unclaimed.
+captured answer stream begins with the expected strong 2,100 Hz CED and then
+V.21-like FSK; replaying it through a single socket peer makes the origin run
+fax RX/TX, exchange HDLC, and call `SendFaxImageData` 71 times. This proves
+answer generation, bridge framing, and origin detection independently.
+
+The paired result is now one layer farther. Relay first-activity timing shows
+that frame-scheduled answer startup varies substantially before both telecom
+streams exist. A run connected near 236 KiB of origin output and reached
+origin fax receive plus two HDLC frames. Another connected earlier, initialized
+fax nine times on both ROMs, ran bidirectional fax DSP, exchanged 7/4 origin
+and 4/12 answer HDLC calls, and reached two real origin
+`SendFaxImageData` calls before both UIs reported failure. The next harness
+must trigger the physical ring from origin byte count rather than independent
+video frames, then require receiver image mode and a stored page. Completed
+fax-page transfer remains unclaimed.
 
 ## Published design cross-check
 

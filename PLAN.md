@@ -53,12 +53,13 @@ The full regression list and expected checkpoints are in
   product-level fax originator now also creates a recipient, addresses the
   Desk screen, dials seven decoded digits, initializes fax mode, and starts
   DMA. The combined exchange/bridge mode supplies origin-side dial tone and
-  then peer PCM. A delayed late ring now connects the live answer path only
-  after digit collection; both sides emit non-silent PCM and the answerer runs
-  fax DSP plus both HDLC directions, but the originator still remains in
-  `Dialing`. Answer-signal recognition, carrier negotiation, and transferring
-  the rendered page are the next missing layers. This is separate from the
-  working PC Card PPP path
+  then peer PCM. Measured answer timing now gets both ROMs into fax DSP:
+  paired runs exchange bidirectional HDLC and reach two real
+  `SendFaxImageData` calls before both product UIs report failure. The relay
+  records the opposite-side byte count at first activity, exposing
+  nondeterministic pre-stream frame skew; a byte-count-driven ring gate,
+  receiver image mode, and completed rendered-page transfer are the next
+  missing layers. This is separate from the working PC Card PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 
 - **Expand Magic Bus beyond one keyboard.** The product connector supports
