@@ -52,6 +52,7 @@ TONE_PATTERN = re.compile(
     rb"TELECOM TONE samples=(\d+) min=(-?\d+) max=(-?\d+) "
     rb"hz350=(\d+) hz440=(\d+) hz1000=(\d+)"
 )
+DTMF_PATTERN = re.compile(rb"Telephone exchange DTMF: ([0-9A-D*#])")
 
 
 def monitor_config(system: str) -> str:
@@ -73,15 +74,46 @@ def automation_script(
     loopback: bool = True,
     continuous: bool = False,
     dial_tone: bool = False,
+    dtmf: bool = False,
 ) -> str:
     """Return Lua that programs one telecom transfer, optionally continuous."""
     loop_bit = "0x08" if loopback else "0x00"
     dma_control = "0x0003" if continuous else "0x8003"
-    divisor = "0x27" if dial_tone else "0x19"
+    divisor = "0x27" if dial_tone or dtmf else "0x19"
     offhook = (
         "        program:write_u32(SIB_SF0_AUX, 0x04000200)\n"
-        if dial_tone
+        if dial_tone or dtmf
         else ""
+    )
+    buffer_setup = (
+        r"""        local function dtmf_sample(index)
+            local block = math.floor(index / 288)
+            if block ~= 0 and block ~= 2 and block ~= 4 then return 0 end
+            local row = block == 0 and 770.0
+                or (block == 2 and 852.0 or 941.0)
+            local local_index = index % 288
+            local angle1 =
+                2.0 * math.pi * row * local_index / 7200.0
+            local angle2 =
+                2.0 * math.pi * 1336.0 * local_index / 7200.0
+            return math.floor(
+                (math.sin(angle1) + math.sin(angle2)) * 4000.0 + 0.5)
+        end
+        for index = 0, WORDS - 1 do
+            local first = dtmf_sample(index * 2) & 0xffff
+            local second = dtmf_sample(index * 2 + 1) & 0xffff
+            program:write_u32(
+                TX + index * 4, (first << 16) | second)
+            program:write_u32(RX + index * 4, 0xffffffff)
+        end
+"""
+        if dtmf
+        else r"""        -- A recognisable pattern, and a receive buffer that must be overwritten.
+        for index = 0, WORDS - 1 do
+            program:write_u32(TX + index * 4, 0x5a000000 + index)
+            program:write_u32(RX + index * 4, 0xffffffff)
+        end
+"""
     )
     tone_report = (
         r"""
@@ -132,12 +164,7 @@ emu.register_frame_done(function()
     frames = frames + 1
 
     if frames == 120 then
-        -- A recognisable pattern, and a receive buffer that must be overwritten.
-        for index = 0, WORDS - 1 do
-            program:write_u32(TX + index * 4, 0x5a000000 + index)
-            program:write_u32(RX + index * 4, 0xffffffff)
-        end
-
+{buffer_setup}
         program:write_u32(TEL_TX_START, TX)
         program:write_u32(TEL_RX_START, RX)
 {offhook}        -- Telecom size field is bits 13:2 and holds the last valid index.
@@ -199,6 +226,11 @@ def parse_tone_result(output: bytes) -> dict[str, int] | None:
         name: int(value)
         for name, value in zip(names, match.groups(), strict=True)
     }
+
+
+def parse_dtmf_result(output: bytes) -> str | None:
+    digits = DTMF_PATTERN.findall(output)
+    return b"".join(digits).decode("ascii") if digits else None
 
 
 def verify_no_loopback(result: dict[str, int]) -> tuple[bool, str]:
@@ -296,6 +328,17 @@ def verify_dial_tone(
     )
 
 
+def verify_dtmf(
+    result: dict[str, int], digit: str | None
+) -> tuple[bool, str]:
+    passed, message = verify_no_loopback(result)
+    if not passed:
+        return passed, message
+    if digit != "580":
+        return False, f"exchange decoded DTMF digits {digit!r}, expected '580'"
+    return True, "automatic telephone exchange decoded outbound DTMF number 580"
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mame", type=Path, default=DEFAULT_MAME)
@@ -326,10 +369,21 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "automatic telephone exchange's 350+440 Hz dial tone"
         ),
     )
+    parser.add_argument(
+        "--dtmf",
+        action="store_true",
+        help=(
+            "transmit deterministic tone/silence blocks and require the "
+            "automatic telephone exchange to decode DTMF number 580"
+        ),
+    )
     args = parser.parse_args(argv)
-    if sum((args.no_loopback, args.continuous, args.dial_tone)) > 1:
+    if sum(
+        (args.no_loopback, args.continuous, args.dial_tone, args.dtmf)
+    ) > 1:
         parser.error(
-            "--no-loopback, --continuous and --dial-tone are separate runs"
+            "--no-loopback, --continuous, --dial-tone and --dtmf are "
+            "separate runs"
         )
     return args
 
@@ -355,10 +409,11 @@ def run_regression(args: argparse.Namespace) -> int:
     log_path = run_dir / "mame-output.txt"
     lua_path.write_text(
         automation_script(
-            words=1024 if args.dial_tone else WORDS,
-            loopback=not (args.no_loopback or args.dial_tone),
+            words=1024 if args.dial_tone or args.dtmf else WORDS,
+            loopback=not (args.no_loopback or args.dial_tone or args.dtmf),
             continuous=args.continuous,
             dial_tone=args.dial_tone,
+            dtmf=args.dtmf,
         ),
         encoding="utf-8",
     )
@@ -411,7 +466,11 @@ def run_regression(args: argparse.Namespace) -> int:
         )
         return 1
 
-    if args.dial_tone:
+    if args.dtmf:
+        passed, message = verify_dtmf(
+            result, parse_dtmf_result(completed.stdout)
+        )
+    elif args.dial_tone:
         passed, message = verify_dial_tone(
             result, parse_tone_result(completed.stdout)
         )

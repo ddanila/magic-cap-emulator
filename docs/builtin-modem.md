@@ -75,9 +75,23 @@ python3 tools/telecom_regression.py --dial-tone
 
 A passing capture spans about −7,878..7,878, measures amplitudes near 4,000
 at both 350 and 440 Hz, and has negligible 1 kHz off-band energy. This closes
-the first analog DAA input. Guest DTMF/pulse recognition, a product-level pass
-through the ROM's asynchronous `SoftwareModem_CheckDialTone`, carrier and a
-remote modem remain later milestones.
+the first analog DAA input.
+
+The other direction feeds every transmitted telecom sample into a 40 ms DTMF
+detector. It evaluates the standard four low and four high frequencies,
+requires one dominant component from each group, debounces held tones, and
+stops dial tone on the first digit. The multi-digit regression transmits
+tone/silence blocks for `580` and requires the exchange to decode that exact
+number:
+
+```sh
+python3 tools/telecom_regression.py --dtmf
+```
+
+The detector and its partial block, debounce state and dial-tone state survive
+MAME save/load. A product-level pass through the ROM's asynchronous
+`SoftwareModem_CheckDialTone` and dialer, pulse dialing, carrier and a remote
+modem remain later milestones.
 
 ## Published design cross-check
 
@@ -144,10 +158,10 @@ PASS: Magic Cap opened the built-in modem, kept its 48-word telecom ring running
 
 This deliberately proves the ROM/Dino/DSP boundary, not an imaginary
 telephone network. Digital DAA hook, line-connect and ring behavior plus the
-exchange's dial-tone waveform are modelled and checked separately, but guest
-dialing, carrier acquisition and a remote modem are still missing. The test
-invokes the lower ROM boundary rather than automating the Internet Center's
-dial dialogs.
+exchange's dial-tone waveform and outbound DTMF decoder are modelled and
+checked separately, but normal product dialing, carrier acquisition and a
+remote modem are still missing. The test invokes the lower ROM boundary rather
+than automating the Internet Center's dial dialogs.
 
 The product-level target is more specific. *Using Magic Cap*, pp. 135–163 and
 216, documents the built-in fax modem on a telephone line, including selectable

@@ -68,6 +68,16 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("amplitude(350)", script)
         self.assertIn("amplitude(440)", script)
 
+    def test_dtmf_transmits_number_with_silence_gaps(self) -> None:
+        script = telecom.automation_script(
+            words=1024, loopback=False, dtmf=True
+        )
+
+        self.assertIn("block == 0 and 770.0", script)
+        self.assertIn("block == 2 and 852.0 or 941.0", script)
+        self.assertIn("1336.0 * local_index / 7200.0", script)
+        self.assertIn("program:write_u32(SIB_SF0_AUX, 0x04000200)", script)
+
 
 class ParseTests(unittest.TestCase):
     def test_parses_a_result_line(self) -> None:
@@ -102,6 +112,16 @@ class ParseTests(unittest.TestCase):
                 "hz440": 3985,
                 "hz1000": 3,
             },
+        )
+
+    def test_parses_decoded_dtmf_digit(self) -> None:
+        self.assertEqual(
+            telecom.parse_dtmf_result(
+                b"Telephone exchange DTMF: 5\n"
+                b"Telephone exchange DTMF: 8\n"
+                b"Telephone exchange DTMF: 0\n"
+            ),
+            "580",
         )
 
 
@@ -192,6 +212,18 @@ class VerifyTests(unittest.TestCase):
 
         self.assertFalse(passed)
         self.assertIn("insufficient range", message)
+
+    def test_accepts_decoded_dtmf_number(self) -> None:
+        passed, message = telecom.verify_dtmf(result(match=0), "580")
+
+        self.assertTrue(passed, message)
+        self.assertIn("number 580", message)
+
+    def test_rejects_wrong_dtmf_digit(self) -> None:
+        passed, message = telecom.verify_dtmf(result(match=0), "8")
+
+        self.assertFalse(passed)
+        self.assertIn("expected '580'", message)
 
 
 if __name__ == "__main__":
