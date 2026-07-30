@@ -22,6 +22,10 @@ class Tx39DebugRegressionTests(unittest.TestCase):
             b"EPC=A00019C0 SR=00100000\n"
             b"DEBUG_OES DEBUG=40001101 DEPC=A0001A40 "
             b"EPC=A0001A40 CAUSE=00000400 SR=00000404\n"
+            b"DEBUG_BSF_LOAD DEBUG=40000400 R3=00000001 "
+            b"CAUSE=00000000 EPC=00000000\n"
+            b"DEBUG_BSF_STORE DEBUG=40000400 R3=00000002 "
+            b"CAUSE=00000000 EPC=00000000\n"
         )
         self.assertEqual(parse_result(output), EXPECTED)
         self.assertEqual(verify_result(parse_result(output)), [])
@@ -34,7 +38,7 @@ class Tx39DebugRegressionTests(unittest.TestCase):
         result[-1] = 3
         failures = verify_result(tuple(result))
         self.assertEqual(len(failures), 1)
-        self.assertIn("field 23", failures[0])
+        self.assertIn("field 31", failures[0])
 
     def test_script_contains_debug_instructions(self) -> None:
         script = automation_script()
@@ -49,7 +53,10 @@ class Tx39DebugRegressionTests(unittest.TestCase):
         self.assertIn('cpu.state["Debug"]', script)
         self.assertIn('cpu.state["DEPC"]', script)
         self.assertIn('cpu.state["NMI"]', script)
+        self.assertIn('cpu.state["BERR"]', script)
         self.assertIn("cpu.debug:bpset", script)
+        self.assertIn("install_read_tap", script)
+        self.assertIn("install_write_tap", script)
 
 
 if __name__ == "__main__":

@@ -236,8 +236,11 @@ interpreter can represent. A single step coincident with NMI first records
 the NMI state and then enters debug with `NIS`; a coincident enabled ordinary
 interrupt similarly records Cause, EPC and shifted Status before setting
 `OES`. Exact-entry debugger snapshots verify that those ordinary registers
-survive beneath debug mode. Debug-handler bus-error reporting is not yet
-verified. The R3900 has no TLB, so TLF has no applicable source.
+survive beneath debug mode. A data-read or data-write bus error while DM is
+set is consumed as `BsF`; it does not alter Cause/EPC or enter the ordinary
+bus-error vector. Read/write taps inject both cases and prove execution
+continues at the following instruction. The R3900 has no TLB, so TLF has no
+applicable source.
 
 The DataRover has no external coprocessor, so its four condition callbacks
 default false. The injected branch regression nevertheless enables each

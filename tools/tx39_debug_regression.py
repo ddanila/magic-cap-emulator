@@ -31,7 +31,11 @@ RESULT_PATTERN = re.compile(
     rb"DEBUG_NIS DEBUG=([0-9A-F]{8}) DEPC=([0-9A-F]{8}) "
     rb"EPC=([0-9A-F]{8}) SR=([0-9A-F]{8}).*"
     rb"DEBUG_OES DEBUG=([0-9A-F]{8}) DEPC=([0-9A-F]{8}) "
-    rb"EPC=([0-9A-F]{8}) CAUSE=([0-9A-F]{8}) SR=([0-9A-F]{8})",
+    rb"EPC=([0-9A-F]{8}) CAUSE=([0-9A-F]{8}) SR=([0-9A-F]{8}).*"
+    rb"DEBUG_BSF_LOAD DEBUG=([0-9A-F]{8}) R3=([0-9A-F]{8}) "
+    rb"CAUSE=([0-9A-F]{8}) EPC=([0-9A-F]{8}).*"
+    rb"DEBUG_BSF_STORE DEBUG=([0-9A-F]{8}) R3=([0-9A-F]{8}) "
+    rb"CAUSE=([0-9A-F]{8}) EPC=([0-9A-F]{8})",
     re.DOTALL,
 )
 EXPECTED = (
@@ -59,6 +63,14 @@ EXPECTED = (
     0xA000_1A40,
     0x0000_0400,
     0x0000_0404,
+    0x4000_0400,
+    0x0000_0001,
+    0x0000_0000,
+    0x0000_0000,
+    0x4000_0400,
+    0x0000_0002,
+    0x0000_0000,
+    0x0000_0000,
 )
 
 
@@ -70,6 +82,25 @@ local program = cpu.spaces["program"]
 local frames = 0
 local NIS_SNAPSHOT = 0x00001b00
 local OES_SNAPSHOT = 0x00001b20
+local inject_load_berr = false
+local inject_store_berr = false
+
+local load_berr_tap = program:install_read_tap(
+    0x00002000, 0x00002003, "tx39_debug_load_berr",
+    function(offset, data, mask)
+        if inject_load_berr then
+            inject_load_berr = false
+            cpu.state["BERR"].value = 1
+        end
+    end)
+local store_berr_tap = program:install_write_tap(
+    0x00002004, 0x00002007, "tx39_debug_store_berr",
+    function(offset, data, mask)
+        if inject_store_berr then
+            inject_store_berr = false
+            cpu.state["BERR"].value = 1
+        end
+    end)
 
 cpu.debug:bpset(
     0xbfc00200, "(Debug&0x00004000)!=0",
@@ -172,6 +203,39 @@ local function run_interrupt_coincidence()
     cpu.state["PC"].value = 0xa0001a40
 end
 
+local function run_debug_load_bus_error()
+    program:write_u32(0x00001c00, 0x3c01a000) -- lui r1,0xa000
+    program:write_u32(0x00001c04, 0x34212000) -- ori r1,r1,0x2000
+    program:write_u32(0x00001c08, 0x8c220000) -- lw r2,0(r1)
+    program:write_u32(0x00001c0c, 0x24030001) -- addiu r3,zero,1
+    program:write_u32(0x00001c10, 0x1000ffff) -- b .
+    program:write_u32(0x00001c14, 0x00000000) -- nop
+    clear_debug()
+    cpu.state["Cause"].value = 0
+    cpu.state["EPC"].value = 0
+    cpu.state["R3"].value = 0
+    cpu.state["Debug"].value = 0x40000000 -- DM
+    inject_load_berr = true
+    cpu.state["PC"].value = 0xa0001c00
+end
+
+local function run_debug_store_bus_error()
+    program:write_u32(0x00001c40, 0x3c01a000) -- lui r1,0xa000
+    program:write_u32(0x00001c44, 0x34212004) -- ori r1,r1,0x2004
+    program:write_u32(0x00001c48, 0x24021234) -- addiu r2,zero,0x1234
+    program:write_u32(0x00001c4c, 0xac220000) -- sw r2,0(r1)
+    program:write_u32(0x00001c50, 0x24030002) -- addiu r3,zero,2
+    program:write_u32(0x00001c54, 0x1000ffff) -- b .
+    program:write_u32(0x00001c58, 0x00000000) -- nop
+    clear_debug()
+    cpu.state["Cause"].value = 0
+    cpu.state["EPC"].value = 0
+    cpu.state["R3"].value = 0
+    cpu.state["Debug"].value = 0x40000000 -- DM
+    inject_store_berr = true
+    cpu.state["PC"].value = 0xa0001c40
+end
+
 emu.register_frame_done(function()
     frames = frames + 1
     if frames == 10 then
@@ -221,6 +285,18 @@ emu.register_frame_done(function()
             program:read_u32(OES_SNAPSHOT + 0x08),
             program:read_u32(OES_SNAPSHOT + 0x0c),
             program:read_u32(OES_SNAPSHOT + 0x10)))
+        run_debug_load_bus_error()
+    elseif frames == 18 then
+        print(string.format(
+            "DEBUG_BSF_LOAD DEBUG=%08X R3=%08X CAUSE=%08X EPC=%08X",
+            cpu.state["Debug"].value, cpu.state["R3"].value,
+            cpu.state["Cause"].value, cpu.state["EPC"].value))
+        run_debug_store_bus_error()
+    elseif frames == 19 then
+        print(string.format(
+            "DEBUG_BSF_STORE DEBUG=%08X R3=%08X CAUSE=%08X EPC=%08X",
+            cpu.state["Debug"].value, cpu.state["R3"].value,
+            cpu.state["Cause"].value, cpu.state["EPC"].value))
         machine:exit()
     end
 end)
@@ -329,7 +405,8 @@ def run_regression(args: argparse.Namespace) -> int:
         "PASS: TX39 SDBBP records breakpoint and delay-slot state, DERET "
         "returns through DEPC, single-step honors its return/branch-delay "
         "suppression contract, and coincident NMI/interrupt state reaches "
-        "NIS/OES with the ordinary exception registers intact"
+        "NIS/OES with the ordinary exception registers intact; debug-mode "
+        "load/store bus errors set BsF without taking an ordinary exception"
     )
     print(f"Artifacts: {run_dir}")
     return 0

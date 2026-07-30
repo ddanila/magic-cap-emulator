@@ -194,9 +194,10 @@ The full regression list and expected checkpoints are in
   The TX39 self-debug unit now covers `SDBBP`, `DERET`, Debug/DEPC, DBP/DSS,
   delay-slot state, DERET single-step suppression, edge-latched NMI and
   coincident `NIS`/`OES` state with the underlying exception registers
-  preserved. Debug-handler bus-error reporting remains unverified. All four
-  coprocessor condition inputs implement ordinary and likely branches; no
-  likely opcode occurs in a sized SDK ELF function.
+  preserved. Data bus errors in debug mode set `BsF` without entering an
+  ordinary exception, for both loads and stores. All four coprocessor condition
+  inputs implement ordinary and likely branches; no likely opcode occurs in a
+  sized SDK ELF function.
 
 The four systems are usable as intended and no longer carry
 `MACHINE_NOT_WORKING`. They carry `MACHINE_IMPERFECT_TIMING` because exact
