@@ -60,6 +60,12 @@ branches for each of the four coprocessor condition inputs (`BC0FL/TL`
 through `BC3FL/TL`) with the same delay-slot rule. `SYNC` waits for a
 preceding load, store, or data-cache refill.
 
+The R3900 deliberately omits two pieces inherited from the R3000A. Its exact
+`TLBR`, `TLBWI`, `TLBWR`, and `TLBP` encodings execute as no-ops because the
+core has no TLB. `LWCz` and `SWCz` are reserved; Coprocessor Unusable still
+has the documented higher exception priority when the referenced
+coprocessor is disabled.
+
 ## ROM audit
 
 The hosted SDK ELF's executable `.text` section contains 792 aligned
@@ -259,7 +265,10 @@ continues at the following instruction. The R3900 has no TLB, so TLF has no
 applicable source. The same exact-entry harness executes `CACHE` from user
 mode twice: with CU0 clear it observes Cause.CpU, CE=0, the faulting EPC and
 the shifted KU mode stack; with CU0 set the legal cache operation completes
-and execution reaches the following instruction.
+and execution reaches the following instruction. It also executes all four
+TLB encodings through the following instruction, then verifies that an
+unsupported `LWC0` reports CpU in CU0-disabled user mode and RI in kernel
+mode.
 
 The DataRover has no external coprocessor, so its four condition callbacks
 default false. The injected branch regression nevertheless enables each

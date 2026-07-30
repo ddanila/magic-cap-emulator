@@ -41,7 +41,13 @@ RESULT_PATTERN = re.compile(
     rb"CACHE_PRIVILEGE DENIED_CAUSE=([0-9A-F]{8}) "
     rb"DENIED_EPC=([0-9A-F]{8}) DENIED_SR=([0-9A-F]{8}).*"
     rb"CACHE_PRIVILEGE ALLOWED_R3=([0-9A-F]{8}) "
-    rb"ALLOWED_CAUSE=([0-9A-F]{8}) ALLOWED_SR=([0-9A-F]{8})",
+    rb"ALLOWED_CAUSE=([0-9A-F]{8}) ALLOWED_SR=([0-9A-F]{8}).*"
+    rb"TLB_NOP R3=([0-9A-F]{8}) CAUSE=([0-9A-F]{8}) "
+    rb"EPC=([0-9A-F]{8}).*"
+    rb"LWC0_PRIVILEGE CAUSE=([0-9A-F]{8}) EPC=([0-9A-F]{8}) "
+    rb"SR=([0-9A-F]{8}).*"
+    rb"LWC0_RESERVED CAUSE=([0-9A-F]{8}) EPC=([0-9A-F]{8}) "
+    rb"SR=([0-9A-F]{8})",
     re.DOTALL,
 )
 EXPECTED = (
@@ -87,6 +93,15 @@ EXPECTED = (
     0x0000_0005,
     0x0000_0000,
     0x1000_0002,
+    0x0000_0006,
+    0x0000_0000,
+    0x0000_0000,
+    0x0000_002C,
+    0x0000_1E80,
+    0x0000_0008,
+    0x0000_0028,
+    0x0000_1EC0,
+    0x0000_0000,
 )
 
 
@@ -131,6 +146,14 @@ cpu.debug:bpset(
     0x80000080, "EPC==0x00001dc0",
     "do d@0x00001b40=Cause; do d@0x00001b44=EPC; " ..
     "do d@0x00001b48=SR; do pc=0xa0001df0; g")
+cpu.debug:bpset(
+    0x80000080, "EPC==0x00001e80",
+    "do d@0x00001b60=Cause; do d@0x00001b64=EPC; " ..
+    "do d@0x00001b68=SR; do pc=0xa0001eb0; g")
+cpu.debug:bpset(
+    0x80000080, "EPC==0x00001ec0",
+    "do d@0x00001b70=Cause; do d@0x00001b74=EPC; " ..
+    "do d@0x00001b78=SR; do pc=0xa0001ef0; g")
 cpu.debug:go()
 
 local function clear_debug()
@@ -307,6 +330,48 @@ local function run_user_cache_usable()
     cpu.state["PC"].value = 0x00001e00
 end
 
+local function run_tlb_nops()
+    program:write_u32(0x00001e40, 0x42000001) -- tlbr
+    program:write_u32(0x00001e44, 0x42000002) -- tlbwi
+    program:write_u32(0x00001e48, 0x42000006) -- tlbwr
+    program:write_u32(0x00001e4c, 0x42000008) -- tlbp
+    program:write_u32(0x00001e50, 0x24030006) -- addiu r3,zero,6
+    program:write_u32(0x00001e54, 0x1000ffff) -- b .
+    program:write_u32(0x00001e58, 0x00000000) -- nop
+    clear_debug()
+    cpu.state["Cause"].value = 0
+    cpu.state["EPC"].value = 0
+    cpu.state["R3"].value = 0
+    cpu.state["PC"].value = 0xa0001e40
+end
+
+local function run_user_lwc0_unusable()
+    program:write_u32(0x00001e80, 0xc0000000) -- lwc0 c0r0,0(zero)
+    program:write_u32(0x00001eb0, 0x1000ffff) -- b .
+    program:write_u32(0x00001eb4, 0x00000000) -- nop
+    for address = 0x00001b60, 0x00001b68, 4 do
+        program:write_u32(address, 0)
+    end
+    clear_debug()
+    cpu.state["Cause"].value = 0
+    cpu.state["EPC"].value = 0
+    cpu.state["SR"].value = 0x00000002 -- user mode, CU0 clear
+    cpu.state["PC"].value = 0x00001e80
+end
+
+local function run_kernel_lwc0_reserved()
+    program:write_u32(0x00001ec0, 0xc0000000) -- lwc0 c0r0,0(zero)
+    program:write_u32(0x00001ef0, 0x1000ffff) -- b .
+    program:write_u32(0x00001ef4, 0x00000000) -- nop
+    for address = 0x00001b70, 0x00001b78, 4 do
+        program:write_u32(address, 0)
+    end
+    clear_debug()
+    cpu.state["Cause"].value = 0
+    cpu.state["EPC"].value = 0
+    cpu.state["PC"].value = 0x00001ec0
+end
+
 emu.register_frame_done(function()
     frames = frames + 1
     if frames == 10 then
@@ -391,6 +456,26 @@ emu.register_frame_done(function()
             "CACHE_PRIVILEGE ALLOWED_R3=%08X ALLOWED_CAUSE=%08X ALLOWED_SR=%08X",
             cpu.state["R3"].value, cpu.state["Cause"].value,
             cpu.state["SR"].value))
+        run_tlb_nops()
+    elseif frames == 24 then
+        print(string.format(
+            "TLB_NOP R3=%08X CAUSE=%08X EPC=%08X",
+            cpu.state["R3"].value, cpu.state["Cause"].value,
+            cpu.state["EPC"].value))
+        run_user_lwc0_unusable()
+    elseif frames == 25 then
+        print(string.format(
+            "LWC0_PRIVILEGE CAUSE=%08X EPC=%08X SR=%08X",
+            program:read_u32(0x00001b60),
+            program:read_u32(0x00001b64),
+            program:read_u32(0x00001b68)))
+        run_kernel_lwc0_reserved()
+    elseif frames == 26 then
+        print(string.format(
+            "LWC0_RESERVED CAUSE=%08X EPC=%08X SR=%08X",
+            program:read_u32(0x00001b70),
+            program:read_u32(0x00001b74),
+            program:read_u32(0x00001b78)))
         machine:exit()
     end
 end)
@@ -502,7 +587,8 @@ def run_regression(args: argparse.Namespace) -> int:
         "NIS/OES with the ordinary exception registers intact; debug-mode "
         "load/store bus errors set BsF without taking an ordinary exception, "
         "cached execution preserves NmI until a write-one clear, and user-mode "
-        "CACHE obeys Status.CU0"
+        "CACHE plus unsupported coprocessor loads obey Status.CU0; the "
+        "R3900's inherited TLB operations are no-ops"
     )
     print(f"Artifacts: {run_dir}")
     return 0
