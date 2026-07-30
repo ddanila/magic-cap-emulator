@@ -426,8 +426,31 @@ only on the exact cumulative ACK. It retains the last packet for request
 retransmission, delays FIN briefly after the final data ACK, and holds the
 result capture until the close handshake and a guest-side settle interval
 complete. A 9,120-byte response passes in 18 segments without a disconnect
-warning. This remains a bounded, single-request adapter rather than a
-transparent network proxy.
+warning. This remains the bounded, single-request adapter.
+
+`--slirp-network-acceptance` instead passes every complete guest IPv4
+datagram through the answer ROM to a rootless libslirp instance. The helper
+is compiled from repository source into
+`$MAGIC_CAP_ASSETS/runtime/build`; `build-essential`, `pkg-config` and
+`libslirp-dev` are sufficient, and no binary is committed. Its layer-2 shim
+handles ARP, trims Ethernet padding and clamps host TCP windows for the old
+guest stack. The deterministic server redirects `/` to `/second`, so success
+requires two browser requests/TCP connections and OCR of the second page:
+
+```sh
+python3 tools/product_data_modem_regression.py \
+  --reload-only \
+  --nvram-source \
+    "$MAGIC_CAP_ASSETS/runtime/product-data-modem-regression/<calibrated-run>/product/nvram" \
+  --slirp-network-acceptance \
+  --attempts 3
+```
+
+Use the immutable input from a known passing calibrated run. `--attempts`
+bounds and retries the shipping ROM's timing-sensitive carrier acquisition;
+each attempt keeps separate artifacts. The `slirp/guest/` and `slirp/host/`
+directories contain the exact packet sequence for Scapy or conversion to pcap
+for `tshark` and other offline inspection.
 
 The paired-fax harness instead starts two ordinary retained-state machines,
 creates and selects `Fax Peer` through the visible origin UI, and rings the
@@ -672,7 +695,7 @@ the separate serial-terminal view.
 | Power | LCD power blanks scanout without losing its framebuffer; Magic Bus Vcc-off drops and later rediscovers the accessory; AC plus charger enable raises the main-battery ADC; the real controls clamp 1–60 minutes and their AC-idle checkbox governs automatic `SLEE`/VCC-off shutdown |
 | Sound output | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
 | Sound input | One-shot SIB receive DMA captures deterministic tone/silence with all expected status; the real Stamper UI records a 1 kHz microphone source, stops and drains its SIB command, then plays an audible WAV segment |
-| Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 and fax code through TX39 DSP extensions; paired generic roles negotiate matching rates and complete V.32 plus LAPM; Web Browser selects an Internet Center provider mapped to `PPP dialup`, dials `555-1212`, starts its real PPP actor, completes LCP/IPCP with guest address `10.0.2.15`, exchanges dynamic TCP, sends `GET / HTTP/1.0`, receives `HTTP/1.0 200 OK`, and renders its deterministic body; direct DAA verification covers connected/off-hook and both ring edges; a held ring opens Phone Status; **receive fax** reaches live-call `AnswerModem`, both fax HDLC directions and non-silent PCM; a clocked two-DataRover product run creates a recipient, dials `5551212`, sustains image transfer, then relaunches the receiver and opens the retained In-box fax, one-page stationery and rendered page; the exchange also supplies deterministic dial tone and decodes DTMF/pulse dialing |
+| Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 and fax code through TX39 DSP extensions; paired generic roles negotiate matching rates and complete V.32 plus LAPM; Web Browser selects an Internet Center provider mapped to `PPP dialup`, dials `555-1212`, starts its real PPP actor, completes LCP/IPCP with guest address `10.0.2.15`, exchanges dynamic TCP, sends `GET / HTTP/1.0`, receives `HTTP/1.0 200 OK`, and renders its deterministic body; its raw-IPv4 mode also traverses rootless libslirp, follows an HTTP redirect over a second TCP connection and renders the second page; direct DAA verification covers connected/off-hook and both ring edges; a held ring opens Phone Status; **receive fax** reaches live-call `AnswerModem`, both fax HDLC directions and non-silent PCM; a clocked two-DataRover product run creates a recipient, dials `5551212`, sustains image transfer, then relaunches the receiver and opens the retained In-box fax, one-page stationery and rendered page; the exchange also supplies deterministic dial tone and decodes DTMF/pulse dialing |
 | Magic Bus | ROM independently assigns addresses zero and one, validates checksummed `ATKB` and `SCTG` descriptors, attaches both client classes, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures; the IDT monitor also discovers SCTG alone, receives function-18 data with command 3, and sends function-19 data with command 7; the similarly named external-modem route is correctly kept on UART B |
 | PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback and live-OS checks; blank storage setup, persistent `RAMC` remount, Option-insert reformat, Good/Low/Dead battery pins, a card-backed Notebook object and full built-in backup/restore also pass; `Translation.pkg` copies an authentic 1.x `new items` package into Built-in storage without source writes |
 | PC Card Ethernet | The archived EtherLink driver initializes the 3C589, completes ARP/TCP through rootless libslirp, renders deterministic local HTTP, and carries Browser 3.5's native HTTPS Rule through a loopback Crypto Ancienne proxy; the absolute request, decrypted request, and rendered result are checked |
@@ -682,10 +705,9 @@ the separate serial-terminal view.
 | Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
 
 The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
-still incomplete. The current gaps include an unrestricted, multi-request host
-bridge beyond the bounded built-in dial-up regression adapter, higher-level
-SCTG/PCLink peer semantics and physical Magic Bus chaining, and hardware
-fidelity beyond the register behavior exercised by the ROM; see
+still incomplete. The current gaps include higher-level SCTG/PCLink peer
+semantics and physical Magic Bus chaining, and hardware fidelity beyond the
+register behavior exercised by the ROM; see
 [`PLAN.md`](../PLAN.md#remaining-work). Magic Bus discovery, its multi-address
 topology, AT-keyboard traffic and both directions of the monitor's SCTG
 request/data path are covered by headless probes.

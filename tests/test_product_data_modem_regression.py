@@ -1,10 +1,14 @@
 import unittest
+import http.client
+import tempfile
 from pathlib import Path
 
 from tools.product_data_modem_regression import (
     HALF_DMA_BYTES,
     MIN_PCM_BYTES,
     PRODUCT_SYMBOLS,
+    SLIRP_ACCEPTANCE_TEXT,
+    SlirpAcceptanceServer,
     answer_automation_script,
     async_ppp_frame,
     build_http_application,
@@ -32,6 +36,36 @@ from tools.product_data_modem_regression import (
 
 
 class ProductDataModemScriptTests(unittest.TestCase):
+    def test_slirp_acceptance_server_requires_two_requests(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            completion = Path(directory) / "complete"
+            server = SlirpAcceptanceServer(port=0, completion_path=completion)
+            server.start()
+            try:
+                connection = http.client.HTTPConnection("127.0.0.1", server.port)
+                connection.request("GET", "/")
+                response = connection.getresponse()
+                self.assertEqual(response.status, 302)
+                self.assertEqual(
+                    response.getheader("Location"),
+                    f"http://10.0.2.2:{server.port}/second",
+                )
+                response.read()
+                connection.close()
+
+                connection = http.client.HTTPConnection("127.0.0.1", server.port)
+                connection.request("GET", "/second")
+                response = connection.getresponse()
+                self.assertEqual(response.status, 200)
+                self.assertIn(SLIRP_ACCEPTANCE_TEXT.encode(), response.read())
+                connection.close()
+            finally:
+                server.stop()
+
+            self.assertEqual(completion.read_text(encoding="ascii"), "complete\n")
+            self.assertEqual(server.requests, ["/", "/second"])
+            self.assertIsNone(server.error)
+
     def test_live_guest_http_request_maps_to_host_base(self) -> None:
         target, headers = resolve_guest_http_request(
             "https://example.com/base/",
@@ -93,6 +127,15 @@ class ProductDataModemScriptTests(unittest.TestCase):
         self.assertIn("PRODUCT_PPP_READ_COUNTER) >= 8", script)
         self.assertNotIn("0x13c29434", script)
 
+        network_script = product_automation_script(
+            network_result_path=Path("/tmp/slirp-http-complete")
+        )
+        self.assertIn(
+            'local network_result_path = "/tmp/slirp-http-complete"',
+            network_script,
+        )
+        self.assertIn("network_ready_frame + 120", network_script)
+
     def test_configs_select_exchange_for_product_and_bridge_for_answer(self) -> None:
         self.assertIn('value="3"', machine_config("product"))
         self.assertIn('value="2"', machine_config("answer"))
@@ -151,6 +194,31 @@ class ProductDataModemScriptTests(unittest.TestCase):
         self.assertIn('host_request_path .. ".partial"', script)
         self.assertIn("pending_host_http_response()", script)
         self.assertIn('echo_phase = "write"\n  echo_active = true', script)
+
+    def test_answer_peer_can_exchange_arbitrary_ipv4_with_slirp(self) -> None:
+        script = answer_automation_script(
+            Path("/tmp/call.trigger"),
+            ip_guest_dir=Path("/tmp/ip/guest"),
+            ip_host_dir=Path("/tmp/ip/host"),
+        )
+
+        self.assertIn("local slirp_bridge_enabled = true", script)
+        self.assertIn('slirp_guest_dir = "/tmp/ip/guest"', script)
+        self.assertIn('slirp_host_dir = "/tmp/ip/host"', script)
+        self.assertIn("queue_slirp_packets()", script)
+        self.assertIn("pending_slirp_packet()", script)
+        self.assertIn("PRODUCT_ANSWER_SLIRP_TX", script)
+        self.assertIn("PRODUCT_ANSWER_SLIRP_RX", script)
+        self.assertIn(
+            "if slirp_bridge_enabled and response_kind == 4 then",
+            script,
+        )
+        self.assertIn("if not slirp_bridge_enabled then", script)
+        self.assertIn("slirp_bridge_enabled or echo_round < 48", script)
+        self.assertIn("local slirp_frame = {}", script)
+        self.assertIn("write_slirp_frame(slirp_frame)", script)
+        with self.assertRaises(ValueError):
+            tcp_peer_lua(ip_guest_dir=Path("/tmp/ip/guest"))
 
     def test_answer_echo_uses_rom_read_pending_read_and_write(self) -> None:
         words = echo_responder_words()

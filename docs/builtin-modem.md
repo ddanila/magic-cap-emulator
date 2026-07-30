@@ -422,6 +422,61 @@ time have elapsed. A live 9,120-byte response passed as seventeen 536-byte
 segments plus one 8-byte segment, rendered its expected text, and closed
 without the disconnect warning.
 
+For unrestricted multi-request transport, replace the synthetic TCP peer with
+the raw-IPv4 libslirp bridge:
+
+```sh
+python3 tools/product_data_modem_regression.py \
+  --reload-only \
+  --nvram-source \
+    "$MAGIC_CAP_ASSETS/runtime/product-data-modem-regression/<calibrated-run>/product/nvram" \
+  --slirp-network-acceptance \
+  --attempts 3
+```
+
+Use the immutable calibrated browser/provider input printed by a known passing
+run, not an output copy that exited while still connected. V.32 carrier
+acquisition is timing-sensitive, so `--attempts` retries isolated copies of
+the same source. A five-minute post-call watchdog bounds a ROM-training stall;
+once the answer result exists, a separate 90-second watchdog bounds failure
+to open IP. Every failed attempt retains its own NVRAM, Lua and logs.
+
+The answer Lua continuously accumulates asynchronous PPP bytes across
+`SoftModemRead` calls. Control frames still use the live-ID LCP/IPCP peer,
+while each complete protocol-`0x0021` datagram is atomically spooled to
+Python. `SlirpFileBridge` feeds those packets to a small source-built
+libslirp adapter and spools returned IPv4 datagrams back; Lua adds PPP
+address/control/protocol, escaping and FCS before calling the answer ROM's
+`SoftModemWrite`. The adapter supplies the Ethernet/ARP layer that libslirp
+expects, removes minimum-frame Ethernet padding on output, and clamps the
+host TCP window to 4,096 bytes with a corrected checksum for compatibility
+with Magic Cap's period TCP stack.
+
+The bridge uses guest `10.0.2.15`, host `10.0.2.2` and DNS `10.0.2.3`.
+Libslirp supplies rootless TCP, UDP and DNS with no per-connection Lua state,
+so sequential and simultaneous flows share one normal network stack. Host
+loopback is blocked by default; the deterministic acceptance explicitly
+enables it and binds a test server to `127.0.0.1:8080`. `/` returns a `302`
+to `/second`, which returns `Magic Cap bridge works twice.`. A passing run
+requires both recorded paths, at least four packets in each direction and
+OCR of the second body with no dropped-connection text. The accepted run
+exchanged fourteen guest and fourteen host packets across the two TCP
+connections.
+
+Only [`slirp_ip_bridge.cpp`](../tools/slirp_ip_bridge.cpp) is stored in Git.
+[`slirp_ip_bridge.py`](../tools/slirp_ip_bridge.py) invokes the host C++17
+compiler using `pkg-config slirp`, caches the executable under
+`$MAGIC_CAP_ASSETS/runtime/build`, and rebuilds it when the source changes:
+
+```sh
+python3 tools/slirp_ip_bridge.py --build-only
+```
+
+The per-run `slirp/guest/` and `slirp/host/` files preserve every exact IPv4
+datagram, while `slirp-http-requests.txt`, the final screen and OCR text
+provide product-level evidence. No ROM, NVRAM, generated Lua, packet capture
+or bridge executable belongs in the repository.
+
 The source is copied and never modified. One DataRover wakes from the
 Internet Center, returns through Downtown and Hallway to the Desk, opens Web
 Browser, selects the retained provider and reloads. The visible product
@@ -480,8 +535,9 @@ the final Web Browser snapshot. The product calls
 `SoftwareModem_Read`, `PPPServer_ReadPDU` and `LCP_ProcessFrame` throughout.
 This proves LCP/IPCP, bidirectional TCP and rendered HTTP across the complete
 ROM stack. The live base-URL mode additionally proves that the browser's
-request can drive a bounded host fetch; an unrestricted, multi-request proxy
-remains separate from the already working PC Card PPP path.
+request can drive a bounded host fetch. The raw-IPv4 mode separately proves
+unrestricted, multi-request host transport through libslirp; the already
+working PC Card PPP path remains an independent network route.
 
 ROM reads are not packet-aligned: one observed 58-byte read contained an LCP
 Configure-Ack followed by an IPCP Configure-Request, while another contained

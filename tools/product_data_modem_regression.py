@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import http.server
 import os
 import re
 import shutil
@@ -36,6 +37,7 @@ from tools.data_modem_pair_regression import (  # noqa: E402
     parse_result as parse_direct_result,
 )
 from tools.fax_pair_regression import CallPcmExchange  # noqa: E402
+from tools.slirp_ip_bridge import SlirpFileBridge  # noqa: E402
 
 
 ASSETS_ROOT = Path(
@@ -74,10 +76,13 @@ HTTP_RESPONSE_PATTERN = re.compile(rb"PRODUCT_ANSWER_HTTP_RESPONSE bytes=(\d+)")
 HTTP_FIN_PATTERN = re.compile(rb"PRODUCT_ANSWER_HTTP_FIN bytes=(\d+)")
 HTTP_CLOSE_ACK_PATTERN = re.compile(rb"PRODUCT_ANSWER_HTTP_CLOSE_ACK bytes=(\d+)")
 DEFAULT_HTTP_TEXT = "Magic Cap built-in modem works."
+SLIRP_ACCEPTANCE_TEXT = "Magic Cap bridge works twice."
 MAX_HTTP_SEGMENT = 4_096
 MAX_HTTP_RESPONSE = 16_384
 HTTP_FIN_GRACE_FRAMES = 300
 HTTP_RESULT_SETTLE_FRAMES = 120
+SLIRP_ANSWER_TIMEOUT = 300
+SLIRP_IP_START_TIMEOUT = 90
 
 PRODUCT_SYMBOLS = (
     (0x13D4_DD08, "new_dialup_link"),
@@ -537,16 +542,97 @@ class GuestHttpBridge:
             self.error = str(error)
 
 
+class SlirpAcceptanceServer:
+    """Serve a redirect and final page for raw-IP product acceptance."""
+
+    def __init__(
+        self,
+        port: int = 8080,
+        completion_path: Path | None = None,
+    ) -> None:
+        self.port = port
+        self.completion_path = completion_path
+        self.requests: list[str] = []
+        self.error: str | None = None
+        self._server: http.server.ThreadingHTTPServer | None = None
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        owner = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.0"
+
+            def do_GET(self) -> None:  # noqa: N802
+                owner.requests.append(self.path)
+                try:
+                    if self.path == "/":
+                        self.send_response(302)
+                        self.send_header(
+                            "Location",
+                            f"http://10.0.2.2:{owner.port}/second",
+                        )
+                        self.send_header("Content-Length", "0")
+                        self.end_headers()
+                    elif self.path == "/second":
+                        body = (
+                            f"<html><body>{SLIRP_ACCEPTANCE_TEXT}</body></html>\r\n"
+                        ).encode("ascii")
+                        self.send_response(200)
+                        self.send_header("Content-Type", "text/html")
+                        self.send_header("Content-Length", str(len(body)))
+                        self.end_headers()
+                        self.wfile.write(body)
+                        if owner.completion_path is not None:
+                            owner.completion_path.write_text(
+                                "complete\n",
+                                encoding="ascii",
+                            )
+                    else:
+                        self.send_error(404)
+                except (BrokenPipeError, ConnectionError, OSError) as error:
+                    owner.error = str(error)
+
+            def log_message(self, _format: str, *_args: object) -> None:
+                pass
+
+        self._server = http.server.ThreadingHTTPServer(
+            ("127.0.0.1", self.port), Handler
+        )
+        self.port = self._server.server_port
+        self._server.daemon_threads = True
+        self._thread = threading.Thread(
+            target=self._server.serve_forever,
+            name="slirp-acceptance-http",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        if self._server is not None:
+            self._server.shutdown()
+            self._server.server_close()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+
+
 def tcp_peer_lua(
     http_application: bytes | None = None,
     host_request_path: Path | None = None,
     host_response_path: Path | None = None,
+    ip_guest_dir: Path | None = None,
+    ip_host_dir: Path | None = None,
 ) -> str:
     """Return Lua helpers that build a SYN-ACK from the live browser SYN."""
     live_host_bridge = host_request_path is not None and host_response_path is not None
+    live_ip_bridge = ip_guest_dir is not None and ip_host_dir is not None
     if (host_request_path is None) != (host_response_path is None):
         raise ValueError("host request and response paths must be paired")
-    if http_application is None and not live_host_bridge:
+    if (ip_guest_dir is None) != (ip_host_dir is None):
+        raise ValueError("IP guest and host directories must be paired")
+    if live_host_bridge and live_ip_bridge:
+        raise ValueError("HTTP and IP host bridges are mutually exclusive")
+    if http_application is None and not live_host_bridge and not live_ip_bridge:
         body = f"<html><body>{DEFAULT_HTTP_TEXT}</body></html>\r\n".encode()
         http_application = build_http_application(body)
     if http_application is None:
@@ -558,6 +644,8 @@ def tcp_peer_lua(
     )
     request_path_lua = _lua_path(host_request_path) if host_request_path else ""
     response_path_lua = _lua_path(host_response_path) if host_response_path else ""
+    ip_guest_dir_lua = _lua_path(ip_guest_dir) if ip_guest_dir else ""
+    ip_host_dir_lua = _lua_path(ip_host_dir) if ip_host_dir else ""
     return (
         r"""
 local function append_bytes(target, source)
@@ -734,6 +822,14 @@ local http_application = __HTTP_APPLICATION__
 local host_bridge_enabled = __HOST_BRIDGE_ENABLED__
 local host_request_path = "__HOST_REQUEST_PATH__"
 local host_response_path = "__HOST_RESPONSE_PATH__"
+local slirp_bridge_enabled = __SLIRP_BRIDGE_ENABLED__
+local slirp_guest_dir = "__SLIRP_GUEST_DIR__"
+local slirp_host_dir = "__SLIRP_HOST_DIR__"
+local slirp_guest_index = 0
+local slirp_host_index = 1
+local slirp_frame = {}
+local slirp_escaped = false
+local slirp_in_frame = false
 local host_response_pending = false
 local host_client_next_sequence = nil
 local http_application_offset = 1
@@ -743,6 +839,73 @@ local http_last_packet = nil
 local http_fin_pending = false
 local http_fin_ready_frame = nil
 local http_fin_client_next_sequence = nil
+
+local function write_slirp_frame(frame)
+  if #frame < 26 or frame[1] ~= 0xff or frame[2] ~= 0x03
+      or frame[3] ~= 0x00 or frame[4] ~= 0x21
+      or (frame[5] >> 4) ~= 4 then
+    return 0
+  end
+  local ip_length = frame[7] * 256 + frame[8]
+  if ip_length < 20 or #frame < 4 + ip_length then
+    return 0
+  end
+  slirp_guest_index = slirp_guest_index + 1
+  local name = string.format(
+    "guest-%08d.ip", slirp_guest_index)
+  local final_path = slirp_guest_dir .. "/" .. name
+  local temporary_path = final_path .. ".partial"
+  local output = assert(io.open(temporary_path, "wb"))
+  for index = 5, 4 + ip_length do
+    output:write(string.char(frame[index]))
+  end
+  output:close()
+  assert(os.rename(temporary_path, final_path))
+  return 1
+end
+
+local function queue_slirp_packets()
+  local queued = 0
+  for offset = 0, program:read_u32(ECHO_READ_TOTAL) - 1 do
+    local byte = program:read_u8(ECHO_BUFFER + offset)
+    if byte == 0x7e then
+      if slirp_in_frame and #slirp_frame > 0 then
+        queued = queued + write_slirp_frame(slirp_frame)
+      end
+      slirp_frame = {}
+      slirp_escaped = false
+      slirp_in_frame = true
+    elseif slirp_in_frame and slirp_escaped then
+      table.insert(slirp_frame, byte ~ 0x20)
+      slirp_escaped = false
+    elseif slirp_in_frame and byte == 0x7d then
+      slirp_escaped = true
+    elseif slirp_in_frame then
+      table.insert(slirp_frame, byte)
+    end
+  end
+  return queued
+end
+
+local function pending_slirp_packet()
+  if not slirp_bridge_enabled then return nil end
+  local path = slirp_host_dir .. "/" ..
+    string.format("host-%08d.ip", slirp_host_index)
+  local input = io.open(path, "rb")
+  if input == nil then return nil end
+  local packet = input:read("*a")
+  input:close()
+  if #packet < 20 or #packet > 2048
+      or (string.byte(packet, 1) >> 4) ~= 4 then
+    error("invalid IPv4 packet from libslirp bridge")
+  end
+  slirp_host_index = slirp_host_index + 1
+  local payload = { 0xff, 0x03, 0x00, 0x21 }
+  for index = 1, #packet do
+    table.insert(payload, string.byte(packet, index))
+  end
+  return async_ppp_frame(payload)
+end
 
 local function build_http_packet(
     sequence, acknowledgement, flags, application, identification)
@@ -963,6 +1126,9 @@ end
         .replace("__HOST_BRIDGE_ENABLED__", "true" if live_host_bridge else "false")
         .replace("__HOST_REQUEST_PATH__", request_path_lua)
         .replace("__HOST_RESPONSE_PATH__", response_path_lua)
+        .replace("__SLIRP_BRIDGE_ENABLED__", "true" if live_ip_bridge else "false")
+        .replace("__SLIRP_GUEST_DIR__", ip_guest_dir_lua)
+        .replace("__SLIRP_HOST_DIR__", ip_host_dir_lua)
         .replace("__MAX_HTTP_RESPONSE__", str(MAX_HTTP_RESPONSE))
         .replace("__MAX_HTTP_SEGMENT__", str(MAX_HTTP_SEGMENT))
         .replace("__HTTP_FIN_GRACE_FRAMES__", str(HTTP_FIN_GRACE_FRAMES))
@@ -973,6 +1139,7 @@ def product_automation_script(
     call_trigger_path: Path = Path("call.trigger"),
     result_frame: int = 7600,
     reload_only: bool = False,
+    network_result_path: Path | None = None,
 ) -> str:
     """Drive the retained Internet Center provider through Web Browser reload."""
     addresses = ", ".join(f"0x{address:08x}" for address, _ in PRODUCT_SYMBOLS)
@@ -986,6 +1153,7 @@ def product_automation_script(
     http_result_path = _lua_path(call_trigger_path.parent / "product-http.result-ready")
     close_result_path = _lua_path(call_trigger_path.parent / "close.result-ready")
     peer_result_path = _lua_path(call_trigger_path.parent / "answer.result-ready")
+    network_result = _lua_path(network_result_path) if network_result_path else ""
     script = f"""local machine = manager.machine
 local cpu = machine.devices[":maincpu"]
 local program = cpu.spaces["program"]
@@ -1012,6 +1180,8 @@ local http_result_path = "{http_result_path}"
 local close_result_path = "{close_result_path}"
 local peer_result_path = "{peer_result_path}"
 local close_ready_frame = nil
+local network_result_path = "{network_result}"
+local network_ready_frame = nil
 
 local function press(x, y)
   touch_x:set_value(math.floor(x * 65535 / 479))
@@ -1096,9 +1266,13 @@ emu.register_frame_done(function()
   elseif frames == 4720 then release()
 
   elseif frames >= {result_frame}
-      and ((close_ready_frame ~= nil
-          and frames >= close_ready_frame + {HTTP_RESULT_SETTLE_FRAMES})
-        or frames >= {result_frame + 1200}) then
+      and ((network_result_path ~= ""
+          and network_ready_frame ~= nil
+          and frames >= network_ready_frame + {HTTP_RESULT_SETTLE_FRAMES})
+        or (network_result_path == ""
+          and ((close_ready_frame ~= nil
+            and frames >= close_ready_frame + {HTTP_RESULT_SETTLE_FRAMES})
+          or frames >= {result_frame + 1200}))) then
     screen:snapshot("product-result.png")
     local v32 = program:read_u32(V32_POINTER)
     local detector, rate0, rate1, rate2, rate3 = 0, 0, 0, 0, 0
@@ -1156,6 +1330,13 @@ emu.register_frame_done(function()
       close_ready_frame = frames
     end
   end
+  if network_ready_frame == nil and network_result_path ~= "" then
+    local network_result = io.open(network_result_path, "r")
+    if network_result ~= nil then
+      network_result:close()
+      network_ready_frame = frames
+    end
+  end
   if call_ready_frame == nil
       and program:read_u32(CALL_READY_COUNTER) > 0 then
     call_ready_frame = frames
@@ -1198,6 +1379,8 @@ def answer_automation_script(
     http_application: bytes | None = None,
     host_request_path: Path | None = None,
     host_response_path: Path | None = None,
+    ip_guest_dir: Path | None = None,
+    ip_host_dir: Path | None = None,
 ) -> str:
     """Keep the retained answer peer awake while running the direct-answer ROM."""
     script = direct_answer_script(
@@ -1256,7 +1439,7 @@ def answer_automation_script(
         f"local ECHO_LOOP = 0x{echo_loop:08x}\n"
         f"local ECHO_WRITE_LOOP = 0x{write_loop:08x}\n"
         f"local ANSWER_DELIVER_COUNTER = 0x{ANSWER_DELIVER_COUNTER:08x}\n\n"
-        f"{tcp_peer_lua(http_application, host_request_path, host_response_path)}\n"
+        f"{tcp_peer_lua(http_application, host_request_path, host_response_path, ip_guest_dir, ip_host_dir)}\n"
         f"local function start_echo()\n"
         f"  echo_round = echo_round + 1\n"
         f"{echo_writes}\n"
@@ -1330,9 +1513,14 @@ def answer_automation_script(
         "    end\n"
         "  end\n"
         "  if restored and not echo_active then\n"
+        "    local slirp_response = pending_slirp_packet()\n"
         "    local host_response = pending_host_http_response()\n"
         "    local delayed_fin = pending_http_fin()\n"
-        "    if host_response ~= nil then\n"
+        "    if slirp_response ~= nil then\n"
+        '      print(string.format("PRODUCT_ANSWER_SLIRP_RX bytes=%d",\n'
+        "        #slirp_response))\n"
+        "      start_dynamic_write(slirp_response)\n"
+        "    elseif host_response ~= nil then\n"
         '      print(string.format("PRODUCT_ANSWER_HTTP_RESPONSE bytes=%d",\n'
         "        #host_response))\n"
         "      print(string.format(\n"
@@ -1344,7 +1532,7 @@ def answer_automation_script(
         '      print(string.format("PRODUCT_ANSWER_HTTP_FIN bytes=%d",\n'
         "        #delayed_fin))\n"
         "      start_dynamic_write(delayed_fin)\n"
-        f"    elseif echo_round < {MAX_PEER_READS}\n"
+        f"    elseif (slirp_bridge_enabled or echo_round < {MAX_PEER_READS})\n"
         "        and program:read_u32(ANSWER_DELIVER_COUNTER)\n"
         "          > echo_deliver_seen then\n"
         "      start_echo()\n"
@@ -1391,14 +1579,25 @@ def answer_automation_script(
         "          echo_round, program:read_u32(ECHO_RESPONSE_KIND),\n"
         "          echo_read_total, program:read_u32(ECHO_TOTAL),\n"
         "          table.concat(echo_hex)))\n"
-        "        local http_response, http_kind = dynamic_http_response()\n"
-        "        local response = http_response\n"
         "        local response_kind = program:read_u32(ECHO_RESPONSE_KIND)\n"
-        "        if response == nil and (response_kind ~= 4\n"
-        "            or program:read_u32(ECHO_IP_READS) == 1) then\n"
-        "          response = dynamic_peer_response(response_kind)\n"
+        "        if slirp_bridge_enabled then\n"
+        "          local queued = queue_slirp_packets()\n"
+        '          print(string.format("PRODUCT_ANSWER_SLIRP_TX packets=%d",\n'
+        "            queued))\n"
         "        end\n"
-        "        if response ~= nil then\n"
+        "        if slirp_bridge_enabled and response_kind == 4 then\n"
+        "          echo_active = false\n"
+        "        else\n"
+        "          local http_response, http_kind = nil, nil\n"
+        "          if not slirp_bridge_enabled then\n"
+        "            http_response, http_kind = dynamic_http_response()\n"
+        "          end\n"
+        "          local response = http_response\n"
+        "          if response == nil and (response_kind ~= 4\n"
+        "              or program:read_u32(ECHO_IP_READS) == 1) then\n"
+        "            response = dynamic_peer_response(response_kind)\n"
+        "          end\n"
+        "          if response ~= nil then\n"
         '          if http_kind == "response" then\n'
         '            print(string.format("PRODUCT_ANSWER_HTTP_RESPONSE bytes=%d",\n'
         "              #http_response))\n"
@@ -1423,9 +1622,10 @@ def answer_automation_script(
         "              #http_response))\n"
         "            http_close_pending = true\n"
         "          end\n"
-        "          start_dynamic_write(response)\n"
-        "        else\n"
-        "          echo_active = false\n"
+        "            start_dynamic_write(response)\n"
+        "          else\n"
+        "            echo_active = false\n"
+        "          end\n"
         "        end\n"
         "      end\n"
         "    end\n"
@@ -1759,9 +1959,23 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "host HTTP(S) base"
         ),
     )
+    upstream.add_argument(
+        "--slirp-network-acceptance",
+        action="store_true",
+        help=(
+            "route raw guest IPv4 through libslirp and verify a local "
+            "two-request redirect"
+        ),
+    )
     parser.add_argument(
         "--http-expected-text",
         help="OCR text required when a host HTTP upstream is used",
+    )
+    parser.add_argument(
+        "--attempts",
+        type=int,
+        default=1,
+        help="retry a failed product/modem run from the immutable NVRAM source",
     )
     return parser.parse_args(argv)
 
@@ -1831,9 +2045,12 @@ def run_regression(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
+    slirp_acceptance = args.slirp_network_acceptance
     try:
         http_application = (
-            fetch_http_application(args.http_upstream_url)
+            None
+            if slirp_acceptance
+            else fetch_http_application(args.http_upstream_url)
             if args.http_upstream_url
             else None
             if args.http_upstream_base_url
@@ -1844,7 +2061,11 @@ def run_regression(args: argparse.Namespace) -> int:
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
-    expected_http_text = args.http_expected_text or DEFAULT_HTTP_TEXT
+    expected_http_text = (
+        SLIRP_ACCEPTANCE_TEXT
+        if slirp_acceptance
+        else args.http_expected_text or DEFAULT_HTTP_TEXT
+    )
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
     run_dir = args.workdir.expanduser().resolve() / f"{stamp}-{os.getpid()}"
@@ -1864,8 +2085,33 @@ def run_regression(args: argparse.Namespace) -> int:
         if args.http_upstream_base_url
         else None
     )
-    if host_bridge is not None:
-        host_bridge.start()
+    slirp_bridge = (
+        SlirpFileBridge(run_dir / "slirp", allow_host_loopback=True)
+        if slirp_acceptance
+        else None
+    )
+    network_result_path = run_dir / "slirp-http-complete"
+    slirp_server = (
+        SlirpAcceptanceServer(completion_path=network_result_path)
+        if slirp_acceptance
+        else None
+    )
+    try:
+        if host_bridge is not None:
+            host_bridge.start()
+        if slirp_server is not None:
+            slirp_server.start()
+        if slirp_bridge is not None:
+            slirp_bridge.start()
+    except (OSError, RuntimeError) as error:
+        if host_bridge is not None:
+            host_bridge.stop()
+        if slirp_bridge is not None:
+            slirp_bridge.stop()
+        if slirp_server is not None:
+            slirp_server.stop()
+        print(f"error: unable to start host network bridge: {error}", file=sys.stderr)
+        return 2
     call_trigger = run_dir / "call.trigger"
     answer_trigger = run_dir / "answer.trigger"
     relay = CallPcmExchange(
@@ -1894,12 +2140,17 @@ def run_regression(args: argparse.Namespace) -> int:
                         host_response_path=(
                             host_response_path if host_bridge else None
                         ),
+                        ip_guest_dir=(slirp_bridge.guest_dir if slirp_bridge else None),
+                        ip_host_dir=slirp_bridge.host_dir if slirp_bridge else None,
                     )
                     if role == "answer"
                     else product_automation_script(
                         call_trigger,
                         result_frame=6200 if args.reload_only else 7600,
                         reload_only=args.reload_only,
+                        network_result_path=(
+                            network_result_path if slirp_acceptance else None
+                        ),
                     )
                 ),
                 encoding="utf-8",
@@ -1958,14 +2209,18 @@ def run_regression(args: argparse.Namespace) -> int:
 
         def release_completion_hold() -> None:
             markers = (
-                run_dir / "close.result-ready",
-                run_dir / "product.result-ready",
+                (run_dir / "product.result-ready",)
+                if slirp_acceptance
+                else (
+                    run_dir / "close.result-ready",
+                    run_dir / "product.result-ready",
+                )
             )
             answer_result_seen: float | None = None
             while not any(marker.is_file() for marker in markers):
                 if any(process.poll() is not None for _, process in processes):
                     return
-                if (run_dir / "answer.result-ready").is_file():
+                if not slirp_acceptance and (run_dir / "answer.result-ready").is_file():
                     if answer_result_seen is None:
                         answer_result_seen = time.monotonic()
                     elif time.monotonic() - answer_result_seen >= 20:
@@ -1980,6 +2235,46 @@ def run_regression(args: argparse.Namespace) -> int:
         )
         trigger_thread.start()
         completion_thread.start()
+
+        def abort_stalled_slirp() -> None:
+            if slirp_bridge is None:
+                return
+            while not call_trigger.is_file():
+                if any(process.poll() is not None for _, process in processes):
+                    return
+                threading.Event().wait(0.05)
+            answer_result = run_dir / "answer.result-ready"
+            deadline = time.monotonic() + SLIRP_ANSWER_TIMEOUT
+            while not answer_result.is_file() and time.monotonic() < deadline:
+                if any(process.poll() is not None for _, process in processes):
+                    return
+                threading.Event().wait(0.05)
+            if not answer_result.is_file():
+                trigger_errors.append(
+                    "answer ROM did not return within "
+                    f"{SLIRP_ANSWER_TIMEOUT} seconds of the call trigger"
+                )
+                for _, process in processes:
+                    if process.poll() is None:
+                        process.kill()
+                return
+            deadline = time.monotonic() + SLIRP_IP_START_TIMEOUT
+            while slirp_bridge.guest_packets == 0 and time.monotonic() < deadline:
+                if any(process.poll() is not None for _, process in processes):
+                    return
+                threading.Event().wait(0.05)
+            if slirp_bridge.guest_packets:
+                return
+            trigger_errors.append(
+                "raw IP did not start within "
+                f"{SLIRP_IP_START_TIMEOUT} seconds of the answer result"
+            )
+            for _, process in processes:
+                if process.poll() is None:
+                    process.kill()
+
+        slirp_watchdog = threading.Thread(target=abort_stalled_slirp, daemon=True)
+        slirp_watchdog.start()
 
         for role, process in processes:
             output, _ = process.communicate(timeout=600)
@@ -1996,6 +2291,10 @@ def run_regression(args: argparse.Namespace) -> int:
         relay.stop()
         if host_bridge is not None:
             host_bridge.stop()
+        if slirp_bridge is not None:
+            slirp_bridge.stop()
+        if slirp_server is not None:
+            slirp_server.stop()
 
     product = parse_product_result(outputs.get("product", b""))
     answer = parse_direct_result(outputs.get("answer", b""))
@@ -2019,18 +2318,43 @@ def run_regression(args: argparse.Namespace) -> int:
             failures.append(f"live guest HTTP forwarding failed: {host_bridge.error}")
         elif host_bridge.target_url is None:
             failures.append("live guest HTTP request was not forwarded")
-    if http_request is None or not http_request.startswith(
-        b"GET / HTTP/1.0\r\nHost: 10.0.2.2:8080\r\n"
-    ):
-        failures.append("browser HTTP request did not reach the answer peer")
-    if http_response_bytes is None or http_response_bytes <= 0:
-        failures.append("answer peer did not write its HTTP response")
-    if http_fin_bytes is None or http_fin_bytes <= 0:
-        failures.append("answer peer did not complete orderly TCP close")
-    if http_close_ack_bytes is None or http_close_ack_bytes <= 0:
-        failures.append("answer peer did not acknowledge the product TCP FIN")
-    if product is not None and http_close_ack_bytes and product["ppp_read"] < 8:
-        failures.append("product did not receive the HTTP response")
+    if slirp_acceptance:
+        assert slirp_bridge is not None
+        assert slirp_server is not None
+        (run_dir / "slirp-http-requests.txt").write_text(
+            "".join(f"{path}\n" for path in slirp_server.requests),
+            encoding="utf-8",
+        )
+        if slirp_bridge.error is not None:
+            failures.append(f"raw-IP bridge failed: {slirp_bridge.error}")
+        if slirp_server.error is not None:
+            failures.append(f"acceptance HTTP server failed: {slirp_server.error}")
+        if slirp_server.requests[:2] != ["/", "/second"]:
+            failures.append(
+                "browser did not follow the two-request HTTP redirect: "
+                f"{slirp_server.requests!r}"
+            )
+        if slirp_bridge.guest_packets < 4 or slirp_bridge.host_packets < 4:
+            failures.append(
+                "raw-IP bridge exchanged too few packets: "
+                f"guest={slirp_bridge.guest_packets}, "
+                f"host={slirp_bridge.host_packets}"
+            )
+        if product is not None and product["ppp_read"] < 8:
+            failures.append("product did not receive both HTTP exchanges")
+    else:
+        if http_request is None or not http_request.startswith(
+            b"GET / HTTP/1.0\r\nHost: 10.0.2.2:8080\r\n"
+        ):
+            failures.append("browser HTTP request did not reach the answer peer")
+        if http_response_bytes is None or http_response_bytes <= 0:
+            failures.append("answer peer did not write its HTTP response")
+        if http_fin_bytes is None or http_fin_bytes <= 0:
+            failures.append("answer peer did not complete orderly TCP close")
+        if http_close_ack_bytes is None or http_close_ack_bytes <= 0:
+            failures.append("answer peer did not acknowledge the product TCP FIN")
+        if product is not None and http_close_ack_bytes and product["ppp_read"] < 8:
+            failures.append("product did not receive the HTTP response")
     rendered, render_detail = verify_rendered_http(run_dir, expected_http_text)
     if not rendered:
         failures.append(render_detail)
@@ -2044,11 +2368,15 @@ def run_regression(args: argparse.Namespace) -> int:
     assert product is not None
     rates = product["rates"]
     assert isinstance(rates, tuple)
+    network_detail = (
+        "followed an HTTP redirect across two raw-IP/libslirp connections"
+        if slirp_acceptance
+        else "sent GET / HTTP/1.0 and received an HTTP/1.0 200 OK response"
+    )
     print(
         "PASS: Web Browser selected its Internet Center PPP dial-up provider, "
         "dialed through the built-in software modem, completed paired "
-        "V.32/LAPM, LCP/IPCP and TCP, sent GET / HTTP/1.0, received an "
-        "HTTP/1.0 200 OK response and rendered its body "
+        f"V.32/LAPM and LCP/IPCP, {network_detail}, and rendered its body "
         f"(peer-bytes={echoed}, "
         f"rates={','.join(f'{rate:04x}' for rate in rates)}, "
         f"PCM={tuple(relay.call_forwarded)})"
@@ -2058,7 +2386,18 @@ def run_regression(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    return run_regression(parse_args(sys.argv[1:] if argv is None else argv))
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+    if args.attempts < 1:
+        print("error: --attempts must be at least 1", file=sys.stderr)
+        return 2
+    for attempt in range(1, args.attempts + 1):
+        if args.attempts > 1:
+            print(f"Product modem attempt {attempt}/{args.attempts}")
+        result = run_regression(args)
+        if result != 1 or attempt == args.attempts:
+            return result
+        print("Retrying from the immutable NVRAM source after a failed attempt.")
+    raise AssertionError("unreachable")
 
 
 if __name__ == "__main__":

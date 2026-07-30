@@ -24,24 +24,27 @@ The host also has the optional native tools used by the repository's build,
 debugging, media and protocol workflows:
 
 - build and C/C++ analysis: `ccache`, `clang`, `clangd`, `clang-format`,
-  `clang-tidy`, `bear`, Universal Ctags, `lcov` and `gcovr`;
+  `clang-tidy`, `bear`, Universal Ctags, `cppcheck`, include-what-you-use,
+  `lcov`, `gcovr`, AFL++, `heaptrack` and `pahole`;
 - MIPS/debugging: GNU MIPS cross-binutils, `gdb-multiarch`, `qemu-mips`,
-  radare2, Valgrind, `perf`, `strace` and `rr`;
-- shell and automation: `shellcheck`, `shfmt`, SDL, Slirp, Xvfb and the full
-  MAME build/runtime dependency set;
+  radare2, Valgrind, `perf`, `strace`, `rr` and elfutils;
+- shell and automation: `shellcheck`, `shfmt`, Lua 5.4, `luacheck`, SDL,
+  Slirp, Xvfb and the full MAME build/runtime dependency set;
 - binary, filesystem and archive inspection: Binwalk, Sleuth Kit, HFS
-  utilities, SRecord, `cabextract`, `unar`, `unshield`, MuPDF and Tesseract;
+  utilities, SRecord, `cabextract`, `unar`, `unshield`, `xdelta3`, `bsdiff`,
+  MuPDF and Tesseract;
 - serial, network and media inspection: `tshark`, `socat`, `picocom`, FFmpeg
-  and SoX.
+  and SoX; the distribution Python also has Scapy for packet decoding.
 
 Check the command-facing subset without depending on installation paths:
 
 ```sh
 command -v \
-  clang-format clang-tidy bear ctags lcov gcovr \
-  shellcheck shfmt srec_cat cabextract rr \
+  clang-format clang-tidy bear ctags cppcheck iwyu lcov gcovr \
+  shellcheck shfmt lua5.4 luac5.4 luacheck srec_cat cabextract rr \
   mips-linux-gnu-objdump gdb-multiarch qemu-mips \
-  r2 valgrind perf strace binwalk fls hformat \
+  r2 valgrind perf strace eu-readelf pahole heaptrack afl-fuzz \
+  binwalk fls hformat xdelta3 bsdiff \
   mutool tesseract tshark socat picocom unar unshield ffmpeg sox
 ```
 

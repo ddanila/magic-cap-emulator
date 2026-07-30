@@ -66,8 +66,13 @@ explicit host base URL, forward its `Accept` and `User-Agent` headers, and
 return the fetched body through the modem. Responses up to 16 KiB are split at
 the MSS advertised by Magic Cap, advanced by cumulative TCP acknowledgements,
 and closed only after the browser has had time to consume the final segment.
-The remaining built-in-modem network gap is an unrestricted, multi-request
-host bridge rather than the bounded regression adapter.
+A source-built raw-IPv4 adapter now connects the same answer-ROM PPP path to
+rootless libslirp. It preserves PPP frames split across ROM reads, removes
+Ethernet padding, applies the receive-window limit required by the period TCP
+stack, and carries arbitrary TCP/UDP flows instead of synthesizing one
+connection. The product acceptance follows an HTTP redirect across two TCP
+connections and OCR-verifies the second page. The helper executable is built
+outside Git under `$MAGIC_CAP_ASSETS/runtime/build`; only its source is kept.
 The full status table and roadmap are in [`PLAN.md`](PLAN.md); the machine's
 hardware, history, and verification approach are in
 [`docs/background.md`](docs/background.md).

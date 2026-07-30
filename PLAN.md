@@ -18,7 +18,7 @@ The full regression list and expected checkpoints are in
 | Battery & supply inputs | Both ADC channels answer within the ROM's own calibration thresholds, so the spurious backup-battery warning is gone; battery levels, AC adapter and battery cover are selectable, and removing the cover raises the IO interrupt the OS services | [`power-wake.md`](docs/power-wake.md#battery-levels) |
 | Power outputs, charging & policy | MFIO LCD power blanks scanout without destroying the framebuffer; active-high Magic Bus Vcc-off removes and rediscovers its peripheral; AC plus charger enable advances the main-battery ADC; the real Power Controls clamp 1–60 minutes and automatic AC idle shutoff follows its checkbox | [`power-wake.md`](docs/power-wake.md#outputs-the-os-writes) |
 | Sound I/O | ROM's startup tone (unbuffered hold register), buffered SIB sound-TX/RX DMA, host or deterministic microphone input, and Magic Cap's sound-stamp record/stop/play workflow | [`betty-registers.md`](docs/betty-registers.md) |
-| Built-in software modem | Continuous 48-word SIB telecom DMA drives the ROM's V.32 and fax paths through TX39 DSP extensions; the Betty DAA hookswitch/line input and Dino ring detector are modelled; a held ring opens Phone Status, whose real **receive fax** action reaches `AnswerModem`, fax HDLC and non-silent PCM; the visible outbound Fax workflow creates a recipient, renders a screen and dials `5551212`; a clocked two-DataRover exchange runs both product fax roles through retained In-box storage, stationery and a reopened rendered page; the deterministic exchange also supplies dial tone and decodes DTMF/pulse dialing; the visible Telephone output decodes as `580`; Web Browser selects an Internet Center provider mapped to `PPP dialup`, completes V.32/LAPM and LCP/IPCP, exchanges dynamic TCP, forwards its live `GET` to an explicit host base, and renders an MSS-segmented response through an orderly close | [`builtin-modem.md`](docs/builtin-modem.md) |
+| Built-in software modem | Continuous 48-word SIB telecom DMA drives the ROM's V.32 and fax paths through TX39 DSP extensions; the Betty DAA hookswitch/line input and Dino ring detector are modelled; a held ring opens Phone Status, whose real **receive fax** action reaches `AnswerModem`, fax HDLC and non-silent PCM; the visible outbound Fax workflow creates a recipient, renders a screen and dials `5551212`; a clocked two-DataRover exchange runs both product fax roles through retained In-box storage, stationery and a reopened rendered page; the deterministic exchange also supplies dial tone and decodes DTMF/pulse dialing; the visible Telephone output decodes as `580`; Web Browser selects an Internet Center provider mapped to `PPP dialup`, completes V.32/LAPM and LCP/IPCP, and either uses the bounded single-response peer or sends raw IPv4 through rootless libslirp; the latter follows a redirect across two TCP connections and renders the second page | [`builtin-modem.md`](docs/builtin-modem.md) |
 | Magic Bus | Two independently addressed descriptors (`ATKB` and `SCTG`), bus reinitialization, shared request-line edges, PIO/DMA transfers, checksummed discovery, ROM client attachment, bidirectional Set-2 keyboard traffic, and both directions of the IDT monitor's SCTG transport (functions 18/19 and commands 3/7) | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | Dino peripheral clocks | `masterClock` independently gates LCD scanout, UART A/B (including the pulsed IrDA transport), Magic Bus, SIB sound/telecom/frame service, and the periodic timer while the battery-backed RTC remains live; a focused register-level regression proves clocks stop work without losing programmed state and that every exercised engine resumes | [`memory-map.md`](docs/memory-map.md#master-clock-gates) |
 | TX39 core | `MADD`/`MADDU` plus three-operand `MULT`/`MULTU`; Config and Cache CP0 semantics; direct-mapped instruction cache plus two-way, write-through/no-write-allocate data cache with LRU, auto-lock, locked stores, and lock clearing; Config-selected refill and processor-clock divisors. Injected code verifies the arithmetic, CP0, replacement, lock, refill, and 1/2/4/8 clock-rate contracts | [`tx39-cpu.md`](docs/tx39-cpu.md) |
@@ -105,10 +105,20 @@ The full regression list and expected checkpoints are in
   into acknowledged TCP segments, retains the last packet for retransmission,
   waits briefly after the final data ACK before FIN, and gates the final
   screenshot on the complete close. A 9,120-byte live response passed in 18
-  segments without the disconnect warning. The remaining line-side target is
-  an unrestricted, multi-request network bridge rather than this explicit,
-  16 KiB regression adapter. This is
-  separate from the working PC Card PPP path
+  segments without the disconnect warning. A second answer-side mode now
+  persists asynchronous PPP framing across every ROM read and passes complete
+  IPv4 datagrams to a source-built libslirp adapter. The layer-2 shim supplies
+  ARP internally, trims Ethernet padding, clamps the host TCP window to the
+  4,096-byte value accepted by the period-era stack, and returns exact IPv4
+  datagrams through `SoftModemWrite`. It supports arbitrary TCP/UDP flows and
+  multiple sequential or simultaneous connections rather than the explicit
+  16 KiB response contract. A product-level acceptance follows a `302` from
+  `/` to `/second` across two TCP connections, exchanges fourteen packets in
+  each direction, and OCRs `Magic Cap bridge works twice.`. Carrier
+  acquisition remains timing sensitive, so the harness has bounded pre-IP
+  watchdogs and can retry from one immutable retained state with `--attempts`.
+  This closes the unrestricted multi-request bridge target; the working PC
+  Card PPP path remains a separate route
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 
 - **Complete deeper Magic Bus topology and peer semantics.** The driver now
