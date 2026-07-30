@@ -92,7 +92,7 @@ the contract for future archived WaveLAN, NE2000 and wireless-card work.
 
 | Area | User-guide contract | Current evidence | Coverage |
 |---|---|---|---|
-| Navigation and touch | Desk, Hallway and Downtown form the main geography; Controls can rerun touch-screen alignment (pp. 3–12, 51–53) | Fresh-boot automation reaches the Desk and calibrates three points; Tab-menu touch round trips pass | Core path covered; user-requested realignment is not automated |
+| Navigation and touch | Desk, Hallway and Downtown form the main geography; Controls can rerun touch-screen alignment (pp. 3–12, 51–53) | Fresh-boot automation reaches the Desk and calibrates three points; Tab-menu touch round trips pass; Controls → Screen → **adjust** repeats all three targets, commits calibration and returns to Screen | Covered |
 | Speaker and controls | Volume and system sounds are configurable; a sound stamp can record, stop and play microphone audio (pp. 23, 51–53, 67–68) | Startup beep and continuously buffered sound-TX DMA pass; direct sound-RX DMA captures tone/silence; the real Stamper UI records, stops, drains its SIB command, and plays the captured audio into a WAV | Principal sound-stamp workflow covered; volume/control UI choices are not separate tests |
 | Infrared Beam | Any displayed card or page can be beamed; discovery fills the recipient, multiple peers require selection, and Magic Cap 3.1 does not interoperate with earlier versions (pp. 78–79, 133) | Two fresh 3.1 peers discover by owner name, select Bob and transfer Alice's name card | Principal workflow covered; other object types and old-version rejection are not separate tests |
 | Web access | Internet Center provider settings drive dial-up Web access and downloaded-page handling (pp. 105–120, 165–174) | PC Card modem completes Hayes/PPP and Web Browser 4.0 fetches a deterministic local page; the same browser selects a provider whose `home` location uses `PPP dialup`, completes V.32/LAPM and LCP/IPCP, renders fixed or live bounded host responses, and can instead exchange raw IPv4 through rootless libslirp; the raw path follows a redirect across two TCP connections and renders the second page | PC Card PPP fetch, built-in deterministic HTTP, fixed/live bounded forwarding and unrestricted multi-request transport covered |
@@ -100,7 +100,7 @@ the contract for future archived WaveLAN, NE2000 and wireless-card work.
 | Storeroom and packages | Packages can be moved, unpacked, sent, backed up and restored through Storeroom (pp. 179–206) | PCLink installs a real package; Storeroom creates a card-resident built-in backup and restores it in a fresh process | Package installation and full built-in backup/restore covered |
 | Storage cards | A card inserted while off is offered for setup after power-on; Option-insert while running can erase/setup it; Magic Cap displays card battery state and can translate older packages (pp. 183–198, 210–215) | Erased `BLNK` setup/naming, persistent `RAMC` remount, live Option-insert reformat, Good/Low/Dead BVD states, a card-backed Notebook object, and built-in backup/restore pass across process boundaries; `Translation.pkg` copies an authentic 1.x `new items` package into Built-in storage and exposes its Notebook page without source writes | Covered |
 | Power | Main and backup batteries are displayed; AC operation recharges the main cell; automatic shutoff defaults to five minutes and is adjustable from 1–60 minutes, optionally while plugged in (pp. 209–211) | Battery ADC levels, AC/cover inputs, retained-RAM suspend/wake, LCD/Magic Bus rail effects and charger-driven main-ADC rise pass; the real Power Controls show 5, clamp at 1/60, and govern plugged-in `SLEE`/VCC-off shutdown | Covered |
-| Magic Bus | The connector supports PCs, external keyboards, external modems and other accessories, commonly daisy-chained (p. 217) | Independently addressed, checksummed `ATKB` and `SCTG` descriptors enumerate together and attach their distinct ROM clients; the keyboard is rediscovered after bus reinitialization and exchanges Set-2/LED traffic; the IDT monitor completes SCTG functions 18/19 through commands 3/7; the Magic Internet Kit's external-modem route is identified as 38,400-baud UART B and passes a bidirectional RS-232 probe | Multi-address discovery, keyboard/SCTG traffic and the external-modem byte transport are covered; higher-level SCTG/PCLink peer semantics and physical chaining are not |
+| Magic Bus | The connector supports PCs, external keyboards, external modems and other accessories, commonly daisy-chained (p. 217) | Independently addressed, checksummed `ATKB` and `SCTG` descriptors enumerate together and attach their distinct ROM clients; the keyboard is rediscovered after bus reinitialization and exchanges Set-2/LED traffic; the IDT monitor completes SCTG functions 18/19 through commands 3/7 and returns an exact `FastChecksum` result; the Magic Internet Kit's external-modem route is identified as 38,400-baud UART B and passes a bidirectional RS-232 probe | Multi-address discovery, keyboard/SCTG command traffic and the external-modem byte transport are covered; additional observed peer messages and physical chaining remain |
 | Persistence and privacy | Storage-card backup/restore and power-on password confirmation protect retained information (pp. 196–198, 207–208) | Battery-backed DRAM and RTC survive a two-process power cycle; a card backup restores retained RAM and reaches the success dialog | Hardware retention and backup/restore covered; password UI is not automated |
 
 ## Acceptance backlog derived from the guide
@@ -109,11 +109,12 @@ These are product-level tests, ordered by how directly they close known
 hardware gaps:
 
 1. **Deeper Magic Bus topology.** Recover and exercise physical chaining or
-   higher-level SCTG/PCLink peer messages. The external modem is a UART-B
+   additional observed SCTG peer messages. The external modem is a UART-B
    stream rather than another packet-bus class, and the ROM symbol audit does
    not support treating `SCTG` as a disk.
-2. **Smaller UI contracts.** Add focused checks for Controls-initiated touch
-   realignment, volume changes, password-on-wake and beaming a notebook page.
+2. **Smaller UI contracts.** Add focused checks for volume changes,
+   password-on-wake and beaming a notebook page. Controls-initiated touch
+   realignment is covered.
 
 This backlog complements the hardware-oriented list in
 [`PLAN.md`](../PLAN.md#remaining-work). It should not expand the driver

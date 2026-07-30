@@ -324,8 +324,8 @@ topology containing that keyboard plus an `SCTG` SCSI target, or present the
 SCSI target alone for the IDT monitor. The combined topology proves independent
 address assignment and ROM client attachment for two different descriptor
 classes. The monitor path additionally exercises both directions of the SCTG
-transport. Higher-level PCLink peer semantics and a physical daisy-chain
-transport remain unmodeled.
+transport and one non-destructive command/response buffer. Additional observed
+peer messages and a physical daisy-chain transport remain unmodeled.
 
 The controller completes transfers synchronously but preserves the ROM's four
 transaction classes:

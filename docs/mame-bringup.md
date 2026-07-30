@@ -230,6 +230,7 @@ python3 tools/serial_regression.py --checkpoint betty
 python3 tools/uart_b_probe.py
 python3 tools/desk_regression.py
 python3 tools/menu_touch_regression.py
+python3 tools/touch_alignment_regression.py
 python3 tools/power_regression.py
 python3 tools/sound_regression.py
 python3 tools/sound_regression.py --checkpoint dma
@@ -340,6 +341,15 @@ It requires the effective X/Y/button bindings to all name lightgun 1 and
 requires both coordinates plus pen-down to change after `menu_active` returns
 to zero. Generated Lua, isolated NVRAM, and host logs remain under
 `$MAGIC_CAP_ASSETS/runtime/menu-touch-regression/`.
+
+The touch-alignment harness takes a fresh machine through initial calibration,
+then opens Hallway → Controls → Screen and presses the real **adjust** control.
+It resets debugger counters only after reaching that panel and requires one
+new `CalibrationPad_Calibrate`, three `CalibrationPad_Touch` calls, one
+`CommitCalibration`, and an exact return of the Screen panel below the live
+status bar. All six native LCD snapshots, generated Lua, isolated NVRAM, and
+MAME output remain under
+`$MAGIC_CAP_ASSETS/runtime/touch-alignment-regression/`.
 
 The power harness is deliberately two processes, not a same-process shortcut.
 It calibrates a fresh heap, enters normal VCC-off power-down, exits so only
@@ -695,14 +705,14 @@ the separate serial-terminal view.
 | Magic Cap entry | MAME debugger reaches ELF symbol `BootCap` at `0x13c1d120` |
 | Early splash | The bare top hat renders before the interactive UI |
 | Welcome | Circled hat, `Magic Cap™`, and `Touch the screen to begin` render and accept a pen tap |
-| Calibration | Upper-left, lower-right, and center targets accept synthesized Betty ADC samples |
+| Calibration | Upper-left, lower-right, and center targets accept synthesized Betty ADC samples on first boot and again through Controls → Screen → touch alignment; the latter commits the new calibration and returns to Screen |
 | Workbench | Live Dino buffer `0x003f6a00` reaches stable lower-workbench signature `0x9dab458b`; the clock-dependent full-screen checksum is informational |
 | Persistence | 4 MiB DRAM and Dino RTC use external NVRAM files; a two-process regression proves retained-RAM power-down and on-button wake |
 | Power | LCD power blanks scanout without losing its framebuffer; Magic Bus Vcc-off drops and later rediscovers the accessory; AC plus charger enable raises the main-battery ADC; the real controls clamp 1–60 minutes and their AC-idle checkbox governs automatic `SLEE`/VCC-off shutdown |
 | Sound output | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
 | Sound input | One-shot SIB receive DMA captures deterministic tone/silence with all expected status; the real Stamper UI records a 1 kHz microphone source, stops and drains its SIB command, then plays an audible WAV segment |
 | Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 and fax code through TX39 DSP extensions; paired generic roles negotiate matching rates and complete V.32 plus LAPM; Web Browser selects an Internet Center provider mapped to `PPP dialup`, dials `555-1212`, starts its real PPP actor, completes LCP/IPCP with guest address `10.0.2.15`, exchanges dynamic TCP, sends `GET / HTTP/1.0`, receives `HTTP/1.0 200 OK`, and renders its deterministic body; its raw-IPv4 mode also traverses rootless libslirp, follows an HTTP redirect over a second TCP connection and renders the second page; direct DAA verification covers connected/off-hook and both ring edges; a held ring opens Phone Status; **receive fax** reaches live-call `AnswerModem`, both fax HDLC directions and non-silent PCM; a clocked two-DataRover product run creates a recipient, dials `5551212`, sustains image transfer, then relaunches the receiver and opens the retained In-box fax, one-page stationery and rendered page; the exchange also supplies deterministic dial tone and decodes DTMF/pulse dialing |
-| Magic Bus | ROM independently assigns addresses zero and one, validates checksummed `ATKB` and `SCTG` descriptors, attaches both client classes, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures; the IDT monitor also discovers SCTG alone, receives function-18 data with command 3, and sends function-19 data with command 7; the similarly named external-modem route is correctly kept on UART B |
+| Magic Bus | ROM independently assigns addresses zero and one, validates checksummed `ATKB` and `SCTG` descriptors, attaches both client classes, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures; the IDT monitor also discovers SCTG alone, executes `FastChecksum` through function 18/command 3, and returns exact status/result through function 19/command 7; the similarly named external-modem route is correctly kept on UART B |
 | PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback and live-OS checks; blank storage setup, persistent `RAMC` remount, Option-insert reformat, Good/Low/Dead battery pins, a card-backed Notebook object and full built-in backup/restore also pass; `Translation.pkg` copies an authentic 1.x `new items` package into Built-in storage without source writes |
 | PC Card Ethernet | The archived EtherLink driver initializes the 3C589, completes ARP/TCP through rootless libslirp, renders deterministic local HTTP, and carries Browser 3.5's native HTTPS Rule through a loopback Crypto Ancienne proxy; the absolute request, decrypted request, and rendered result are checked |
 | PCLink | The Storeroom computer installs archived `DvorakKeyboard.pkg`; the optional 452K TLS-browser package also transfers, disconnects cleanly, and records zero ROM Magic Bus failures |
@@ -711,8 +721,8 @@ the separate serial-terminal view.
 | Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
 
 The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
-still incomplete. The current gaps include higher-level SCTG/PCLink peer
-semantics and physical Magic Bus chaining, and hardware fidelity beyond the
+still incomplete. The current gaps include additional observed SCTG peer
+messages and physical Magic Bus chaining, and hardware fidelity beyond the
 register behavior exercised by the ROM; see
 [`PLAN.md`](../PLAN.md#remaining-work). Magic Bus discovery, its multi-address
 topology, AT-keyboard traffic and both directions of the monitor's SCTG
