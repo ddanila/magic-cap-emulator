@@ -439,7 +439,10 @@ Tesseract must recognize the new In-box row, one-page fax stationery, and
 rendered page. The original calibrated NVRAM remains untouched.
 
 The TX39 harness executes signed and unsigned multiply and multiply/add
-instructions from uncached RAM and verifies `rd`, `HI`, and `LO`. Its
+instructions from uncached RAM and verifies `rd`, `HI`, and `LO`. It also
+checks Config's cache-size, writable-mask, and write-lock contract, then runs
+a real `syscall` handler and RFE to prove Cache current/previous/old mode
+stacking. Its
 generated inputs and log remain under
 `$MAGIC_CAP_ASSETS/runtime/tx39-regression/`; the CPU audit and
 reference-manual download command are in

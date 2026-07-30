@@ -70,11 +70,28 @@ the input registers unscaled, and reduces the transmitted waveform to
 roughly ±6. Implementing the TX39 destination write restores the intended
 16-bit DTMF amplitude.
 
-The boot code also reads and writes TX39 CP0 registers 3 (configuration) and
-7 (cache lock) and issues cache operations 0, 5, and 17. The R3900 device
-keeps the two CP0 values as read/write shadows and already models the three
-observed cache operations. That is sufficient for the verified boot path;
-cycle-exact cache locking and clock division are not claimed.
+The boot code also reads and writes TX39 CP0 registers 3 (Config) and 7
+(Cache) and issues cache operations 0, 5, and 17. `config_cache_toshiba`
+writes Config `0x74`, enabling both caches, selecting burst refill, and
+choosing an eight-word instruction refill. `LockHalfDataCache` sets Cache
+`DALc`, reads the first 512 bytes, then clears `DALc`.
+
+These registers are no longer unrestricted shadows:
+
+- Config reports the TMPR3902U's read-only 4 KiB instruction-cache and 1 KiB
+  data-cache fields, ignores reserved bits, and resets with both caches
+  enabled. ICE and DCE select cached versus uncached accesses. Once software
+  sets Config.Lock, further writes are ignored until reset.
+- Cache accepts only its six `IALo/DALo`, `IALp/DALp`, and `IALc/DALc` mode
+  bits. An exception pushes current → previous → old and clears current; RFE
+  restores previous → current and old → previous while retaining old, just
+  like the TX39 manual's Status-register mode stack.
+- Cache operations 0 (instruction index invalidate), 5 (data index lock/LRU
+  clear), and 17 (data hit invalidate) remain recognized.
+
+MAME's underlying MIPS-I cache is still direct-mapped and word-line based.
+The TMPR3902U's per-line two-way replacement/locking, burst refill timing,
+reduced-frequency clock timing, and cycle costs are therefore not claimed.
 
 ## Emulator behavior and regression
 
@@ -91,10 +108,20 @@ Run the isolated arithmetic regression with:
 python3 tools/tx39_regression.py
 ```
 
-It writes four tiny uncached-RAM programs into the running DataRover machine.
+It writes a suite of tiny uncached-RAM programs into the running DataRover
+machine.
 The multiply/add cases prove `5 + (-2 × 3) = -1` and
 `1 + (0xffffffff × 2) = 0x1ffffffff`; the multiply cases prove
 `-2 × 3 = -6` and `0xffffffff × 2 = 0x1fffffffe`. All four verify `rd`,
 `HI`, and `LO`.
+
+The CP0 programs first fill a cache line with `0x11111111`, change backing RAM
+to `0x22222222`, clear DCE, and prove that the next kseg0 load bypasses the
+stale line. They then write Config with ICE clear and Lock set, verify the
+read-only size fields and writable mask, attempt a forbidden second write,
+and observe the unchanged value `0x001000df`. Finally they set both current
+Cache modes, execute a real `syscall`, record `0x00000c00` in the exception
+handler, and execute RFE in the return jump's delay slot. The restored Cache
+value is `0x00000300`.
 Generated Lua, NVRAM, and logs stay under
 `$MAGIC_CAP_ASSETS/runtime/tx39-regression/`.

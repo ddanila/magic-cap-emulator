@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute and verify the TX39 multiply instruction extensions in MAME."""
+"""Execute and verify the TX39 instruction and CP0 extensions in MAME."""
 
 from __future__ import annotations
 
@@ -30,6 +30,12 @@ RESULT_PATTERN = re.compile(
     rb"PC=[0-9A-F]{8}",
     re.DOTALL,
 )
+CP0_PATTERN = re.compile(
+    rb"CACHE_ENABLE CACHED=([0-9A-F]{8}) UNCACHED=([0-9A-F]{8}).*"
+    rb"CONFIG FIRST=([0-9A-F]{8}) LOCKED=([0-9A-F]{8}).*"
+    rb"CACHE EXCEPTION=([0-9A-F]{8}) RETURN=([0-9A-F]{8})",
+    re.DOTALL,
+)
 EXPECTED = (
     0xFFFFFFFF,
     0xFFFFFFFF,
@@ -44,10 +50,18 @@ EXPECTED = (
     0x00000001,
     0xFFFFFFFE,
 )
+EXPECTED_CP0 = (
+    0x11111111,
+    0x22222222,
+    0x001000DF,
+    0x001000DF,
+    0x00000C00,
+    0x00000300,
+)
 
 
 def automation_script() -> str:
-    """Return an isolated uncached-RAM test for four TX39 operations."""
+    """Return isolated uncached-RAM tests for TX39 instructions and CP0."""
     return r"""local machine = manager.machine
 local cpu = machine.devices[":maincpu"]
 local program = cpu.spaces["program"]
@@ -129,6 +143,70 @@ emu.register_frame_done(function()
             cpu.state["HI"].value,
             cpu.state["LO"].value,
             cpu.state["PC"].value))
+
+        -- Fill a data-cache line while DCE is enabled.
+        program:write_u32(0x00002000, 0x11111111)
+        program:write_u32(0x00001080, 0x24080030)
+        program:write_u32(0x00001084, 0x40881800)
+        program:write_u32(0x00001088, 0x3c098000)
+        program:write_u32(0x0000108c, 0x35292000)
+        program:write_u32(0x00001090, 0xbd310000)
+        program:write_u32(0x00001094, 0x8d2a0000)
+        program:write_u32(0x00001098, 0x1000ffff)
+        program:write_u32(0x0000109c, 0x00000000)
+        run_at(0x00001080)
+    elseif frames == 15 then
+        -- Change backing RAM behind the cached line, disable DCE, and load
+        -- through the same kseg0 address.  The second load must bypass cache.
+        program:write_u32(0x00002000, 0x22222222)
+        program:write_u32(0x000010a0, 0x24080020)
+        program:write_u32(0x000010a4, 0x40881800)
+        program:write_u32(0x000010a8, 0x3c098000)
+        program:write_u32(0x000010ac, 0x35292000)
+        program:write_u32(0x000010b0, 0x8d2b0000)
+        program:write_u32(0x000010b4, 0x1000ffff)
+        program:write_u32(0x000010b8, 0x00000000)
+        run_at(0x000010a0)
+    elseif frames == 16 then
+        print(string.format(
+            "CACHE_ENABLE CACHED=%08X UNCACHED=%08X",
+            cpu.state["R10"].value,
+            cpu.state["R11"].value))
+
+        -- Config preserves its read-only cache sizes.  The first write also
+        -- sets Config.Lock; the second write must therefore be ignored.
+        program:write_u32(0x00001100, 0x240800df)
+        program:write_u32(0x00001104, 0x40881800)
+        program:write_u32(0x00001108, 0x40091800)
+        program:write_u32(0x0000110c, 0x40801800)
+        program:write_u32(0x00001110, 0x400a1800)
+        program:write_u32(0x00001114, 0x1000ffff)
+        program:write_u32(0x00001118, 0x00000000)
+        run_at(0x00001100)
+    elseif frames == 17 then
+        print(string.format(
+            "CONFIG FIRST=%08X LOCKED=%08X",
+            cpu.state["R9"].value,
+            cpu.state["R10"].value))
+
+        -- A syscall pushes Cache.DALc/IALc into the previous mode pair.  The
+        -- handler records that state, then RFE restores the current pair.
+        program:write_u32(0x00000080, 0x40103800)
+        program:write_u32(0x00000084, 0x3c1aa000)
+        program:write_u32(0x00000088, 0x375a10cc)
+        program:write_u32(0x0000008c, 0x03400008)
+        program:write_u32(0x00000090, 0x42000010)
+        program:write_u32(0x000010c0, 0x24080300)
+        program:write_u32(0x000010c4, 0x40883800)
+        program:write_u32(0x000010c8, 0x0000000c)
+        program:write_u32(0x000010cc, 0x1000ffff)
+        program:write_u32(0x000010d0, 0x00000000)
+        run_at(0x000010c0)
+    elseif frames == 18 then
+        print(string.format(
+            "CACHE EXCEPTION=%08X RETURN=%08X",
+            cpu.state["R16"].value,
+            cpu.state["Cache"].value))
         machine:exit()
     end
 end)
@@ -137,6 +215,13 @@ end)
 
 def parse_results(output: bytes) -> tuple[int, ...] | None:
     match = RESULT_PATTERN.search(output)
+    if not match:
+        return None
+    return tuple(int(value, 16) for value in match.groups())
+
+
+def parse_cp0_results(output: bytes) -> tuple[int, ...] | None:
+    match = CP0_PATTERN.search(output)
     if not match:
         return None
     return tuple(int(value, 16) for value in match.groups())
@@ -220,7 +305,19 @@ def run_regression(args: argparse.Namespace) -> int:
         )
         return 1
 
-    print("PASS: TX39 MADD, MADDU, MULT, and MULTU update rd, HI, and LO correctly")
+    actual_cp0 = parse_cp0_results(completed.stdout)
+    if actual_cp0 != EXPECTED_CP0:
+        print(
+            f"FAIL: TX39 CP0 result {actual_cp0!r}, expected {EXPECTED_CP0!r}; "
+            f"see {log_path}",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(
+        "PASS: TX39 arithmetic, Config locking/cache sizes, and Cache "
+        "exception modes are correct"
+    )
     print(f"Artifacts: {run_dir}")
     return 0
 
