@@ -38,10 +38,11 @@ Dino or Betty registers. A documented workflow therefore becomes an
 acceptance target, but implementation still follows ROM-observed behavior
 rather than inventing hardware behind the UI.
 
-Likewise, an untested workflow is not automatically a driver failure. Much of
-Magic Cap is portable OS code and already runs if the required hardware
+Likewise, a guide statement is not automatically a driver requirement. Much
+of Magic Cap is portable OS code and already runs if the required hardware
 boundary exists. The table distinguishes proven emulator behavior from
-product behavior that still needs an end-to-end check.
+cross-version or physical-hardware claims that need a matching evidence source
+before they can become an end-to-end check.
 
 Kaiser's later real-device and SDK
 [*Bringing TLS to the Magic Cap DataRover*](oldvcr-tls.md) report complements
@@ -94,7 +95,7 @@ the contract for future archived WaveLAN, NE2000 and wireless-card work.
 |---|---|---|---|
 | Navigation and touch | Desk, Hallway and Downtown form the main geography; Controls can rerun touch-screen alignment (pp. 3–12, 51–53) | Fresh-boot automation reaches the Desk and calibrates three points; Tab-menu touch round trips pass; Controls → Screen → **adjust** repeats all three targets, commits calibration and returns to Screen | Covered |
 | Speaker and controls | Volume and system sounds are configurable; a sound stamp can record, stop and play microphone audio (pp. 23, 51–53, 67–68) | Startup beep and continuously buffered sound-TX DMA pass; Controls → Sound moves the volume to both clamps and makes the same effect audible at maximum and silent at off; direct sound-RX DMA captures tone/silence; the real Stamper UI records, stops, plays and commits a captured stamp; construction mode exposes the Magic Hat's sound coupons, and an alarm coupon applied to the error button reaches the ROM's coupon/`SetSound` methods and retains the same waveform across relaunch | Covered |
-| Infrared Beam | Any displayed card or page can be beamed; discovery fills the recipient, multiple peers require selection, and Magic Cap 3.1 does not interoperate with earlier versions (pp. 78–79, 133) | Two fresh 3.1 peers discover by owner name, select Bob and transfer either Alice's name card or the displayed Notebook page; captured SIR distinguishes the page's serialized `Note Card` body | Card and page workflows covered; old-version rejection is not a separate test |
+| Infrared Beam | Any displayed card or page can be beamed; discovery fills the recipient, multiple peers require selection, and Magic Cap 3.1 does not interoperate with earlier versions (pp. 78–79, 133) | Two fresh 3.1 peers discover by owner name, select Bob and transfer either Alice's name card or the displayed Notebook page; captured SIR distinguishes the page's serialized `Note Card` body | Card and page workflows covered; older-peer rejection is cross-version scope without an emulated 1.x peer |
 | Web access | Internet Center provider settings drive dial-up Web access and downloaded-page handling (pp. 105–120, 165–174) | PC Card modem completes Hayes/PPP and Web Browser 4.0 fetches a deterministic local page; the same browser selects a provider whose `home` location uses `PPP dialup`, completes V.32/LAPM and LCP/IPCP, renders fixed or live bounded host responses, and can instead exchange raw IPv4 through rootless libslirp; the raw path follows a redirect across two TCP connections and renders the second page | PC Card PPP fetch, built-in deterministic HTTP, fixed/live bounded forwarding and unrestricted multi-request transport covered |
 | Telephone and built-in modem | The built-in fax modem uses a telephone line, presents receive-fax/answer choices, and can fax visible pages through Magic lamp → Fax (pp. 76–78, 94–95, 135–163, 216) | ROM V.32/fax code and continuous DMA execute; one held ring opens Phone Status; **receive fax** starts live-call `AnswerModem`, both fax HDLC directions, the Receiving fax window and non-silent PCM; a clocked two-DataRover run creates/selects a recipient, dials `5551212`, sustains sender/receiver image data, then relaunches the receiver and opens the new In-box fax, its one-page stationery and rendered page; paired generic V.32 roles complete LAPM SABME/UA; Web Browser's real `PPP dialup` path dials `555-1212`, completes LCP/IPCP, exchanges IPv4 through the answer ROM and rootless libslirp, and follows a two-connection HTTP redirect | Internal ROM/DSP, digital DAA, V.32/LAPM, both fax UIs, dialing, normal Telephone dialing, remote PCM transport, complete received-fax delivery and Internet Center's multi-request host transport covered |
 | Storeroom and packages | Packages can be moved, unpacked, sent, backed up and restored through Storeroom (pp. 179–206) | PCLink installs a real package; Storeroom creates a card-resident built-in backup and restores it in a fresh process | Package installation and full built-in backup/restore covered |
@@ -117,7 +118,7 @@ The smaller UI contracts formerly listed here—Controls-initiated touch
 realignment, volume clamps, password-on-wake, beaming a Notebook page and
 individual system-sound reassignment—now have focused product regressions.
 
-This backlog complements the hardware-oriented list in
-[`PLAN.md`](../PLAN.md#remaining-work). It should not expand the driver
-with guessed behavior: each item still starts by tracing the relevant ROM path
-and SDK symbols.
+This closure complements the hardware evidence boundaries in
+[`PLAN.md`](../PLAN.md#roadmap-closure-and-evidence-boundaries). New scope
+should not expand the driver with guessed behavior: it starts with a relevant
+ROM path, SDK symbol, hardware document or real-device trace.

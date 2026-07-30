@@ -143,9 +143,9 @@ The full regression list and expected checkpoints are in
   carries `MACHINE_IMPERFECT_TIMING`; the ROM-visible MBIC lifecycle is covered
   ([`memory-map.md`](docs/memory-map.md#magic-bus)).
 
-## Remaining work
+## Roadmap closure and evidence boundaries
 
-- **Improve hardware fidelity beyond observed ROM needs.** TX39 Config now
+- **Implemented hardware fidelity beyond observed ROM needs.** TX39 Config now
   exposes the implemented cache sizes, masks reserved/read-only bits, enforces
   its write lock, and makes ICE/DCE control refill; Cache current/previous/old
   auto-lock modes now stack on exception and RFE. The data cache now has its
@@ -154,9 +154,13 @@ The full regression list and expected checkpoints are in
   reset invalidates both caches. Config now selects the documented
   4/8/16/32-word instruction refill and either one-word or 4/8/16/32-word
   data refill; data auto-lock covers every word in a burst. The backing cache
-  remains word-granular. Dino's Magic Bus, sound and telecom receive DMA now
-  invalidates matching unlocked data-cache words; the monitor's checksummed
-  discovery buffer verifies that burst-prefetched destinations are coherent.
+  remains word-granular internally, while the documented multiword refill,
+  shared instruction-tag invalidation and lock effects are represented
+  explicitly and regression-checked. No observed path distinguishes a
+  different internal tag container. Dino's Magic Bus, sound and telecom
+  receive DMA now invalidates matching unlocked data-cache words; the
+  monitor's checksummed discovery buffer verifies that burst-prefetched
+  destinations are coherent.
   Config RF now scales only the processor core by its
   documented 1/2/4/8 divisors while external devices retain their own clocks,
   covering the ROM's slow/fast helpers and quarter-speed deep-doze loop. Dino
@@ -201,6 +205,17 @@ The full regression list and expected checkpoints are in
   from Doze cache snooping, and clear on a physical interrupt regardless of
   its Status mask. All four coprocessor condition inputs implement ordinary
   and likely branches; no likely opcode occurs in a sized SDK ELF function.
+
+The implementation roadmap supported by the available ROM, SDK, TX39 manual,
+public developer material and product guide is closed. No known
+manual-defined TX39 instruction behavior or ROM-observed DataRover product
+path remains an open implementation item. The boundaries above require new
+primary evidence:
+a real-device bus trace or Dino documentation for external-bus and exact
+Magic Bus timing; and hardware documentation plus an observed software
+consumer before implementing master-clock bit 14 or functional consumer-IR,
+SPI and CHI engines. Guessed timing or invented peripherals would reduce
+fidelity rather than complete the roadmap.
 
 The four systems are usable as intended and no longer carry
 `MACHINE_NOT_WORKING`. They carry `MACHINE_IMPERFECT_TIMING` because exact

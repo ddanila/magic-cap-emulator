@@ -98,7 +98,7 @@ above.
 
 The repository's current regression tools only import Pillow outside the
 standard library. The dedicated environment additionally carries packages
-useful for the remaining modem/DSP and MIPS investigation:
+useful for deeper or future modem/DSP and MIPS investigation:
 
 - NumPy and SciPy for PCM and signal analysis;
 - Matplotlib for plots and spectrograms;

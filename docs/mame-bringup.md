@@ -561,7 +561,9 @@ Cause before the ROM debug vector can change them. Address-space taps also
 inject load and store bus errors while DM is set; both must set `BsF`, leave
 Cause/EPC untouched, and execute the following marker. A cached-code pass
 then requires Status `NmI` to survive, followed by an explicit `MTC0`
-write-one clear. Its artifacts remain under
+write-one clear. Finally it checks user-mode `CACHE` privilege, all four
+R3900 no-op TLB encodings, and the CpU-before-RI exception priority for an
+unsupported coprocessor load. Its artifacts remain under
 `$MAGIC_CAP_ASSETS/runtime/tx39-debug-regression/`.
 
 The Dino clock companion parks the CPU and drives `masterClock` directly. It
@@ -844,7 +846,8 @@ workflows and every variant are usable as intended. They retain the narrower
 `MACHINE_IMPERFECT_TIMING` warning because exact Dino external-bus and
 Apollo-specific nanosecond Magic Bus timing are not known; the related
 General Magic patent timing is documented as a bounded reference rather than
-assumed identical hardware. See [`PLAN.md`](../PLAN.md#remaining-work).
+assumed identical hardware. See
+[`PLAN.md`](../PLAN.md#roadmap-closure-and-evidence-boundaries).
 Magic Bus discovery, live ordered MBIC attachment/detachment/reinsertion,
 multi-address topology, AT-keyboard traffic and both directions of the
 monitor's SCTG request/data path are covered by headless probes. The production

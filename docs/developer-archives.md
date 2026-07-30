@@ -410,24 +410,28 @@ These checksums pin the non-PDF inputs behind the findings above:
 
 ## Effect on the roadmap
 
-The public-source audit changes priorities without claiming new implemented
-behavior:
+The public-source findings have been reconciled with the implementation:
 
-1. **Storage cards are the largest immediate unlock.** The exact `0xA0`
-   tuple, classification codes and CardServer contract are known, and the
-   present generic CIS can be compared directly against them.
-2. **Memory-pressure reproduction is now cheap.** Port or build
-   `MemoryMonger` before diagnosing vague cleanup/error reports.
-3. **Package formats can be independently validated.** Keep the raw frozen
-   package, MagicXChange wrapper and PCLink transport layers distinct.
-4. **More PC Card devices are feasible but substantial.** The packages name
-   real supported cards and provide MIPS binaries, while each underlying NIC
-   or radio still needs a hardware model and deterministic host transport.
-5. **Magic Bus topology has a concrete physical contract.** The General Magic
-   patent family confirms the six-device bound and defines upstream/downstream
-   MBIC buffers, mid/last interrupt behavior, hot attachment and removal. The
-   Apollo ROM adds the exact command-27/address-six sequence and debounce.
-   Model that chain before considering an MCU-level peripheral implementation.
-6. **Earlier 68K targets remain preservation work.** Astro, Envoy and
-   PIC-2000 material should stay isolated from the Apollo driver until ROMs
-   and matching hardware evidence exist.
+1. **Storage-card support is complete for the documented contract.** The
+   `0xA0` tuple, `BLNK`/`RAMC` classification, setup, reformat, persistence,
+   object storage, backup/restore and 1.x package translation all have live OS
+   regressions.
+2. **MemoryMonger is an optional diagnosis aid, not an emulator blocker.**
+   It can provide controlled memory pressure if a future cleanup failure is
+   reported; the current roadmap contains no unexplained memory-pressure
+   failure that requires porting it.
+3. **Package layers are kept distinct and tested.** Frozen package bytes,
+   MagicXChange wrapping, PCLink transport and source-preserving translation
+   have separate parsers or end-to-end checks.
+4. **Additional PC Card NICs and radios are new device scope.** The archived
+   packages identify possible guests, but each needs its own evidence-backed
+   hardware model and deterministic host transport. Their existence is not a
+   missing DataRover platform function.
+5. **The evidence-backed Magic Bus topology is complete.** The driver models
+   the six-address MBIC chain behavior used by Apollo, including
+   command-27/address-six discovery, ordered attachment, addressed removal,
+   debounce, recovery and reinsertion. An MCU-level accessory remains separate
+   scope unless a concrete peripheral requires it.
+6. **Earlier 68K targets remain intentionally separate preservation work.**
+   Astro, Envoy and PIC-2000 material is not applied to the Apollo driver
+   without matching ROM and hardware evidence.

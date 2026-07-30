@@ -28,6 +28,15 @@ class Tx39DebugRegressionTests(unittest.TestCase):
             b"CAUSE=00000000 EPC=00000000\n"
             b"NMI_CACHE SR=00100000 R3=00000003\n"
             b"NMI_CLEAR SR=00000000 R3=00000004\n"
+            b"CACHE_PRIVILEGE DENIED_CAUSE=0000002C "
+            b"DENIED_EPC=00001DC0 DENIED_SR=00000008\n"
+            b"CACHE_PRIVILEGE ALLOWED_R3=00000005 "
+            b"ALLOWED_CAUSE=00000000 ALLOWED_SR=10000002\n"
+            b"TLB_NOP R3=00000006 CAUSE=00000000 EPC=00000000\n"
+            b"LWC0_PRIVILEGE CAUSE=0000002C EPC=00001E80 "
+            b"SR=00000008\n"
+            b"LWC0_RESERVED CAUSE=00000028 EPC=00001EC0 "
+            b"SR=00000000\n"
         )
         self.assertEqual(parse_result(output), EXPECTED)
         self.assertEqual(verify_result(parse_result(output)), [])
@@ -40,7 +49,7 @@ class Tx39DebugRegressionTests(unittest.TestCase):
         result[-1] = 3
         failures = verify_result(tuple(result))
         self.assertEqual(len(failures), 1)
-        self.assertIn("field 35", failures[0])
+        self.assertIn(f"field {len(EXPECTED) - 1}", failures[0])
 
     def test_script_contains_debug_instructions(self) -> None:
         script = automation_script()
@@ -50,7 +59,13 @@ class Tx39DebugRegressionTests(unittest.TestCase):
             "0x40918000",
             "0x40918800",
             "0x40816000",
+            "0x42000001",
+            "0x42000002",
+            "0x42000006",
+            "0x42000008",
             "0x4200001f",
+            "0xbc050000",
+            "0xc0000000",
         ):
             self.assertIn(opcode, script)
         self.assertIn('cpu.state["Debug"]', script)

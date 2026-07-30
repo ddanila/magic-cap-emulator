@@ -77,7 +77,8 @@ stack, and carries arbitrary TCP/UDP flows instead of synthesizing one
 connection. The product acceptance follows an HTTP redirect across two TCP
 connections and OCR-verifies the second page. The helper executable is built
 outside Git under `$MAGIC_CAP_ASSETS/runtime/build`; only its source is kept.
-The full status table and roadmap are in [`PLAN.md`](PLAN.md); the machine's
+The full status table, closed implementation roadmap, and evidence-limited
+hardware boundaries are in [`PLAN.md`](PLAN.md); the machine's
 hardware, history, and verification approach are in
 [`docs/background.md`](docs/background.md).
 

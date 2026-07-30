@@ -111,8 +111,9 @@ the recipient, select a name if more than one peer is visible, then send. The
 guide also defines two boundaries that the PTY transport intentionally does not
 pretend to model: physical line-of-sight/range, and incompatibility between
 Magic Cap 3.1 beaming and earlier Magic Cap versions. The displayed-page
-contract is covered by `--item notebook`; an explicit old-version rejection
-remains an optional product-level extension; see
+contract is covered by `--item notebook`. An explicit old-version rejection
+requires a matching Magic Cap 1.x peer and is therefore documented
+cross-version scope rather than an open Apollo-driver item; see
 [`user-guide.md`](user-guide.md).
 
 A representative passing transfer sent 22 complete frames / 1,491 bytes from
