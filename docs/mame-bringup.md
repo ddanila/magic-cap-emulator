@@ -286,6 +286,7 @@ python3 tools/battery_regression.py
 python3 tools/power_outputs_regression.py
 python3 tools/power_policy_regression.py
 python3 tools/dino_clock_regression.py
+python3 tools/rtc_set_regression.py
 python3 tools/magicbus_probe.py
 python3 tools/magicbus_probe.py --two-accessories --require-clean
 python3 tools/magicbus_scsi_probe.py
@@ -538,12 +539,18 @@ transmits including UART-B pulsed mode, bus completion, SIB frame boundaries
 and periodic interrupt while checking uninterrupted RTC advancement. Finally,
 with every master clock clear, it proves that stop-timer values 2 and 8 raise
 interrupt-bank-5 bit 28 after exactly 512 and 2,048 RTC ticks. This distinguishes
-the always-on power timer from the probable RTC-test clock behind bit 14.
+the always-on power timer from the unidentified clock behind bit 14.
 The same run reads the periodic timer's upper-half live counter, observes
 `8 → 5`, holds 5 through ten ticks of both explicit freeze and master-clock
 gating, then requires the interrupt on the fifth resumed tick.
 Generated Lua, isolated configuration/NVRAM and output remain under
 `$MAGIC_CAP_ASSETS/runtime/dino-clock-regression/`.
+
+The RTC-set companion calls the development ROM's real `SetTimer` at
+`0x13c04f04`. It requires the routine to return success after exercising both
+`BumpTimerRough` and `BumpTimerFine`, then checks the high byte and the low
+word against the requested value using the ROM's own four-tick tolerance.
+Artifacts remain under `$MAGIC_CAP_ASSETS/runtime/rtc-set-regression/`.
 
 The PC Card harness copies the verified 840F flasher into its persistent run
 directory, inserts that disposable copy after the workbench appears, and

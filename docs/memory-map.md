@@ -161,14 +161,26 @@ count on reads, repeats at the programmed interval, and preserves the
 partially elapsed count through both bit-5 freeze and loss of master timer
 clock bit 15. Writes cannot replace the read-only count field.
 
-The other timer-control names clarify, but do not fully specify, Dino's test
-path: bits 7 and 6 freeze the prescaler and RTC, bit 3 clears the RTC, bit 2
-is `TestC8Ms`, bit 1 is `RtcEnTestClk`, and bit 0 is `EnRtcTest`. The IDT
-monitor's fast `setrtc` helpers at `0x13c04980` and `0x13c04a7c` toggle bits
-0/1 while freezing the prescaler around a target RTC value. This is the only
-observed candidate consumer for the separately named master-clock bit-14
-`FastTimerClk`; neither the SDK nor ROM establishes that test clock's source
-frequency or its exact wiring, so the model does not invent either.
+The other timer-control names define Dino's RTC test path: bits 7 and 6 freeze
+the prescaler and RTC, bit 3 clears the RTC, bit 2 is `TestC8Ms`, bit 1 is
+`RtcEnTestClk`, and bit 0 is `EnRtcTest`. The IDT monitor's
+`BumpTimerRough` (`0x13c04980`) enables bit 0 while the RTC is frozen and
+polls `rtcHigh`; each test pulse advances that high-byte stage.
+`BumpTimerFine` (`0x13c04a7c`) enables bit 1 and polls `rtcLow` masked to
+32-tick units; that fine stage wraps without carrying into the separately
+adjusted high byte. The model exposes one accelerated test pulse at each
+poll, the only rate-independent behavior visible to the ROM. The focused
+acceptance calls the monitor's real `SetTimer` (`0x13c04f04`), which returns
+success and reaches the requested value within its own four-tick tolerance:
+
+```sh
+python3 tools/rtc_set_regression.py
+```
+
+The SDK and ROM still do not establish the physical test source frequency.
+The monitor uses this path without enabling separately named master-clock
+bit 14 `FastTimerClk`, so the model does not assign that unidentified clock
+to the RTC, periodic timer, or power stop timer.
 
 ### Master clock gates
 
@@ -231,14 +243,31 @@ that interrupt-bank-5 bit 28 stays clear through RTC ticks 511 and 2,047, and
 appears immediately after ticks 512 and 2,048. It then loads the periodic
 counter with 8, observes the live `8 → 5` countdown, holds 5 across ten timer
 ticks under both the dedicated freeze bit and master-clock gate, and requires
-the interrupt on the fifth resumed tick. Bit 14's probable RTC-test role and
-unknown rate remain separate from the observed power timer.
+the interrupt on the fifth resumed tick. The unidentified bit-14 clock remains
+separate from the observed power timer and functional RTC test path.
 
 Bit 2 is not coupled to the pulsed UART transport. A complete two-peer Beam
 run leaves `kClockEnIrClkMask` clear while UART B exchanges SIR frames in both
 directions. That clock belongs to Dino's separate consumer-infrared register
 block at `0x0a0`–`0x0a8`, which is not modeled; applying it to IrDA breaks an
 observed release-ROM path.
+
+### Consumer IR, SPI and CHI boundary
+
+These blocks have a narrow, exact Apollo-ROM footprint. `CanDeepDoze`
+(`0x13c3a164`) requires CHI control bit 0, consumer-IR control bit 0 and SPI
+control bit 0 to be clear. `AnyDinoRxDmaActive` (`0x13c3a0e4`) also checks CHI
+size bit 1, and `DisablePeripherals` (`0x13c3a330`) clears CHI and SPI control
+before waiting for SPI on-status bit 17 to fall. Register shadows satisfy
+those observed idle/disable checks.
+
+The symbol and direct-register-access audit found no Apollo product path that
+enables a CHI or SPI transfer. The only exported product method named for the
+other engine,
+`ConsumerIRDevice_SendIRCommand` (`0x13c26f60`), is a two-instruction
+`jr ra; nop` stub. Functional CHI DMA, an attached SPI peripheral, consumer-IR
+waveform output and their unobserved timing/interrupt behavior therefore
+remain outside the model; none is needed for the verified product paths.
 
 ### Implemented semantics
 

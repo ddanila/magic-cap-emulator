@@ -418,9 +418,10 @@ for each nominal 16 ms (exactly 15.625 ms) Betty-reset phase, and value 8
 raises it after 2,048 ticks for the nominal 64 ms (exactly 62.5 ms)
 `DeepDoze` refresh wake. The focused clock regression checks both edges with
 all master clocks clear, and the full retained-state regression proves the
-resulting doze/cleanup/wake sequence. SDK names and the monitor's fast
-`setrtc` path place the separately named fast-timer clock near RTC test mode,
-but its source rate and exact wiring remain unresolved.
+resulting doze/cleanup/wake sequence. The monitor's fast `setrtc` path now
+completes through the separately modeled rough-high and fine-low RTC test
+stages. It does not enable master-clock bit 14, whose physical consumer and
+rate remain unresolved.
 
 ## Automated acceptance
 
