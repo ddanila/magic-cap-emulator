@@ -555,6 +555,20 @@ gating, then requires the interrupt on the fifth resumed tick.
 Generated Lua, isolated configuration/NVRAM and output remain under
 `$MAGIC_CAP_ASSETS/runtime/dino-clock-regression/`.
 
+The UART DMA companion exercises the controller path that the SDK describes
+but the release ROM’s PIO serial servers do not select:
+
+```sh
+python3 tools/uart_dma_regression.py
+```
+
+It parks the CPU, connects both RS-232 ports to host PTYs, and swaps UART A
+and B between four-byte transmit and receive DMA. The check requires exact
+host bytes and DRAM words, a final zero-based count of 3, cleared one-shot
+direction enables, and both channels’ half/end interrupt bits. RX uses Dino’s
+external-bus-master cache invalidation path. Artifacts remain under
+`$MAGIC_CAP_ASSETS/runtime/uart-dma-regression/`.
+
 The Dino BIU companion waits for the release ROM's memory-controller
 initialization and reads configuration registers 0–4 back through the live
 device. It requires the Apollo header values for 32-bit page-mode DRAM and

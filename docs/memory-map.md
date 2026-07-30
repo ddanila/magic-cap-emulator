@@ -138,6 +138,29 @@ then sends `0x54` back to the host. Because the PTY endpoint remains
 configured for 38,400 baud, this exchange also detects a serial engine left
 at the former hard-coded 19,200 rate.
 
+The DMA register triplet that was previously only shadowed is now functional
+on both channels. `dmaControl1` supplies an aligned physical start address,
+`dmaControl2[15:0]` is the zero-based final byte index, and hardware maintains
+the matching current index in `dmacnt[15:0]`. A rising RX or TX enable starts
+at index zero. One-shot TX reads bytes from DRAM at the selected UART’s
+programmed framing rate and clears its direction enable after the final byte;
+RX writes incoming bytes to DRAM and does the same. Loop mode wraps the count
+to zero while leaving the direction enabled. Loss of that UART’s master clock
+pauses TX without losing the programmed registers or current index.
+
+Dino interrupt-bank-2 bits 23/22 report UART A DMA end/half and bits 13/12 do
+the same for UART B. Receive DMA invalidates each destination byte in the
+R3900 data cache before raising completion, just like the other represented
+Dino bus masters. The release ROM’s serial servers use PIO, so this is
+hardware-fidelity coverage rather than a hidden requirement for the working
+PCLink, modem, or IrDA paths. The focused acceptance connects two host PTYs,
+swaps the UARTs’ TX/RX roles, and requires the exact external bytes, DRAM
+words, final count 3, cleared one-shot enables, and all four half/end bits:
+
+```sh
+python3 tools/uart_dma_regression.py
+```
+
 The video-control bit-depth field is bits 7:6 (`0x00` mono, `0x40` 2-bit gray,
 `0x80` 4-bit gray, `0xc0` 8-bit color). Bit 0 enables video scanning and bit 1
 turns on the display. `EarlySetBuffer` writes the RAM buffer start to `+0x030`

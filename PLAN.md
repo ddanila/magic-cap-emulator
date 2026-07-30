@@ -10,7 +10,7 @@ The full regression list and expected checkpoints are in
 
 | Subsystem | Verified behavior | Details |
 |---|---|---|
-| Boot & serial | IDT monitor reaches an interactive `<IDT>` prompt; both Dino UARTs on MAME RS-232 | [`memory-map.md`](docs/memory-map.md) |
+| Boot & serial | IDT monitor reaches an interactive `<IDT>` prompt; both Dino UARTs provide PIO and byte-buffer DMA over MAME RS-232, including independent clocks, counts, half/end interrupts and RX cache coherency | [`memory-map.md`](docs/memory-map.md) |
 | Betty (SIB ASIC) | Boot reaches `BootCap`; the ROM's own `BettyTest` diagnostic passes | [`betty-registers.md`](docs/betty-registers.md) |
 | Display | 480×320 2bpp framebuffer renders splash → welcome → workbench | [`memory-map.md`](docs/memory-map.md) |
 | Touch | One absolute pointer device drives X/Y/pen-down through first-boot and Controls-initiated three-point calibration, commits the new calibration, and remains live across MAME Tab-menu round trips | [`mame-bringup.md`](docs/mame-bringup.md) |
@@ -181,8 +181,11 @@ The full regression list and expected checkpoints are in
   consumer-IR/SPI/CHI engines remain behavioral or absent. The ROM only checks
   those three engines for idle during doze/shutdown, and Apollo's exported
   consumer-IR send method is an empty stub. The verified boot, power, sound,
-  telecom, and peripheral paths act on the bits the ROM uses, but a complete
-  functional Dino is not claimed
+  telecom, and peripheral paths act on the bits the ROM uses. Both Dino UART
+  DMA channels now implement aligned start, zero-based length/count, one-shot
+  and loop modes, clocked transmit/receive, half/end status, and receive-side
+  cache invalidation; an external-PTY regression swaps their roles and checks
+  the exact four-byte buffers. A complete functional Dino is still not claimed
   ([`tx39-cpu.md`](docs/tx39-cpu.md), [`memory-map.md`](docs/memory-map.md)).
   The TX39 self-debug unit now covers `SDBBP`, `DERET`, Debug/DEPC, DBP/DSS,
   delay-slot state and DERET single-step suppression. Its coincident
