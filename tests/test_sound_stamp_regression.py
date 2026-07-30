@@ -9,9 +9,7 @@ from pathlib import Path
 
 
 MODULE_PATH = Path(__file__).parents[1] / "tools" / "sound_stamp_regression.py"
-SPEC = importlib.util.spec_from_file_location(
-    "sound_stamp_regression", MODULE_PATH
-)
+SPEC = importlib.util.spec_from_file_location("sound_stamp_regression", MODULE_PATH)
 assert SPEC and SPEC.loader
 sound_stamp = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = sound_stamp
@@ -27,6 +25,10 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("press(279, 148)", script)
         self.assertIn("press(350, 148)", script)
         self.assertIn("press(420, 148)", script)
+        self.assertIn("press(463, 16)", script)
+        self.assertIn("press(34, 300)", script)
+        self.assertIn('snapshot("sound-stamp-committed.png")', script)
+        self.assertIn('snapshot("sound-stamp-card-left.png")', script)
         self.assertIn("0x00020000", script)
         self.assertIn("SOUND_STAMP RX_START=", script)
         self.assertNotIn("touch_button:value()", script)
@@ -62,17 +64,13 @@ class ResultTests(unittest.TestCase):
         )
 
     def test_accepts_complete_product_flow(self) -> None:
-        passed, message = sound_stamp.verify_result(
-            self.result, self.playback
-        )
+        passed, message = sound_stamp.verify_result(self.result, self.playback)
 
         self.assertTrue(passed, message)
         self.assertIn("drained the stop command", message)
 
     def test_rejects_stuck_sib_command(self) -> None:
-        result = sound_stamp.Result(
-            **{**self.result.__dict__, "sib_state": 5}
-        )
+        result = sound_stamp.Result(**{**self.result.__dict__, "sib_state": 5})
 
         passed, message = sound_stamp.verify_result(result, self.playback)
 
@@ -80,9 +78,7 @@ class ResultTests(unittest.TestCase):
         self.assertIn("state remained 5", message)
 
     def test_rejects_rx_dma_that_never_stops(self) -> None:
-        result = sound_stamp.Result(
-            **{**self.result.__dict__, "rx_stop": 0}
-        )
+        result = sound_stamp.Result(**{**self.result.__dict__, "rx_stop": 0})
 
         passed, message = sound_stamp.verify_result(result, self.playback)
 
@@ -114,14 +110,8 @@ class WaveTests(unittest.TestCase):
                 output.setnchannels(2)
                 output.setsampwidth(2)
                 output.setframerate(rate)
-                interleaved = [
-                    sample
-                    for value in samples
-                    for sample in (0, value)
-                ]
-                output.writeframes(
-                    struct.pack(f"<{len(interleaved)}h", *interleaved)
-                )
+                interleaved = [sample for value in samples for sample in (0, value)]
+                output.writeframes(struct.pack(f"<{len(interleaved)}h", *interleaved))
 
             segments = sound_stamp.audible_segments(path)
             result = sound_stamp.Result(

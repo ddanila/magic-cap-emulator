@@ -240,6 +240,8 @@ python3 tools/sound_controls_regression.py
 # Requires a personalized NVRAM that resumes at the ordinary Desk:
 python3 tools/sound_stamp_regression.py \
   --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
+python3 tools/sound_assignment_regression.py \
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
 python3 tools/telecom_regression.py
 python3 tools/telecom_regression.py --continuous
 python3 tools/telecom_regression.py --no-loopback

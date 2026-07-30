@@ -18,7 +18,8 @@ are shortened; the animations play at their recorded speed. How it is made:
 The emulated machine boots ROM build 3.1.2j to the interactive Magic Cap
 workbench: touchscreen, persistent storage, suspend/wake and retained
 power-on password protection, speaker output
-and microphone sound-stamp recording/playback, live AC charging with LCD/Magic
+and microphone sound-stamp recording/playback, persistent system-sound
+reassignment through Magic Hat coupons, live AC charging with LCD/Magic
 Bus power-rail effects and configurable
 automatic shutoff, both PC Card slots, package installation over serial PCLink,
 IrDA beaming of name cards and Notebook pages between two emulated

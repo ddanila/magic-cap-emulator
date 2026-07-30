@@ -91,6 +91,8 @@ local stop_pressed = false
 local stop_released = false
 local play_pressed = false
 local play_released = false
+local close_pressed = false
+local close_released = false
 local audio_valid = 0
 local nonzero = 0
 local minimum = 0
@@ -189,7 +191,22 @@ emu.register_frame_done(function()
         machine.screens[":screen"]:snapshot("sound-stamp-played.png")
     end
 
-    if play_stop ~= 0 and frames == play_stop + 30 then
+    if play_stop ~= 0 and not close_pressed and frames == play_stop + 30 then
+        press(463, 16)
+        close_pressed = true
+    elseif close_pressed and not close_released
+            and frames == play_stop + 50 then
+        release()
+        close_released = true
+    elseif close_released and frames == play_stop + 300 then
+        machine.screens[":screen"]:snapshot("sound-stamp-committed.png")
+    elseif close_released and frames == play_stop + 330 then
+        press(34, 300)
+    elseif close_released and frames == play_stop + 350 then
+        release()
+    elseif close_released and frames == play_stop + 600 then
+        machine.screens[":screen"]:snapshot("sound-stamp-card-left.png")
+    elseif close_released and frames == play_stop + 630 then
         finish()
     end
 
@@ -253,13 +270,9 @@ def parse_result(output: bytes) -> Result | None:
     return Result(*(int(value) for value in match.groups()))
 
 
-def _segment(
-    samples: list[int], start: int, end: int, sample_rate: int
-) -> Playback:
+def _segment(samples: list[int], start: int, end: int, sample_rate: int) -> Playback:
     body = samples[start:end]
-    crossings = sum(
-        (left < 0) != (right < 0) for left, right in zip(body, body[1:])
-    )
+    crossings = sum((left < 0) != (right < 0) for left, right in zip(body, body[1:]))
     duration = len(body) / sample_rate
     return Playback(
         start=start / sample_rate,
@@ -306,19 +319,13 @@ def audible_segments(
 def playback_for(result: Result, segments: list[Playback]) -> Playback | None:
     expected = result.play_start / SCREEN_RATE
     return min(
-        (
-            segment
-            for segment in segments
-            if abs(segment.start - expected) <= 0.25
-        ),
+        (segment for segment in segments if abs(segment.start - expected) <= 0.25),
         key=lambda segment: abs(segment.start - expected),
         default=None,
     )
 
 
-def verify_result(
-    result: Result | None, playback: Playback | None
-) -> tuple[bool, str]:
+def verify_result(result: Result | None, playback: Playback | None) -> tuple[bool, str]:
     if result is None:
         return False, "sound-stamp checkpoint is missing"
     if not 0 < result.rx_start < result.rx_stop:
@@ -326,13 +333,9 @@ def verify_result(
     if result.nonzero < 900:
         return False, f"capture populated only {result.nonzero}/1024 samples"
     if result.minimum > -11_000 or result.maximum < 11_000:
-        return False, (
-            f"capture range is only {result.minimum}..{result.maximum}"
-        )
+        return False, (f"capture range is only {result.minimum}..{result.maximum}")
     if not 250 <= result.crossings <= 320:
-        return False, (
-            f"capture has {result.crossings} crossings, expected 250-320"
-        )
+        return False, (f"capture has {result.crossings} crossings, expected 250-320")
     if not result.audio_valid:
         return False, "Dino never reported a valid SIB audio slot"
     if result.sib_state:
@@ -455,13 +458,14 @@ def run_regression(args: argparse.Namespace) -> int:
         print(f"error: MAME timed out; artifacts: {run_dir}", file=sys.stderr)
         return 2
     except OSError as error:
-        print(f"error: unable to run MAME: {error}; artifacts: {run_dir}", file=sys.stderr)
+        print(
+            f"error: unable to run MAME: {error}; artifacts: {run_dir}", file=sys.stderr
+        )
         return 2
     log_path.write_bytes(completed.stdout)
     if completed.returncode:
         print(
-            f"error: MAME exited with status {completed.returncode}; "
-            f"see {log_path}",
+            f"error: MAME exited with status {completed.returncode}; see {log_path}",
             file=sys.stderr,
         )
         return 2
@@ -470,7 +474,9 @@ def run_regression(args: argparse.Namespace) -> int:
     try:
         segments = audible_segments(wav_path)
     except (OSError, ValueError, wave.Error) as error:
-        print(f"FAIL: invalid WAV capture: {error}; artifacts: {run_dir}", file=sys.stderr)
+        print(
+            f"FAIL: invalid WAV capture: {error}; artifacts: {run_dir}", file=sys.stderr
+        )
         return 1
     passed, message = verify_result(
         result, playback_for(result, segments) if result else None

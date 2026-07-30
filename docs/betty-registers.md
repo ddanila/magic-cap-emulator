@@ -338,13 +338,53 @@ python3 tools/sound_stamp_regression.py \
 
 The harness follows Desk → new mail card → Stamper → General → sound stamp,
 opens the controls, records the deterministic microphone tone, presses Stop,
-and then presses Play. It requires a 1024-sample receive buffer near
+presses Play, closes the recording controls, and returns through the normal
+Card → Desk path so Magic Cap commits the filled stamp. It requires a
+1024-sample receive buffer near
 `-12000..12000`, the audio-valid bit, receive DMA shutdown, SIB state zero,
 equal command-queue indices, a bounded transmit-DMA interval, and an audible
 WAV segment aligned with that interval. A measured run captured 967 nonzero
 samples with 283 crossings, drained queue indices `28/28`, and played 3.15
 seconds with peak 13441. Screenshots, the copied NVRAM, Lua, log and WAV remain
 under `$MAGIC_CAP_ASSETS/runtime/sound-stamp-regression/`.
+
+### System-sound coupons
+
+The Sound Controls buttons are destinations, not sources that can simply be
+dragged between the **Sound effects** and **Instruments** pages. The SDK class
+contract explains the missing object: `SoundButton_CanAcceptCoupon` evaluates
+a `SoundCoupon`, `SoundCoupon_ApplyCoupon` applies it, and
+`SoundButton_SetSound` updates the corresponding system indexical. The
+construction-mode contract in the SDK design guide places sound coupons in
+the Magic Hat.
+
+The product-level regression therefore starts from a copied personalized
+NVRAM and follows the real UI:
+
+```sh
+python3 tools/sound_assignment_regression.py \
+  --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
+```
+
+It opens Controls → General, enables **construction mode**, opens Magic Hat →
+Sounds, continuously slides the **alarm** coupon into the Tote, returns to
+Controls → Sound, and slides the coupon onto the **error** button. It then
+closes the Tote and leaves Sound → Controls → Hallway before ending the first
+process, which is the persistence boundary for the changed sound indexical.
+A second MAME process starts from that saved RAM, returns to Sound and taps
+**error** again.
+
+The unstripped 1998 Apollo development ELF gives exact method entry points;
+normalized MIPS instruction matching locates the corresponding shipping-ROM
+methods without committing either binary. Breakpoint counters require the
+shipping path to reach `CanAcceptSound` and `SoundButton_CanAcceptCoupon`,
+then call `SoundButton_SetSound`, `SoundCoupon_ApplyCoupon` and
+`SoundCoupon_Accepted` exactly once. The WAV oracle independently requires the
+live alarm playback and the retained replay to match in duration, frequency
+and peak. One measured two-process pass retained a 1.21-second, 598.3 Hz
+signature with peaks 5743 and 5806. Screenshots, both isolated NVRAM trees,
+Lua scripts, logs and WAVs remain under
+`$MAGIC_CAP_ASSETS/runtime/sound-assignment-regression/`.
 
 The broader product coverage map is in [`user-guide.md`](user-guide.md).
 
