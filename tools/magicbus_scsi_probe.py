@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the IDT monitor's Magic Bus SCSI-target data request."""
+"""Exercise both directions of the IDT monitor's Magic Bus SCTG transport."""
 
 from __future__ import annotations
 
@@ -24,12 +24,20 @@ SCSI_TARGET_PERIPH = 0x0000_C1E8
 SCRATCH = 0x0030_0100
 WATCHED = (
     ("init", 0x13C0_5620, "InitMagicBus"),
+    ("init_done", 0x13C0_568C, "InitMagicBus return"),
     ("check", 0x13C0_5A64, "CheckMagicBus"),
     ("get_data", 0x13C0_5EF4, "GetDataFunction"),
+    ("get_done", 0x13C0_6108, "GetDataFunction return"),
+    ("send_dispatch", 0x13C0_5C3C, "SendDataFunction dispatch"),
+    ("send_data", 0x13C0_6148, "SendDataFunction"),
 )
+GET_DONE_SLOT = SCRATCH + 16
+SEND_DATA_SLOT = SCRATCH + 24
 RESULT = re.compile(
-    rb"MAGICBUS SCSI address=(\d+) init=(\d+) check=(\d+) get_data=(\d+)"
+    rb"MAGICBUS SCTG address=(\d+) init=(\d+) init_done=(\d+) check=(\d+) "
+    rb"get_data=(\d+) get_done=(\d+) send_dispatch=(\d+) send_data=(\d+)"
 )
+HOST_DATA = re.compile(rb"Magic Bus SCTG accepted (\d+) host bytes")
 MONITOR_COMMAND = "magicbus -i\n"
 TERMINAL_KEYS = {
     "a": (2, 0x0002),
@@ -68,13 +76,18 @@ def automation_script(frames: int) -> str:
 local cpu = machine.devices[":maincpu"]
 local program = cpu.spaces["program"]
 local request = machine.ioport.ports[
-    ":MAGICBUS_SCSI_REQUEST"].fields["Magic Bus SCSI request"]
+    ":MAGICBUS_SCSI_REQUEST"].fields["Magic Bus SCTG get-data request"]
+local send_request = machine.ioport.ports[
+    ":MAGICBUS_SCSI_REQUEST"].fields["Magic Bus SCTG send-data request"]
 local frames = 0
 local command = {{
 {command}
 }}
 local command_index = 1
 local key_down = false
+local send_requested = false
+local second_command_frame = 0
+local send_seen_frame = 0
 
 local function watch(slot, address, name)
     program:write_u32(slot, 0)
@@ -86,7 +99,8 @@ end
 
 local function report()
     print(string.format(
-        "MAGICBUS SCSI address=%d init=%d check=%d get_data=%d",
+        "MAGICBUS SCTG address=%d init=%d init_done=%d check=%d get_data=%d "
+        .. "get_done=%d send_dispatch=%d send_data=%d",
         program:read_u32({SCSI_TARGET_PERIPH}), {counters}))
 end
 
@@ -94,9 +108,19 @@ emu.register_frame_done(function()
     frames = frames + 1
 
     if frames == 1 then
-        -- Hold the physical target request through enumeration.  The driver
-        -- presents it once the SCTG information record has been accepted.
+        -- Hold the get-data request through enumeration.  Discovery consumes
+        -- the first request record; a repeated information pass presents it
+        -- to the monitor's normal transport dispatcher.
         request:set_value(request.mask)
+    end
+
+    if second_command_frame == -1
+            and command_index == #command
+            and not key_down then
+        -- Assert the second request with the newline that invokes the second
+        -- command, so the idle monitor cannot consume it beforehand.
+        send_request:set_value(send_request.mask)
+        second_command_frame = 0
     end
 
     if command_index <= #command then
@@ -111,12 +135,30 @@ emu.register_frame_done(function()
         end
     end
 
-    if program:read_u32({SCRATCH + 8}) > 0 then
+    if not send_requested
+            and program:read_u32({GET_DONE_SLOT}) > 0 then
         request:set_value(0)
+        second_command_frame = frames + 30
+        send_requested = true
+    elseif second_command_frame > 0 and frames >= second_command_frame then
+        -- The monitor command services one transport request.  Run it again
+        -- so the second invocation discovers and services the opposite one.
+        command_index = 1
+        second_command_frame = -1
+    end
+
+    if send_seen_frame == 0 and program:read_u32({SEND_DATA_SLOT}) > 0 then
+        send_seen_frame = frames
+    end
+
+    if send_seen_frame > 0 and frames >= send_seen_frame + 2 then
+        request:set_value(0)
+        send_request:set_value(0)
         report()
         machine:exit()
     elseif frames == {frames} then
         request:set_value(0)
+        send_request:set_value(0)
         report()
         machine:exit()
     end
@@ -141,13 +183,25 @@ def parse_result(output: bytes) -> dict[str, int] | None:
     match = RESULT.search(output)
     if not match:
         return None
-    return dict(
+    result = dict(
         zip(
-            ("address", "init", "check", "get_data"),
+            (
+                "address",
+                "init",
+                "init_done",
+                "check",
+                "get_data",
+                "get_done",
+                "send_dispatch",
+                "send_data",
+            ),
             (int(value) for value in match.groups()),
             strict=True,
         )
     )
+    host_data = HOST_DATA.search(output)
+    result["host_bytes"] = int(host_data.group(1)) if host_data else 0
+    return result
 
 
 def acceptance_errors(result: dict[str, int]) -> list[str]:
@@ -155,9 +209,19 @@ def acceptance_errors(result: dict[str, int]) -> list[str]:
     errors = []
     if result["address"] != 0:
         errors.append(f"address={result['address']} (need 0)")
-    for name in ("init", "check", "get_data"):
+    for name in (
+        "init",
+        "init_done",
+        "check",
+        "get_data",
+        "get_done",
+        "send_dispatch",
+        "send_data",
+    ):
         if result[name] < 1:
             errors.append(f"{name}={result[name]} (need 1)")
+    if result["host_bytes"] != 16:
+        errors.append(f"host_bytes={result['host_bytes']} (need 16)")
     return errors
 
 
@@ -241,8 +305,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Artifacts: {run_dir}")
         return 1
     print(
-        "PASS: IDT monitor discovered SCTG at address 0 and consumed its "
-        "command-3 data request"
+        "PASS: IDT monitor discovered SCTG at address 0 and completed its "
+        "command-3 receive and command-7 send transactions"
     )
     print(f"Artifacts: {run_dir}")
     return 0

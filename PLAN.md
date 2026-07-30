@@ -19,7 +19,7 @@ The full regression list and expected checkpoints are in
 | Power outputs, charging & policy | MFIO LCD power blanks scanout without destroying the framebuffer; active-high Magic Bus Vcc-off removes and rediscovers its peripheral; AC plus charger enable advances the main-battery ADC; the real Power Controls clamp 1–60 minutes and automatic AC idle shutoff follows its checkbox | [`power-wake.md`](docs/power-wake.md#outputs-the-os-writes) |
 | Sound I/O | ROM's startup tone (unbuffered hold register), buffered SIB sound-TX/RX DMA, host or deterministic microphone input, and Magic Cap's sound-stamp record/stop/play workflow | [`betty-registers.md`](docs/betty-registers.md) |
 | Built-in software modem | Continuous 48-word SIB telecom DMA drives the ROM's V.32 and fax paths through TX39 DSP extensions; the Betty DAA hookswitch/line input and Dino ring detector are modelled; a held ring opens Phone Status, whose real **receive fax** action reaches `AnswerModem`, fax HDLC and non-silent PCM; the visible outbound Fax workflow creates a recipient, renders a screen and dials `5551212`; a clocked two-DataRover exchange runs both product fax roles through retained In-box storage, stationery and a reopened rendered page; the deterministic exchange also supplies dial tone and decodes DTMF/pulse dialing; the visible Telephone output decodes as `580`; Web Browser selects an Internet Center provider mapped to `PPP dialup`, completes V.32/LAPM and LCP/IPCP, exchanges dynamic TCP, forwards its live `GET` to an explicit host base, and renders an MSS-segmented response through an orderly close | [`builtin-modem.md`](docs/builtin-modem.md) |
-| Magic Bus | Two independently addressed descriptors (`ATKB` and `SCTG`), bus reinitialization, shared request-line edges, PIO/DMA transfers, checksummed discovery, ROM client attachment, bidirectional Set-2 keyboard traffic, and the IDT monitor's SCTG function-18 request/command-3 payload | [`memory-map.md`](docs/memory-map.md#magic-bus) |
+| Magic Bus | Two independently addressed descriptors (`ATKB` and `SCTG`), bus reinitialization, shared request-line edges, PIO/DMA transfers, checksummed discovery, ROM client attachment, bidirectional Set-2 keyboard traffic, and both directions of the IDT monitor's SCTG transport (functions 18/19 and commands 3/7) | [`memory-map.md`](docs/memory-map.md#magic-bus) |
 | TX39 extensions | `MADD`/`MADDU` plus three-operand `MULT`/`MULTU` implemented; all four verify `rd`, `HI`, and `LO`, covering 792 multiply/add and 89 destination-writing multiply uses in the SDK ELF | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core, completes TCP through rootless libslirp, renders deterministic local HTTP, carries Browser 3.5's native HTTPS Rule through a host TLS proxy, and can browse public HTTPS sites through a guarded loopback launcher | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
 | Storage cards | Blank setup, persistent remount, live Option-insert reformat, battery states, card-backed objects, full built-in-storage backup/restore, and source-preserving translation of a real 1.x `new items` package into 3.1 Built-in storage | [`developer-archives.md`](docs/developer-archives.md#storage-cards-an-exact-os-visible-contract), [`mame-bringup.md`](docs/mame-bringup.md) |
@@ -110,13 +110,14 @@ The full regression list and expected checkpoints are in
   separate from the working PC Card PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 
-- **Complete Magic Bus SCSI and other peripheral data planes.** The driver now
+- **Complete other Magic Bus peripheral classes and topology.** The driver now
   enumerates independently addressed `ATKB` and `SCTG` descriptors on the
   shared bus, attaches both built-in ROM clients, and drives the IDT monitor's
-  SCTG function-18 request through command-3 data receipt. Keyboard requests
-  and controls are fully bidirectional; concrete SCSI block commands and
-  backing storage, an external-modem class, and physical daisy-chain timing
-  remain uncovered
+  SCTG functions 18 and 19 through command-3 receive and command-7 transmit
+  DMA. Keyboard and SCTG monitor traffic are bidirectional. The remaining
+  evidence-backed gaps are an external-modem class, higher-level SCTG/PCLink
+  peer semantics, and physical daisy-chain timing—not a presumed disk or
+  backing store
   ([`memory-map.md`](docs/memory-map.md#magic-bus)).
 
 - **Improve hardware fidelity beyond observed ROM needs.** TX39 configuration

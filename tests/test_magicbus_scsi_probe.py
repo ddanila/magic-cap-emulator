@@ -16,8 +16,14 @@ class ScriptTests(unittest.TestCase):
     def test_script_holds_request_through_enumeration(self) -> None:
         script = probe.automation_script(1800)
 
-        self.assertIn('":MAGICBUS_SCSI_REQUEST"', script)
+        self.assertIn('"Magic Bus SCTG get-data request"', script)
+        self.assertIn('"Magic Bus SCTG send-data request"', script)
         self.assertIn("request:set_value(request.mask)", script)
+        self.assertIn("send_request:set_value(send_request.mask)", script)
+        self.assertIn("local send_requested = false", script)
+        self.assertIn("second_command_frame = frames + 30", script)
+        self.assertIn("command_index = 1", script)
+        self.assertIn("second_command_frame = -1", script)
         self.assertIn(f"program:read_u32({probe.SCSI_TARGET_PERIPH})", script)
 
     def test_monitor_command_opens_scsi_transport(self) -> None:
@@ -43,22 +49,54 @@ class ScriptTests(unittest.TestCase):
 
 class ResultTests(unittest.TestCase):
     def test_complete_result_is_accepted(self) -> None:
-        output = b"MAGICBUS SCSI address=0 init=1 check=3 get_data=1\n"
+        output = (
+            b"MAGICBUS SCTG address=0 init=1 init_done=1 check=4 get_data=1 "
+            b"get_done=1 send_dispatch=1 send_data=1\n"
+            b"Magic Bus SCTG accepted 16 host bytes\n"
+        )
         result = probe.parse_result(output)
 
-        self.assertEqual(result, {"address": 0, "init": 1, "check": 3, "get_data": 1})
+        self.assertEqual(
+            result,
+            {
+                "address": 0,
+                "init": 1,
+                "init_done": 1,
+                "check": 4,
+                "get_data": 1,
+                "get_done": 1,
+                "send_dispatch": 1,
+                "send_data": 1,
+                "host_bytes": 16,
+            },
+        )
         assert result is not None
         self.assertEqual(probe.acceptance_errors(result), [])
 
     def test_incomplete_result_is_rejected(self) -> None:
-        result = {"address": 1, "init": 1, "check": 0, "get_data": 0}
+        result = {
+            "address": 1,
+            "init": 1,
+            "init_done": 0,
+            "check": 0,
+            "get_data": 0,
+            "get_done": 0,
+            "send_dispatch": 0,
+            "send_data": 0,
+            "host_bytes": 0,
+        }
 
         self.assertEqual(
             probe.acceptance_errors(result),
             [
                 "address=1 (need 0)",
+                "init_done=0 (need 1)",
                 "check=0 (need 1)",
                 "get_data=0 (need 1)",
+                "get_done=0 (need 1)",
+                "send_dispatch=0 (need 1)",
+                "send_data=0 (need 1)",
+                "host_bytes=0 (need 16)",
             ],
         )
 

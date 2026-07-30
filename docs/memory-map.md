@@ -203,8 +203,8 @@ one `ATKB` keyboard or a two-device topology containing that keyboard plus an
 `SCTG` SCSI target, or present the SCSI target alone for the IDT monitor. The
 combined topology proves independent address assignment and ROM client
 attachment for two different descriptor classes. The monitor path additionally
-exercises an SCTG request and data reply; SCSI block commands and a physical
-daisy-chain transport remain unmodeled.
+exercises both directions of the SCTG transport. Higher-level PCLink peer
+semantics and a physical daisy-chain transport remain unmodeled.
 
 The controller completes transfers synchronously but preserves the ROM's four
 transaction classes:
@@ -243,6 +243,7 @@ seven is broadcast. The two modeled endpoints take addresses zero and one:
 | `cc24` | `ca24` | 2 | read selected data |
 | `cc18` | `ca18` | 1 | read a pending request record |
 | `cc3c` | `ca3c` | 5 | write client data |
+| `cc48` | `ca48` | 7 | write SCTG transport data |
 | `dcc8` | `dac8` | 28 | addressed request polling |
 
 Broadcast commands continue to use address seven, including `def0` for command
@@ -299,13 +300,13 @@ self-test/acknowledgement bytes rather than exposing them as key transitions.
 Magic Bus state, the scan FIFO, and all in-flight transaction state participate
 in save states.
 
-### SCSI-target monitor traffic
+### SCTG monitor/PCLink transport
 
 The IDT monitor's `magicbus -i` command discovers an SCTG-only configuration,
 validates the same 88-byte information record, and reports `MagicBus SCSI
 controller connected`. Holding the modeled target-request input during
 enumeration presents the request after the information record is accepted.
-The monitor then:
+For the target-to-host direction, the monitor:
 
 1. enters `CheckMagicBus`;
 2. reads a 16-byte command-1 request record whose length is four 32-bit words
@@ -315,9 +316,22 @@ The monitor then:
 
 The payload is deliberately a zeroed monitor command. Function zero is
 unsupported, so the ROM acknowledges the transfer without reading or modifying
-target memory. This proves SCTG request selection, PIO/DMA completion and its
-non-keyboard data transaction; it is not yet a SCSI disk, block-command parser
-or backing store.
+target memory.
+
+The opposite request record uses function byte 19. `CheckMagicBus` routes it
+to `SendDataFunction`, which issues command 7 and transmits a 16-byte
+monitor/PCLink buffer to the target through Dino DMA. The modeled target
+consumes the complete record and raises DMA-end completion. The probe invokes
+`magicbus -i` once for each direction because one monitor command services one
+transport request.
+
+The ROM's PCLink module exposes only
+`MagicBusSCSITargetClient_Attached`, `Detached`, and `CanHandlePeripheral`;
+the symbol and call audit found no disk or block-read/write client methods.
+`SCTG` is therefore documented as a SCSI-target-shaped PCLink transport
+endpoint, not as evidence for a disk peripheral. Remaining work must start
+from observed peer messages rather than inventing a block-command parser or
+backing store.
 
 The acceptance probe exercises discovery plus both directions of keyboard
 traffic: it injects Caps Lock, observes Set-2 dispatch, and requires the ROM
@@ -339,12 +353,13 @@ refuses the development ROM because those routine addresses shift and would
 silently measure nothing.
 
 The SCTG probe boots the release monitor, types `magicbus -i` through the
-terminal's real key matrix, holds a physical target request through discovery,
-and requires `InitMagicBus`, `CheckMagicBus`, and `GetDataFunction` plus the
-assigned SCTG address. It uses the SCSI-only configuration because the monitor
-assigns a keyboard-plus-target chain with an address gap that its simple
-standalone scanner does not traverse; the ordinary OS gate covers that combined
-topology.
+terminal's real key matrix, and holds the target-to-host request through
+discovery. After function 18 and command 3 complete, it invokes the command a
+second time with the host-to-target request and requires `SendDataFunction`
+plus a 16-byte command-7 DMA receipt. It uses the SCSI-only configuration
+because the monitor assigns a keyboard-plus-target chain with an address gap
+that its simple standalone scanner does not traverse; the ordinary OS gate
+covers that combined topology.
 
 Magic Cap later repeats broadcast address assignment when it reinitializes
 the bus. Modeled endpoints discard their earlier addresses and answer that
