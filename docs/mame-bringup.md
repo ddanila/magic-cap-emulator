@@ -235,6 +235,7 @@ python3 tools/power_regression.py
 python3 tools/sound_regression.py
 python3 tools/sound_regression.py --checkpoint dma
 python3 tools/sound_input_regression.py
+python3 tools/sound_controls_regression.py
 # Requires a personalized NVRAM that resumes at the ordinary Desk:
 python3 tools/sound_stamp_regression.py \
   --nvram-source "$MAGIC_CAP_ASSETS/runtime/manual/nvram"
@@ -350,6 +351,14 @@ new `CalibrationPad_Calibrate`, three `CalibrationPad_Touch` calls, one
 status bar. All six native LCD snapshots, generated Lua, isolated NVRAM, and
 MAME output remain under
 `$MAGIC_CAP_ASSETS/runtime/touch-alignment-regression/`.
+
+The sound-controls harness opens Hallway → Controls → Sound, overshoots both
+ends of the volume slider with forty presses each, and verifies the thumb moves
+default → maximum → off. It previews the same **contain** sound at both clamps
+and analyzes their exact emulated-frame windows in MAME's WAV output: maximum
+must be audible and off must suppress the peak by at least 10×. Screenshots,
+WAV, generated Lua, isolated NVRAM and output remain under
+`$MAGIC_CAP_ASSETS/runtime/sound-controls-regression/`.
 
 The power harness is deliberately two processes, not a same-process shortcut.
 It calibrates a fresh heap, enters normal VCC-off power-down, exits so only
@@ -709,7 +718,7 @@ the separate serial-terminal view.
 | Workbench | Live Dino buffer `0x003f6a00` reaches stable lower-workbench signature `0x9dab458b`; the clock-dependent full-screen checksum is informational |
 | Persistence | 4 MiB DRAM and Dino RTC use external NVRAM files; a two-process regression proves retained-RAM power-down and on-button wake |
 | Power | LCD power blanks scanout without losing its framebuffer; Magic Bus Vcc-off drops and later rediscovers the accessory; AC plus charger enable raises the main-battery ADC; the real controls clamp 1–60 minutes and their AC-idle checkbox governs automatic `SLEE`/VCC-off shutdown |
-| Sound output | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
+| Sound output | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz; Controls → Sound clamps the visible volume at maximum/off and makes the same effect audible/silent in the matching WAV windows |
 | Sound input | One-shot SIB receive DMA captures deterministic tone/silence with all expected status; the real Stamper UI records a 1 kHz microphone source, stops and drains its SIB command, then plays an audible WAV segment |
 | Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 and fax code through TX39 DSP extensions; paired generic roles negotiate matching rates and complete V.32 plus LAPM; Web Browser selects an Internet Center provider mapped to `PPP dialup`, dials `555-1212`, starts its real PPP actor, completes LCP/IPCP with guest address `10.0.2.15`, exchanges dynamic TCP, sends `GET / HTTP/1.0`, receives `HTTP/1.0 200 OK`, and renders its deterministic body; its raw-IPv4 mode also traverses rootless libslirp, follows an HTTP redirect over a second TCP connection and renders the second page; direct DAA verification covers connected/off-hook and both ring edges; a held ring opens Phone Status; **receive fax** reaches live-call `AnswerModem`, both fax HDLC directions and non-silent PCM; a clocked two-DataRover product run creates a recipient, dials `5551212`, sustains image transfer, then relaunches the receiver and opens the retained In-box fax, one-page stationery and rendered page; the exchange also supplies deterministic dial tone and decodes DTMF/pulse dialing |
 | Magic Bus | ROM independently assigns addresses zero and one, validates checksummed `ATKB` and `SCTG` descriptors, attaches both client classes, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures; the IDT monitor also discovers SCTG alone, executes `FastChecksum` through function 18/command 3, and returns exact status/result through function 19/command 7; the similarly named external-modem route is correctly kept on UART B |

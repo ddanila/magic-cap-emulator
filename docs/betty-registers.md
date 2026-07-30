@@ -297,6 +297,20 @@ and zero crossings, checks half/end/pointer and receive-ready interrupts, then
 switches the live source to silence and requires 128 zero samples. This covers
 the Dino/Betty receive path directly.
 
+The output-volume contract is also covered through the product UI:
+
+```sh
+python3 tools/sound_controls_regression.py
+```
+
+That harness opens Hallway → Controls → Sound and deliberately overshoots the
+slider's `+` and `−` ends. The wide thumb must move from its default position
+to maximum and then to **off**. It taps the same **contain** effect at each
+clamp and reads the corresponding windows from MAME's 16-bit WAV capture;
+maximum must have a peak above 1,000, while off must remain below one tenth of
+that peak. This verifies the visible setting and its actual output effect
+without assuming that the UI writes a SIB attenuation command immediately.
+
 *Using Magic Cap*, pp. 67–68, supplies the acceptance workflow rather than
 leaving “microphone support” abstract: create an email, add the general-drawer
 sound stamp, open its recording controls, record from the DataRover microphone,
