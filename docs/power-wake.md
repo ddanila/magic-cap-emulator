@@ -404,11 +404,11 @@ The driver therefore:
 - resets Betty/SIB on a VCC-off wake, but preserves them across a VCC-on doze.
 
 `masterClock` is modeled separately from these CPU/VCC transitions. Its timer
-bit stops and restarts the periodic timer, while the SIB bit does the same for
-its frame and DMA timers. The battery-backed RTC is not gated: the release ROM
-clears all master clocks during normal power-down and immediately uses
-`rtcLow` for a delay. Video, Magic Bus and UART gates are detailed and
-independently regressed in
+bit freezes and resumes the periodic timer at its live 16-bit count, while the
+SIB bit does the same for its frame and DMA timers. The battery-backed RTC is
+not gated: the release ROM clears all master clocks during normal power-down
+and immediately uses `rtcLow` for a delay. Video, Magic Bus and UART gates are
+detailed and independently regressed in
 [the Dino register map](memory-map.md#master-clock-gates).
 
 The power-control stop timer is another always-on consumer of the 32.768 kHz
@@ -418,8 +418,9 @@ for each nominal 16 ms (exactly 15.625 ms) Betty-reset phase, and value 8
 raises it after 2,048 ticks for the nominal 64 ms (exactly 62.5 ms)
 `DeepDoze` refresh wake. The focused clock regression checks both edges with
 all master clocks clear, and the full retained-state regression proves the
-resulting doze/cleanup/wake sequence. The separately named fast-timer clock
-remains unresolved.
+resulting doze/cleanup/wake sequence. SDK names and the monitor's fast
+`setrtc` path place the separately named fast-timer clock near RTC test mode,
+but its source rate and exact wiring remain unresolved.
 
 ## Automated acceptance
 

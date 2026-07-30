@@ -145,6 +145,31 @@ and an encoded end address to `+0x034`.
 Betty is **not** this register block. It is an external device reached through
 Dino's SIB subframe registers; see [`betty-registers.md`](betty-registers.md).
 
+### Timer module
+
+The SDK defines `timerControl` at offset `0x150` and `perTimer` at `0x154`.
+The periodic register is not a plain load-value shadow:
+
+| Bits | SDK field | Implemented behavior |
+|---:|---|---|
+| 31:16 | `kTimerPerCntMask` | Live 16-bit down counter |
+| 15:0 | `kTimerPerLoadMask` | Reload value |
+
+Timer-control bit 4 enables that counter and bit 5 freezes it. The model
+reloads on a new value or a disabled-to-enabled transition, exposes the live
+count on reads, repeats at the programmed interval, and preserves the
+partially elapsed count through both bit-5 freeze and loss of master timer
+clock bit 15. Writes cannot replace the read-only count field.
+
+The other timer-control names clarify, but do not fully specify, Dino's test
+path: bits 7 and 6 freeze the prescaler and RTC, bit 3 clears the RTC, bit 2
+is `TestC8Ms`, bit 1 is `RtcEnTestClk`, and bit 0 is `EnRtcTest`. The IDT
+monitor's fast `setrtc` helpers at `0x13c04980` and `0x13c04a7c` toggle bits
+0/1 while freezing the prescaler around a target RTC value. This is the only
+observed candidate consumer for the separately named master-clock bit-14
+`FastTimerClk`; neither the SDK nor ROM establishes that test clock's source
+frequency or its exact wiring, so the model does not invent either.
+
 ### Master clock gates
 
 `masterClock` at offset `0x1c0` is more than a shadow register. The SDK's
@@ -173,7 +198,8 @@ clock, including pulsed IrDA mode. Magic Bus stops reporting enabled and does
 not complete new commands while clocked off. SIB frame service and
 sound/telecom DMA timers pause. Clearing the timer clock suppresses the
 periodic timer; programmed registers and DMA positions are retained across
-these clock transitions.
+these clock transitions. The periodic timer also retains its live countdown
+phase rather than restarting a full interval.
 
 The battery-backed RTC is deliberately independent. During normal power-down,
 the release ROM writes `masterClock = 0` at `0x13c3a428`, then
@@ -202,9 +228,11 @@ advancement. The video gate is also covered by normal boot/Workbench
 validation and the driver's shared clock-and-LCD blanking path. With every
 master clock clear, the same regression starts stop values 2 and 8, proves
 that interrupt-bank-5 bit 28 stays clear through RTC ticks 511 and 2,047, and
-appears immediately after ticks 512 and 2,048. Bit 14's separately named
-fast-timer consumer remains unresolved rather than being conflated with this
-observed power timer.
+appears immediately after ticks 512 and 2,048. It then loads the periodic
+counter with 8, observes the live `8 → 5` countdown, holds 5 across ten timer
+ticks under both the dedicated freeze bit and master-clock gate, and requires
+the interrupt on the fifth resumed tick. Bit 14's probable RTC-test role and
+unknown rate remain separate from the observed power timer.
 
 Bit 2 is not coupled to the pulsed UART transport. A complete two-peer Beam
 run leaves `kClockEnIrClkMask` clear while UART B exchanges SIR frames in both
@@ -243,6 +271,8 @@ boot, OS, and peripheral regressions:
   hookswitch.
 - A battery-backed 32,768 Hz RTC counter, alarm and rollover interrupts,
   freeze/clear controls, and a separate persistent clock record.
+- A periodic timer with a read-only live count, writable reload, repeated
+  interrupt, and phase-preserving enable/freeze/master-clock behavior.
 - Read-only power-good/on-button inputs plus cold-start/VCC power state.
   `StopCpu` suspends the R3900; a pending enabled interrupt releases a
   VCC-on doze, while an on-button edge restores VCC after power-down. Dino's
@@ -258,7 +288,8 @@ boot, OS, and peripheral regressions:
   monitor.
 - Video high-buffer selection and 480×320, 2 bpp framebuffer scanout.
 - Functional `masterClock` gates for video, both UARTs, Magic Bus,
-  SIB, and the periodic timer; RTC/alarm/rollover timekeeping remains live.
+  SIB, and the periodic timer; the timer's partial count is retained, while
+  RTC/alarm/rollover timekeeping remains live.
 - Main DRAM backed by MAME NVRAM, kept in the external runtime directory
   selected with `-nvram_directory`.
 

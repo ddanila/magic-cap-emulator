@@ -26,6 +26,13 @@ class DinoClockRegressionTests(unittest.TestCase):
             b"INT5=20000000 MBUS=C0000001 RTC=00002000\n"
             b"STOP_TIMER V2_PRE=00000000 V2_POST=10000000 "
             b"V8_PRE=00000000 V8_POST=10000000\n"
+            b"PERIODIC_PHASE START=0008 RUN=0005 "
+            b"FREEZE_A=0005 FREEZE_B=0005 "
+            b"FREEZE_IDLE=00000000 FREEZE_PRE=00000000 "
+            b"FREEZE_POST=20000000 "
+            b"GATE_A=0005 GATE_B=0005 "
+            b"GATE_IDLE=00000000 GATE_PRE=00000000 "
+            b"GATE_POST=20000000\n"
         )
         self.assertIsNotNone(parse_results(output))
         self.assertEqual(verify_results(parse_results(output)), [])
@@ -54,8 +61,20 @@ class DinoClockRegressionTests(unittest.TestCase):
             0,
             STOP_TIMER_EVENT,
             0,
+            0,
+            0,
+            0,
+            1,
+            PERIODIC_EVENT,
+            PERIODIC_EVENT,
+            0,
+            0,
+            1,
+            PERIODIC_EVENT,
+            PERIODIC_EVENT,
+            0,
         )
-        self.assertGreaterEqual(len(verify_results(bad)), 17)
+        self.assertGreaterEqual(len(verify_results(bad)), 29)
 
     def test_script_controls_major_clock_domains(self) -> None:
         script = automation_script()
@@ -68,6 +87,8 @@ class DinoClockRegressionTests(unittest.TestCase):
         self.assertIn("stop_timer_start(2)", script)
         self.assertIn("stop_timer_start(8)", script)
         self.assertIn("program:write_u32(MASTER_CLOCK, 0)", script)
+        self.assertIn("PERIODIC_ENABLE | PERIODIC_FREEZE", script)
+        self.assertIn("local periodic_gate_a = periodic_count()", script)
         self.assertIn("emu.attotime.from_ticks", script)
 
 

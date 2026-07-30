@@ -28,7 +28,14 @@ RESULT_PATTERN = re.compile(
     rb"INT2=([0-9A-F]{8}) INT5=([0-9A-F]{8}) "
     rb"MBUS=([0-9A-F]{8}) RTC=([0-9A-F]{8}).*"
     rb"STOP_TIMER V2_PRE=([0-9A-F]{8}) V2_POST=([0-9A-F]{8}) "
-    rb"V8_PRE=([0-9A-F]{8}) V8_POST=([0-9A-F]{8})",
+    rb"V8_PRE=([0-9A-F]{8}) V8_POST=([0-9A-F]{8}).*"
+    rb"PERIODIC_PHASE START=([0-9A-F]{4}) RUN=([0-9A-F]{4}) "
+    rb"FREEZE_A=([0-9A-F]{4}) FREEZE_B=([0-9A-F]{4}) "
+    rb"FREEZE_IDLE=([0-9A-F]{8}) FREEZE_PRE=([0-9A-F]{8}) "
+    rb"FREEZE_POST=([0-9A-F]{8}) "
+    rb"GATE_A=([0-9A-F]{4}) GATE_B=([0-9A-F]{4}) "
+    rb"GATE_IDLE=([0-9A-F]{8}) GATE_PRE=([0-9A-F]{8}) "
+    rb"GATE_POST=([0-9A-F]{8})",
     re.DOTALL,
 )
 UART_ENABLED = 0x80000000
@@ -66,6 +73,10 @@ local RTC_LOW = 0x10c00144
 local TIMER_CONTROL = 0x10c00150
 local PERIODIC_TIMER = 0x10c00154
 local ACTIVE_CLOCKS = 0x00028803
+local TIMER_CLOCK = 0x00008000
+local PERIODIC_ENABLE = 0x00000010
+local PERIODIC_FREEZE = 0x00000020
+local PERIODIC_EVENT = 0x20000000
 local STOP_TIMER_ENABLE = 0x00000800
 local STOP_TIMER_EVENT = 0x10000000
 
@@ -169,6 +180,60 @@ local v8_post = program:read_u32(INTERRUPT5)
 print(string.format(
     "STOP_TIMER V2_PRE=%08X V2_POST=%08X V8_PRE=%08X V8_POST=%08X",
     v2_pre, v2_post, v8_pre, v8_post))
+
+local function periodic_count()
+    return (program:read_u32(PERIODIC_TIMER) >> 16) & 0xffff
+end
+
+local function periodic_start(load)
+    program:write_u32(TIMER_CONTROL, 0)
+    program:write_u32(MASTER_CLOCK, TIMER_CLOCK)
+    program:write_u32(INTERRUPT5, PERIODIC_EVENT | STOP_TIMER_EVENT)
+    -- The upper half is hardware-owned count state and must ignore writes.
+    program:write_u32(PERIODIC_TIMER, 0xabcd0000 | load)
+    program:write_u32(TIMER_CONTROL, PERIODIC_ENABLE)
+end
+
+-- perTimer exposes the active countdown in bits 31:16.  Both its dedicated
+-- freeze control and its master clock gate must retain the partial interval.
+periodic_start(8)
+local periodic_start_count = periodic_count()
+wait_ticks(3)
+local periodic_run = periodic_count()
+program:write_u32(
+    TIMER_CONTROL, PERIODIC_ENABLE | PERIODIC_FREEZE)
+local periodic_freeze_a = periodic_count()
+wait_ticks(10)
+local periodic_freeze_b = periodic_count()
+local periodic_freeze_idle = program:read_u32(INTERRUPT5)
+program:write_u32(TIMER_CONTROL, PERIODIC_ENABLE)
+wait_ticks(periodic_freeze_b - 1)
+local periodic_freeze_pre = program:read_u32(INTERRUPT5)
+wait_ticks(1)
+local periodic_freeze_post = program:read_u32(INTERRUPT5)
+
+periodic_start(8)
+wait_ticks(3)
+program:write_u32(MASTER_CLOCK, 0)
+local periodic_gate_a = periodic_count()
+wait_ticks(10)
+local periodic_gate_b = periodic_count()
+local periodic_gate_idle = program:read_u32(INTERRUPT5)
+program:write_u32(MASTER_CLOCK, TIMER_CLOCK)
+wait_ticks(periodic_gate_b - 1)
+local periodic_gate_pre = program:read_u32(INTERRUPT5)
+wait_ticks(1)
+local periodic_gate_post = program:read_u32(INTERRUPT5)
+
+print(string.format(
+    "PERIODIC_PHASE START=%04X RUN=%04X FREEZE_A=%04X FREEZE_B=%04X " ..
+    "FREEZE_IDLE=%08X FREEZE_PRE=%08X FREEZE_POST=%08X " ..
+    "GATE_A=%04X GATE_B=%04X GATE_IDLE=%08X GATE_PRE=%08X GATE_POST=%08X",
+    periodic_start_count, periodic_run,
+    periodic_freeze_a, periodic_freeze_b,
+    periodic_freeze_idle, periodic_freeze_pre, periodic_freeze_post,
+    periodic_gate_a, periodic_gate_b,
+    periodic_gate_idle, periodic_gate_pre, periodic_gate_post))
 machine:exit()
 """
 
@@ -204,6 +269,18 @@ def verify_results(values: tuple[int, ...] | None) -> list[str]:
         v2_post,
         v8_pre,
         v8_post,
+        periodic_start_count,
+        periodic_run,
+        periodic_freeze_a,
+        periodic_freeze_b,
+        periodic_freeze_idle,
+        periodic_freeze_pre,
+        periodic_freeze_post,
+        periodic_gate_a,
+        periodic_gate_b,
+        periodic_gate_idle,
+        periodic_gate_pre,
+        periodic_gate_post,
     ) = values
     failures: list[str] = []
     if off_uart_a & UART_ENABLED or off_uart_b & UART_ENABLED:
@@ -250,6 +327,33 @@ def verify_results(values: tuple[int, ...] | None) -> list[str]:
         ("eight-tick timer did not fire after 2,048 RTC ticks", v8_post),
     ):
         if not value & STOP_TIMER_EVENT:
+            failures.append(label)
+    for label, value, expected in (
+        ("periodic timer did not load its live counter", periodic_start_count, 8),
+        ("periodic timer did not count three ticks", periodic_run, 5),
+        ("periodic freeze changed the counter on entry", periodic_freeze_a, 5),
+        ("periodic freeze did not retain the counter", periodic_freeze_b, 5),
+        ("timer clock gate changed the counter on entry", periodic_gate_a, 5),
+        ("timer clock gate did not retain the counter", periodic_gate_b, 5),
+    ):
+        if value != expected:
+            failures.append(f"{label}: expected {expected}, got {value}")
+    for label, value in (
+        ("periodic timer fired while frozen", periodic_freeze_idle),
+        (
+            "periodic timer fired before its resumed freeze interval",
+            periodic_freeze_pre,
+        ),
+        ("periodic timer fired while its master clock was gated", periodic_gate_idle),
+        ("periodic timer fired before its resumed gated interval", periodic_gate_pre),
+    ):
+        if value & PERIODIC_EVENT:
+            failures.append(label)
+    for label, value in (
+        ("periodic timer did not fire after freeze resume", periodic_freeze_post),
+        ("periodic timer did not fire after master-clock resume", periodic_gate_post),
+    ):
+        if not value & PERIODIC_EVENT:
             failures.append(label)
     return failures
 
@@ -335,8 +439,9 @@ def run_regression(args: argparse.Namespace) -> int:
 
     print(
         "PASS: Dino master clocks gate and resume both UARTs, SIB, "
-        "Magic Bus and the periodic timer; the RTC and exact 128 Hz power "
-        "stop timer remain independent"
+        "Magic Bus and the live periodic countdown; freeze and clock gates "
+        "retain its phase, while the RTC and exact 128 Hz power stop timer "
+        "remain independent"
     )
     print(f"Artifacts: {run_dir}")
     return 0
