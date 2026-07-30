@@ -55,7 +55,10 @@ The integer ISA extensions also include `BEQL`, `BNEL`, `BLEZL`, `BGTZL`,
 `BLTZL`, `BGEZL`, `BLTZALL`, and `BGEZALL`. A taken branch executes its delay
 slot; a not-taken likely branch nullifies it. Both link-likely instructions
 write `r31 = PC + 8` unconditionally, as do the R3900's ordinary `BLTZAL` and
-`BGEZAL`. `SYNC` waits for a preceding load, store, or data-cache refill.
+`BGEZAL`. The extended set also supplies false-likely and true-likely
+branches for each of the four coprocessor condition inputs (`BC0FL/TL`
+through `BC3FL/TL`) with the same delay-slot rule. `SYNC` waits for a
+preceding load, store, or data-cache refill.
 
 ## ROM audit
 
@@ -200,14 +203,17 @@ save-state data. Other MIPS-I devices retain MAME's previous blocking divide
 and multiply timing.
 
 The R3900 decoder now distinguishes the Toshiba integer branch-likely
-extensions from the baseline MIPS-I REGIMM aliases. A not-taken likely branch
-advances past its delay slot without fetching or executing it; a taken branch
-uses the ordinary delayed-branch state. Link writes are unconditional.
-Baseline MIPS-I devices retain their original REGIMM alias behavior and reject
-the four likely primary opcodes. `SYNC` is accepted only by the R3900 and is
-currently an effective no-op because memory accesses and cache fills complete
-synchronously inside the interpreter. The disassembler applies the same
-device distinction.
+extensions from the baseline MIPS-I REGIMM aliases and implements
+`BC0FL/TL` through `BC3FL/TL` against MAME's four coprocessor condition
+callbacks. A not-taken likely branch advances past its delay slot without
+fetching or executing it; a taken branch uses the ordinary delayed-branch
+state. Link writes are unconditional. Coprocessors 1–3 still raise the
+architectural Coprocessor Unusable exception unless their Status enable bit
+is set. Baseline MIPS-I devices retain their original REGIMM alias behavior,
+reject the four likely primary opcodes, and reject likely coprocessor
+sub-opcodes. `SYNC` is accepted only by the R3900 and is currently an
+effective no-op because memory accesses and cache fills complete synchronously
+inside the interpreter. The disassembler applies the same device distinction.
 
 The R3900 self-debug unit now exposes CP0 register 16 `Debug` and register 17
 `DEPC`. `SDBBP` enters debug mode at fixed vector `0xbfc00200` without
@@ -225,8 +231,11 @@ the core has no NMI input and its synchronous interpreter cannot presently
 represent coincident exceptions. The R3900 has no TLB, so TLF has no
 applicable source.
 
-Likely branches for external coprocessors remain outside the DataRover
-configuration, which has no such coprocessor. Neither they nor the self-debug
+The DataRover has no external coprocessor, so its four condition callbacks
+default false. The injected branch regression nevertheless enables each
+applicable Status bit and verifies both possible false-line outcomes:
+`BCzFL` takes the branch and executes its delay slot, while `BCzTL` falls
+through and nullifies it. Neither likely branches nor the self-debug
 instructions occur in a sized function in the available SDK ELFs.
 
 Run the isolated CPU regressions with:

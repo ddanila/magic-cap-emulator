@@ -535,6 +535,15 @@ with Config.Lock and proves a later full-rate write changes neither Config nor
 the measured quarter rate. Its artifacts remain under
 `$MAGIC_CAP_ASSETS/runtime/tx39-clock-regression/`.
 
+The branch companion injects every integer likely form and every
+`BC0FL/TL` through `BC3FL/TL` form. It requires taken branches to execute
+their delay slots, not-taken branches to nullify them, link forms to write
+`r31` unconditionally, and `SYNC` to decode successfully. Because no external
+coprocessor is connected, the harness enables the corresponding Status bits
+and checks the deterministic false condition line in both directions. Its
+artifacts remain under
+`$MAGIC_CAP_ASSETS/runtime/tx39-branch-regression/`.
+
 The self-debug companion covers `SDBBP` breakpoint and delay-slot entry,
 Debug/DEPC moves, `DERET`, DSS, and the special suppression applied when
 DERET returns to a branch and its delay slot. Its artifacts remain under

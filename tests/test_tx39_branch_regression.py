@@ -37,6 +37,14 @@ class Tx39BranchRegressionTests(unittest.TestCase):
             "0x04230002",
             "0x04320002",
             "0x04330002",
+            "0x41020002",
+            "0x41030002",
+            "0x45020002",
+            "0x45030002",
+            "0x49020002",
+            "0x49030002",
+            "0x4d020002",
+            "0x4d030002",
             "0x0000000f",
         ):
             self.assertIn(opcode, script)

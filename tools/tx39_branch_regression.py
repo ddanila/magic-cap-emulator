@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify TX39 integer branch-likely nullification and SYNC in MAME."""
+"""Verify TX39 branch-likely nullification and SYNC in MAME."""
 
 from __future__ import annotations
 
@@ -47,12 +47,23 @@ EXPECTED = {
     # their ordinary delay slot when not taken.
     "BLTZAL_N": (0x41, True),
     "BGEZAL_N": (0x41, True),
+    # The DataRover has no external coprocessors, so all four unbound
+    # condition inputs read false.  False-likely branches are therefore
+    # taken, while true-likely branches nullify their delay slots.
+    "BC0FL": (0x01, False),
+    "BC0TL": (0x40, False),
+    "BC1FL": (0x01, False),
+    "BC1TL": (0x40, False),
+    "BC2FL": (0x01, False),
+    "BC2TL": (0x40, False),
+    "BC3FL": (0x01, False),
+    "BC3TL": (0x40, False),
     "SYNC": (0x01, False),
 }
 
 
 def automation_script() -> str:
-    """Return injected programs covering every integer likely branch."""
+    """Return injected programs covering every R3900 likely branch."""
     return r"""local machine = manager.machine
 local cpu = machine.devices[":maincpu"]
 local program = cpu.spaces["program"]
@@ -76,6 +87,14 @@ local modes = {
     { name = "BGEZALL_N",  opcode = 0x04330002, r1 = -1, r2 = 0 },
     { name = "BLTZAL_N",   opcode = 0x04300002, r1 =  0, r2 = 0 },
     { name = "BGEZAL_N",   opcode = 0x04310002, r1 = -1, r2 = 0 },
+    { name = "BC0FL",      opcode = 0x41020002, r1 =  0, r2 = 0 },
+    { name = "BC0TL",      opcode = 0x41030002, r1 =  0, r2 = 0 },
+    { name = "BC1FL",      opcode = 0x45020002, r1 =  0, r2 = 0, sr = 0x20000000 },
+    { name = "BC1TL",      opcode = 0x45030002, r1 =  0, r2 = 0, sr = 0x20000000 },
+    { name = "BC2FL",      opcode = 0x49020002, r1 =  0, r2 = 0, sr = 0x40000000 },
+    { name = "BC2TL",      opcode = 0x49030002, r1 =  0, r2 = 0, sr = 0x40000000 },
+    { name = "BC3FL",      opcode = 0x4d020002, r1 =  0, r2 = 0, sr = 0x80000000 },
+    { name = "BC3TL",      opcode = 0x4d030002, r1 =  0, r2 = 0, sr = 0x80000000 },
     { name = "SYNC",       opcode = 0x0000000f, r1 =  0, r2 = 0 },
 }
 
@@ -100,7 +119,7 @@ local function run_mode(index)
     cpu.state["R1"].value = mode.r1 & 0xffffffff
     cpu.state["R2"].value = mode.r2 & 0xffffffff
     cpu.state["R31"].value = 0
-    cpu.state["SR"].value = 0
+    cpu.state["SR"].value = mode.sr or 0
     cpu.state["PC"].value = 0xa0000000 | address
 end
 
@@ -248,9 +267,9 @@ def run_regression(args: argparse.Namespace) -> int:
         return 1
 
     print(
-        "PASS: all eight TX39 integer branch-likely forms execute or nullify "
-        "their delay slots correctly, link branches write r31 "
-        "unconditionally, and SYNC is accepted"
+        "PASS: all eight TX39 integer and eight coprocessor branch-likely "
+        "forms execute or nullify their delay slots correctly, link branches "
+        "write r31 unconditionally, and SYNC is accepted"
     )
     print(f"Artifacts: {run_dir}")
     return 0
