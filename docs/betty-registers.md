@@ -182,7 +182,10 @@ drives off-hook, while input bit `0x0100` reports a connected line and remains
 preserved across IOData writes. The automatic exchange supplies a
 deterministic 350+440 Hz dial tone to receive DMA, decodes standard DTMF from
 transmit DMA and observes hookswitch pulse dialing. A silent-line option still
-delivers silence. Carrier modulation and a remote modem peer are not modelled.
+delivers silence. The paired-carrier and product Internet Center harnesses
+attach the remote PCM/PPP peer documented in
+[`builtin-modem.md`](builtin-modem.md); this register-level exchange does not
+synthesize carrier by itself.
 
 The driver's own clock for this channel comes from `kSibTelDivMask`, separate
 from the sound divisor, so the two channels can run at different rates.

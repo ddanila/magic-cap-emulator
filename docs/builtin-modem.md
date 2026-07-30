@@ -186,8 +186,9 @@ python3 tools/telephone_line_regression.py --pulse
 
 A sustained on-hook state remains a hangup and does not produce a digit. A
 product-level pass through the Telephone is covered separately below. The
-ROM's asynchronous `SoftwareModem_CheckDialTone`, carrier and a remote modem
-remain later milestones.
+ROM's asynchronous `SoftwareModem_CheckDialTone` is not isolated by this
+detector test; the paired carrier and product Internet Center paths are
+covered separately below.
 
 ## Product Telephone path
 
@@ -302,7 +303,7 @@ It requires every receive word on each DataRover to equal the other
 DataRover's transmit word and verifies nonzero byte counts in both relay
 directions. This closes the raw external bidirectional PCM transport. The
 paired-fax regression below supplies the product-level, clocked call exchange;
-data-modem carrier remains a separate open acceptance target.
+the paired and product data-modem carrier checks are covered separately below.
 
 ## Paired carrier baseline
 
@@ -567,17 +568,17 @@ reaches `AnswerModem`, issues 24 softmodem commands during the observed
 interval, installs `SoftModemLineHandler`, runs both `FaxModemRcv` and
 `FaxModemXmt`, exercises HDLC receive/send, and produces non-silent PCM.
 
-This narrows the remaining application-level gap: raw full-duplex transport,
-scheduler skew, silent DSP output, answer-role selection, simple polarity, a
-broad direct-to-attenuated gain range, V.32 carrier, incoming call-object
-creation, and the real fax-answer and fax-origin startups have all been
-addressed or excluded. The direct carrier harness does not create an Internet
-Center connection object. The product carrier regression now creates that
-object, completes V.32 and LAPM, starts the PPP actor and delivers its first
-data unit to the answer ROM. Its bounded HTTP peer can consume the guest
-request locally or forward it to an explicit host base URL; unrestricted
-network transport and segmented responses remain distinct from proving the
-paired ROM data pumps. A
+The application-level coverage now addresses raw full-duplex transport,
+scheduler skew, DSP output, answer-role selection, polarity, gain range,
+V.32 carrier, incoming call-object creation, and the real fax-answer and
+fax-origin startups. The direct carrier harness does not create an Internet
+Center connection object; the product carrier regression does. It completes
+V.32 and LAPM, starts the PPP actor and delivers its first data unit to the
+answer ROM. Its bounded HTTP peer can consume the guest
+request locally or forward it to an explicit host base URL. The raw-IPv4
+libslirp mode above separately proves unrestricted multi-request transport
+and a segmented redirect response rather than conflating host networking with
+the paired ROM data pumps. A
 captured answer stream begins with the expected strong 2,100 Hz CED and then
 V.21-like FSK; replaying it through a single socket peer makes the origin run
 fax RX/TX, exchange HDLC, and call `SendFaxImageData` 71 times. This proves
@@ -688,8 +689,9 @@ tone/pulse dialing and fax workflows. The real Telephone now reaches its call
 screen, generates its tone-dialed number and crosses the line hardware.
 The product regression now drives the Internet Center through carrier, LAPM,
 LCP/IPCP, TCP and a rendered deterministic HTTP response, and the fax pair
-covers the complete send/receive workflow. Closing the remaining gap means
-connecting the protocol-aware PPP peer to a general host-network endpoint—not
-merely making the lower-level DSP or digital-DAA probes count more functions.
-See
+covers the complete send/receive workflow. Its raw-IPv4 mode connects the PPP
+peer to rootless libslirp, follows a redirect across two TCP connections, and
+renders the second response. This closes the general host-network endpoint
+gap without treating lower-level DSP or digital-DAA function counts as
+product acceptance. See
 [`user-guide.md`](user-guide.md).
