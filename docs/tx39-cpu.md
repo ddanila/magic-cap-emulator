@@ -101,10 +101,14 @@ manual's required read → clear lock → store sequence for committing that
 value to memory. Both cache arrays, LRU selectors, and lock state survive
 MAME save/load, and reset invalidates every line and clears every lock.
 
-The instruction-cache backing still represents each word separately, even
-though invalidation observes its documented four-word tag. Multiword
-instruction refill, Config-selected instruction/data burst refill, external
-bus timing, reduced-frequency clock timing, and cycle costs are not claimed.
+Config's refill fields now have functional effects. Instruction misses align
+to and fill the selected 4/8/16/32-word block. With DCBR clear, a data miss
+fills the data cache's native one-word line; with DCBR set, DRSize selects a
+4/8/16/32-word aligned burst. DALc locks every data-cache word brought in by
+that burst. The instruction-cache backing still represents each word
+separately, so this models the refill's contents but not a shared physical tag
+object. External-bus timing, reduced-frequency clock timing, and cycle costs
+are not claimed.
 
 ## Emulator behavior and regression
 
@@ -115,10 +119,11 @@ raise Reserved Instruction for primary opcode `0x1c`. The R3900
 disassembler shows a nonzero destination explicitly, while other MIPS-I
 devices retain the conventional spelling.
 
-Run the isolated arithmetic regression with:
+Run the isolated CPU regressions with:
 
 ```sh
 python3 tools/tx39_regression.py
+python3 tools/tx39_refill_regression.py
 ```
 
 It writes a suite of tiny uncached-RAM programs into the running DataRover
@@ -148,3 +153,15 @@ case changes backing RAM after the write and observes the change on the next
 cached load, proving the store did not allocate.
 Generated Lua, NVRAM, and logs stay under
 `$MAGIC_CAP_ASSETS/runtime/tx39-regression/`.
+
+The refill companion first selects DCBR-clear mode and proves that loading one
+data word does not prefetch its neighbor. It then selects a four-word data
+burst, changes the neighbor in backing RAM, and observes the prefetched old
+value through the cached alias. Its DALc case churns both same-index
+alternatives after a burst and proves the adjacent burst word remains locked.
+Finally it branches over an instruction that arrived in a four-word refill,
+changes its backing word, and jumps directly to the cached address; the old
+instruction executes, proving instruction prefetch. The expected observations
+are `BBBBBBBB`, `22222222`, `22222222`, and `00001234`, respectively.
+Generated inputs and logs stay under
+`$MAGIC_CAP_ASSETS/runtime/tx39-refill-regression/`.

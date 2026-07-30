@@ -286,6 +286,7 @@ python3 tools/magicbus_scsi_probe.py
 python3 tools/ir_probe.py
 python3 tools/beam_regression.py
 python3 tools/tx39_regression.py
+python3 tools/tx39_refill_regression.py
 python3 tools/pccard_regression.py
 python3 tools/modem_save_regression.py
 python3 tools/storage_card_regression.py
@@ -449,6 +450,12 @@ generated inputs and log remain under
 `$MAGIC_CAP_ASSETS/runtime/tx39-regression/`; the CPU audit and
 reference-manual download command are in
 [`tx39-cpu.md`](tx39-cpu.md).
+
+The refill companion independently switches Config between native one-word
+and four-word data refill, verifies that a burst also applies DALc to every
+filled word, and proves that a four-word instruction refill prefetches code
+not yet executed. It keeps its generated inputs and log under
+`$MAGIC_CAP_ASSETS/runtime/tx39-refill-regression/`.
 
 The PC Card harness copies the verified 840F flasher into its persistent run
 directory, inserts that disposable copy after the workbench appears, and

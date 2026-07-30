@@ -4,7 +4,7 @@ This workstation has an optional reverse-engineering and Python analysis
 environment for the Magic Cap work. It is installed outside the repositories,
 so it does not add generated binaries or a virtual environment to Git.
 
-Verified on 2026-07-29:
+Verified on 2026-07-30:
 
 | Command | Purpose | Installed version |
 |---|---|---|

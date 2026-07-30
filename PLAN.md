@@ -20,7 +20,7 @@ The full regression list and expected checkpoints are in
 | Sound I/O | ROM's startup tone (unbuffered hold register), buffered SIB sound-TX/RX DMA, host or deterministic microphone input, and Magic Cap's sound-stamp record/stop/play workflow | [`betty-registers.md`](docs/betty-registers.md) |
 | Built-in software modem | Continuous 48-word SIB telecom DMA drives the ROM's V.32 and fax paths through TX39 DSP extensions; the Betty DAA hookswitch/line input and Dino ring detector are modelled; a held ring opens Phone Status, whose real **receive fax** action reaches `AnswerModem`, fax HDLC and non-silent PCM; the visible outbound Fax workflow creates a recipient, renders a screen and dials `5551212`; a clocked two-DataRover exchange runs both product fax roles through retained In-box storage, stationery and a reopened rendered page; the deterministic exchange also supplies dial tone and decodes DTMF/pulse dialing; the visible Telephone output decodes as `580`; Web Browser selects an Internet Center provider mapped to `PPP dialup`, completes V.32/LAPM and LCP/IPCP, exchanges dynamic TCP, forwards its live `GET` to an explicit host base, and renders an MSS-segmented response through an orderly close | [`builtin-modem.md`](docs/builtin-modem.md) |
 | Magic Bus | Two independently addressed descriptors (`ATKB` and `SCTG`), bus reinitialization, shared request-line edges, PIO/DMA transfers, checksummed discovery, ROM client attachment, bidirectional Set-2 keyboard traffic, and both directions of the IDT monitor's SCTG transport (functions 18/19 and commands 3/7) | [`memory-map.md`](docs/memory-map.md#magic-bus) |
-| TX39 core | `MADD`/`MADDU` plus three-operand `MULT`/`MULTU`; Config and Cache CP0 semantics; direct-mapped instruction cache plus two-way, write-through/no-write-allocate data cache with LRU, auto-lock, locked stores, and lock clearing. Injected code verifies the arithmetic, CP0, replacement, and lock contracts | [`tx39-cpu.md`](docs/tx39-cpu.md) |
+| TX39 core | `MADD`/`MADDU` plus three-operand `MULT`/`MULTU`; Config and Cache CP0 semantics; direct-mapped instruction cache plus two-way, write-through/no-write-allocate data cache with LRU, auto-lock, locked stores, and lock clearing; Config-selected single/burst data refill and 4–32-word instruction refill. Injected code verifies the arithmetic, CP0, replacement, lock, and refill contracts | [`tx39-cpu.md`](docs/tx39-cpu.md) |
 | PC Cards | Both linear slots with CIS and insertion signaling; Magic Cap's original EtherLink driver configures the reusable 3Com 3C589 core, completes TCP through rootless libslirp, renders deterministic local HTTP, carries Browser 3.5's native HTTPS Rule through a host TLS proxy, and can browse public HTTPS sites through a guarded loopback launcher | [`mame-bringup.md`](docs/mame-bringup.md), [`etherlink.md`](docs/etherlink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
 | Storage cards | Blank setup, persistent remount, live Option-insert reformat, battery states, card-backed objects, full built-in-storage backup/restore, and source-preserving translation of a real 1.x `new items` package into 3.1 Built-in storage | [`developer-archives.md`](docs/developer-archives.md#storage-cards-an-exact-os-visible-contract), [`mame-bringup.md`](docs/mame-bringup.md) |
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap, including the 452K Apollo browser from the Old VCR field report | [`pclink.md`](docs/pclink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
@@ -128,11 +128,13 @@ The full regression list and expected checkpoints are in
   auto-lock modes now stack on exception and RFE. The data cache now has its
   real two-way LRU selection, write-through/no-write-allocate behavior,
   per-index auto-lock, cache-only locked stores, and index lock clearing;
-  reset invalidates both caches. Multiword instruction lines are invalidated
-  together, but block/burst refill, reduced-frequency clock timing, and many
-  Dino registers remain behavioral rather than cycle-exact. The verified boot,
-  power, sound, telecom, and peripheral paths act on the bits the ROM uses,
-  but a complete functional Dino is not claimed
+  reset invalidates both caches. Config now selects the documented
+  4/8/16/32-word instruction refill and either one-word or 4/8/16/32-word
+  data refill; data auto-lock covers every word in a burst. The backing cache
+  remains word-granular, and external-bus timing, reduced-frequency clock
+  timing, cycle costs, and many Dino registers remain behavioral rather than
+  cycle-exact. The verified boot, power, sound, telecom, and peripheral paths
+  act on the bits the ROM uses, but a complete functional Dino is not claimed
   ([`tx39-cpu.md`](docs/tx39-cpu.md), [`memory-map.md`](docs/memory-map.md)).
 
 The machine stays `MACHINE_NOT_WORKING` while these hardware gaps remain.
