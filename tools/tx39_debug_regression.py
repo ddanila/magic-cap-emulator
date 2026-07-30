@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the TX39 self-debug unit, SDBBP, DERET, and single-step state."""
+"""Verify TX39 self-debug, coincident exceptions, SDBBP, and DERET."""
 
 from __future__ import annotations
 
@@ -27,7 +27,11 @@ RESULT_PATTERN = re.compile(
     rb"DEBUG_STEP DEBUG=([0-9A-F]{8}) DEPC=([0-9A-F]{8}) "
     rb"R18=([0-9A-F]{8}).*"
     rb"DEBUG_SUPPRESS SEEN=([0-9A-F]{8}) DEBUG=([0-9A-F]{8}) "
-    rb"DEPC=([0-9A-F]{8}) DELAY=([0-9A-F]{8})",
+    rb"DEPC=([0-9A-F]{8}) DELAY=([0-9A-F]{8}).*"
+    rb"DEBUG_NIS DEBUG=([0-9A-F]{8}) DEPC=([0-9A-F]{8}) "
+    rb"EPC=([0-9A-F]{8}) SR=([0-9A-F]{8}).*"
+    rb"DEBUG_OES DEBUG=([0-9A-F]{8}) DEPC=([0-9A-F]{8}) "
+    rb"EPC=([0-9A-F]{8}) CAUSE=([0-9A-F]{8}) SR=([0-9A-F]{8})",
     re.DOTALL,
 )
 EXPECTED = (
@@ -46,6 +50,15 @@ EXPECTED = (
     0x4000_0101,
     0x0000_1950,
     0x0000_0001,
+    0x4000_4101,
+    0xA000_19C0,
+    0xA000_19C0,
+    0x0010_0000,
+    0x4000_1101,
+    0xA000_1A40,
+    0xA000_1A40,
+    0x0000_0400,
+    0x0000_0404,
 )
 
 
@@ -55,6 +68,19 @@ def automation_script() -> str:
 local cpu = machine.devices[":maincpu"]
 local program = cpu.spaces["program"]
 local frames = 0
+local NIS_SNAPSHOT = 0x00001b00
+local OES_SNAPSHOT = 0x00001b20
+
+cpu.debug:bpset(
+    0xbfc00200, "(Debug&0x00004000)!=0",
+    "do d@0x00001b00=Debug; do d@0x00001b04=DEPC; " ..
+    "do d@0x00001b08=EPC; do d@0x00001b0c=SR; g")
+cpu.debug:bpset(
+    0xbfc00200, "(Debug&0x00001000)!=0",
+    "do d@0x00001b20=Debug; do d@0x00001b24=DEPC; " ..
+    "do d@0x00001b28=EPC; do d@0x00001b2c=Cause; " ..
+    "do d@0x00001b30=SR; g")
+cpu.debug:go()
 
 local function clear_debug()
     cpu.state["Debug"].value = 0
@@ -121,6 +147,31 @@ local function run_deret_to_branch()
     cpu.state["PC"].value = 0xa0001980
 end
 
+local function run_nmi_coincidence()
+    clear_debug()
+    for address = NIS_SNAPSHOT, NIS_SNAPSHOT + 0x0c, 4 do
+        program:write_u32(address, 0)
+    end
+    cpu.state["Cause"].value = 0
+    cpu.state["EPC"].value = 0
+    cpu.state["Debug"].value = 0x00000100 -- SSt
+    cpu.state["NMI"].value = 1
+    cpu.state["PC"].value = 0xa00019c0
+end
+
+local function run_interrupt_coincidence()
+    clear_debug()
+    for address = OES_SNAPSHOT, OES_SNAPSHOT + 0x10, 4 do
+        program:write_u32(address, 0)
+    end
+    cpu.state["NMI"].value = 0
+    cpu.state["Cause"].value = 0x00000400 -- Int0 pending
+    cpu.state["EPC"].value = 0
+    cpu.state["SR"].value = 0x00000401 -- Int0 enabled, IEc
+    cpu.state["Debug"].value = 0x00000100 -- SSt
+    cpu.state["PC"].value = 0xa0001a40
+end
+
 emu.register_frame_done(function()
     frames = frames + 1
     if frames == 10 then
@@ -153,6 +204,23 @@ emu.register_frame_done(function()
             program:read_u32(0x00001a00), cpu.state["Debug"].value,
             cpu.state["DEPC"].value,
             program:read_u32(0x00001a04)))
+        run_nmi_coincidence()
+    elseif frames == 16 then
+        print(string.format(
+            "DEBUG_NIS DEBUG=%08X DEPC=%08X EPC=%08X SR=%08X",
+            program:read_u32(NIS_SNAPSHOT + 0x00),
+            program:read_u32(NIS_SNAPSHOT + 0x04),
+            program:read_u32(NIS_SNAPSHOT + 0x08),
+            program:read_u32(NIS_SNAPSHOT + 0x0c)))
+        run_interrupt_coincidence()
+    elseif frames == 17 then
+        print(string.format(
+            "DEBUG_OES DEBUG=%08X DEPC=%08X EPC=%08X CAUSE=%08X SR=%08X",
+            program:read_u32(OES_SNAPSHOT + 0x00),
+            program:read_u32(OES_SNAPSHOT + 0x04),
+            program:read_u32(OES_SNAPSHOT + 0x08),
+            program:read_u32(OES_SNAPSHOT + 0x0c),
+            program:read_u32(OES_SNAPSHOT + 0x10)))
         machine:exit()
     end
 end)
@@ -226,6 +294,9 @@ def run_regression(args: argparse.Namespace) -> int:
         "dummy",
         "-nothrottle",
         "-skip_gameinfo",
+        "-debug",
+        "-debugger",
+        "none",
     ]
     try:
         completed = subprocess.run(
@@ -256,8 +327,9 @@ def run_regression(args: argparse.Namespace) -> int:
 
     print(
         "PASS: TX39 SDBBP records breakpoint and delay-slot state, DERET "
-        "returns through DEPC, and single-step honors its return/branch-delay "
-        "suppression contract"
+        "returns through DEPC, single-step honors its return/branch-delay "
+        "suppression contract, and coincident NMI/interrupt state reaches "
+        "NIS/OES with the ordinary exception registers intact"
     )
     print(f"Artifacts: {run_dir}")
     return 0

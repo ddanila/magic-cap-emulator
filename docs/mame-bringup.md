@@ -546,7 +546,10 @@ artifacts remain under
 
 The self-debug companion covers `SDBBP` breakpoint and delay-slot entry,
 Debug/DEPC moves, `DERET`, DSS, and the special suppression applied when
-DERET returns to a branch and its delay slot. Its artifacts remain under
+DERET returns to a branch and its delay slot. It also injects NMI and an
+enabled ordinary interrupt at single-step boundaries. Exact-entry debugger
+breakpoints require `NIS`/`OES` and snapshot the underlying EPC, Status and
+Cause before the ROM debug vector can change them. Its artifacts remain under
 `$MAGIC_CAP_ASSETS/runtime/tx39-debug-regression/`.
 
 The Dino clock companion parks the CPU and drives `masterClock` directly. It

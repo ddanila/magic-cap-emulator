@@ -224,12 +224,20 @@ return instruction branches, suppression extends through the delay slot.
 Debug mode also forces cache auto-lock off. The disassembler recognizes both
 instructions and names all four R3900-specific CP0 registers.
 
-The focused model covers DBP/DSS, DBD, DM, SSt, BsF storage, DEPC and the
-documented return suppression. Simultaneous NMI/ordinary-exception status
-(`NIS`/`OES`) and debug-handler bus-error reporting are not generated because
-the core has no NMI input and its synchronous interpreter cannot presently
-represent coincident exceptions. The R3900 has no TLB, so TLF has no
-applicable source.
+The NMI input is edge-latched and sampled at instruction boundaries. It
+records EPC/BD, sets Status `NmI`, clears Config Halt/Doze, and enters the
+fixed uncached `0xbfc00000` vector without shifting the ordinary mode stacks.
+`NmI` is write-one-to-clear. An NMI arriving in debug mode remains pending
+until `DERET`.
+
+The focused debug model covers DBP/DSS, DBD, DM, SSt, BsF storage, DEPC,
+the documented return suppression, and the asynchronous coincidences the
+interpreter can represent. A single step coincident with NMI first records
+the NMI state and then enters debug with `NIS`; a coincident enabled ordinary
+interrupt similarly records Cause, EPC and shifted Status before setting
+`OES`. Exact-entry debugger snapshots verify that those ordinary registers
+survive beneath debug mode. Debug-handler bus-error reporting is not yet
+verified. The R3900 has no TLB, so TLF has no applicable source.
 
 The DataRover has no external coprocessor, so its four condition callbacks
 default false. The injected branch regression nevertheless enables each
