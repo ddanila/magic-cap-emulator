@@ -290,6 +290,7 @@ python3 tools/dino_biu_regression.py
 python3 tools/rtc_set_regression.py
 python3 tools/magicbus_probe.py
 python3 tools/magicbus_probe.py --two-accessories --require-clean
+python3 tools/magicbus_hotplug_regression.py
 python3 tools/magicbus_scsi_probe.py
 python3 tools/ir_probe.py
 python3 tools/beam_regression.py
@@ -584,6 +585,17 @@ The RTC-set companion calls the development ROM's real `SetTimer` at
 word against the requested value using the ROM's own four-tick tolerance.
 Artifacts remain under `$MAGIC_CAP_ASSETS/runtime/rtc-set-regression/`.
 
+The Magic Bus hot-plug companion starts with one AT keyboard, appends the SCTG
+tail through the live machine configuration, removes it and reinserts it
+without resetting MAME. It requires the ROM's command-27/address-six attach
+path, addressed missing-device receive error, detach handler and both second
+client attachments. Caps Lock/LED round trips after the first attachment and
+after reinsertion prove that the unchanged keyboard path still carries
+traffic. The expected removal signature is exactly one low-level
+`MagicBusError` and zero entries into the separately announced
+`MagicBus_HandleMagicBusFailure`. Artifacts remain under
+`$MAGIC_CAP_ASSETS/runtime/magicbus-hotplug/`.
+
 The PC Card harness copies the verified 840F flasher into its persistent run
 directory, inserts that disposable copy after the workbench appears, and
 checks common memory, CIS bytes, write/readback, Glacier card-detect signals,
@@ -794,7 +806,7 @@ the separate serial-terminal view.
 | Sound output | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz; Controls → Sound clamps the visible volume at maximum/off and makes the same effect audible/silent in the matching WAV windows |
 | Sound input | One-shot SIB receive DMA captures deterministic tone/silence with all expected status; the real Stamper UI records a 1 kHz microphone source, stops and drains its SIB command, then plays an audible WAV segment |
 | Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 and fax code through TX39 DSP extensions; paired generic roles negotiate matching rates and complete V.32 plus LAPM; Web Browser selects an Internet Center provider mapped to `PPP dialup`, dials `555-1212`, starts its real PPP actor, completes LCP/IPCP with guest address `10.0.2.15`, exchanges dynamic TCP, sends `GET / HTTP/1.0`, receives `HTTP/1.0 200 OK`, and renders its deterministic body; its raw-IPv4 mode also traverses rootless libslirp, follows an HTTP redirect over a second TCP connection and renders the second page; direct DAA verification covers connected/off-hook and both ring edges; a held ring opens Phone Status; **receive fax** reaches live-call `AnswerModem`, both fax HDLC directions and non-silent PCM; a clocked two-DataRover product run creates a recipient, dials `5551212`, sustains image transfer, then relaunches the receiver and opens the retained In-box fax, one-page stationery and rendered page; the exchange also supplies deterministic dial tone and decodes DTMF/pulse dialing |
-| Magic Bus | ROM independently assigns addresses zero and one, validates checksummed `ATKB` and `SCTG` descriptors, attaches both client classes, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures; the IDT monitor also discovers SCTG alone, executes `FastChecksum` through function 18/command 3, and returns exact status/result through function 19/command 7; the similarly named external-modem route is correctly kept on UART B |
+| Magic Bus | ROM independently assigns addresses zero and one, validates checksummed `ATKB` and `SCTG` descriptors, attaches both client classes, dispatches Set-2 Caps Lock input, and writes the LED state back; live keyboard → keyboard+SCTG tail attachment, addressed detachment, recovery and reinsertion pass with keyboard traffic after both transitions and no high-level bus failure; the IDT monitor also discovers SCTG alone, executes `FastChecksum` through function 18/command 3, and returns exact status/result through function 19/command 7; the similarly named external-modem route is correctly kept on UART B |
 | PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback and live-OS checks; blank storage setup, persistent `RAMC` remount, Option-insert reformat, Good/Low/Dead battery pins, a card-backed Notebook object and full built-in backup/restore also pass; `Translation.pkg` copies an authentic 1.x `new items` package into Built-in storage without source writes |
 | PC Card Ethernet | The archived EtherLink driver initializes the 3C589, completes ARP/TCP through rootless libslirp, renders deterministic local HTTP, and carries Browser 3.5's native HTTPS Rule through a loopback Crypto Ancienne proxy; the absolute request, decrypted request, and rendered result are checked |
 | PCLink | The Storeroom computer installs archived `DvorakKeyboard.pkg`; the optional 452K TLS-browser package also transfers, disconnects cleanly, and records zero ROM Magic Bus failures |
@@ -805,11 +817,11 @@ the separate serial-terminal view.
 The four systems no longer carry `MACHINE_NOT_WORKING`: the covered product
 workflows and every variant are usable as intended. They retain the narrower
 `MACHINE_IMPERFECT_TIMING` warning because exact Dino external-bus and
-Apollo-specific Magic Bus timing and live MBIC chaining are not implemented;
-the related General Magic patent timing is now documented as a bounded
-reference rather than assumed identical hardware. See
-[`PLAN.md`](../PLAN.md#remaining-work). Magic Bus discovery, its multi-address
-topology, AT-keyboard traffic and both directions of the monitor's SCTG
-request/data path are covered by headless probes. The production
+Apollo-specific nanosecond Magic Bus timing are not known; the related
+General Magic patent timing is documented as a bounded reference rather than
+assumed identical hardware. See [`PLAN.md`](../PLAN.md#remaining-work).
+Magic Bus discovery, live ordered MBIC attachment/detachment/reinsertion,
+multi-address topology, AT-keyboard traffic and both directions of the
+monitor's SCTG request/data path are covered by headless probes. The production
 `MagicBusSCSITargetClient_PeripheralRequest` is an empty stub, so no deeper
 Magic Cap SCTG payload path is claimed missing.

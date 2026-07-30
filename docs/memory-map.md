@@ -483,16 +483,18 @@ opens the new downstream link. Removing a device makes the immediately
 upstream MBIC signal the break. An interrupt is not merely a wired-OR
 request from one logical endpoint.
 
-### Live attachment contract and current blocker
+### Live attachment and detachment contract
 
 The unstripped Apollo SDK ROM makes the product-side sequence concrete.
 `MagicBus_HandleAttachedPeripherals` disables request-line interrupts and
 debounces for 1,000 ms. If a peripheral was already known, it sends command
-27 to address zero and requires the request line to remain asserted. It then
+27 to address zero and requires the request line to be **deasserted**. It then
 sends command 28 to address six and requires an asserted response, sends
 command 25 to the previous highest assigned address, and begins attaching
-peripherals at the old count. `MagicBus_AssignMagicBusAddresses` accepts only
-addresses zero through five and waits another 500 ms after assignment.
+peripherals at the old count. This polarity is literal in the release ROM:
+the command-27 check rejects `TestMBReqLine() == 1`, while the address-six
+check rejects zero. `MagicBus_AssignMagicBusAddresses` accepts only addresses
+zero through five and waits another 500 ms after assignment.
 
 This aligns command 27 with the patent generation's Assign-Mid operation and
 address six with its newly exposed, unassigned-device poll. The relationship
@@ -500,24 +502,33 @@ is stronger evidence than treating either as an ordinary peripheral payload,
 but the patent embodiment assigns addresses in a different order. The Apollo
 ROM's literal zero-through-five behavior must therefore win in the emulator.
 
-A development experiment changed the MAME accessory choice live and generated
-only a synthetic request-line pulse. Both insertion and removal/reinsertion
-reached `MagicBus_HandleMagicBusFailure`; neither completed clean attachment.
-That negative result was not retained as driver code. It demonstrates that
-the next implementation must model, at minimum:
+The implementation now preserves those distinctions. The live input callback
+latches a configuration and compares ordered endpoint kinds. During tail
+insertion, the new endpoint is not addressable behind the former tail until
+command 27 converts that MBIC to its mid role. Command 27 temporarily exposes
+a low shared line; address-six polling selects the unassigned endpoint and
+exposes its asserted request. Existing assigned endpoints keep their address
+during this insertion.
 
-1. an ordered chain with upstream, downstream, mid and last MBIC state;
-2. the distinct attach/detach interrupt polarity and ownership;
-3. command-27 exposure of the new tail and address-six polling; and
-4. preservation or teardown of assigned endpoints according to their physical
-   position.
+Removal is not an anonymous request pulse. The immediately upstream MBIC
+retains the vanished endpoint's assigned address and reports its connector
+request only when command 28 polls that address. The following IRQ-Get cannot
+receive a response, so Dino raises `kIntMbusRxErrMask` instead of reporting an
+empty/successful transaction. The ROM records the failed polling completion,
+runs `MagicBus_HandleDetachedPeripherals`, tears down and rebuilds its client
+set, and can then enumerate a reinserted tail. This path necessarily enters
+the low-level `MagicBusError` once; it does not enter the separately announced
+`MagicBus_HandleMagicBusFailure` method when a remaining keyboard permits
+immediate recovery.
 
-The acceptance target is a no-reset transition from one keyboard to keyboard
-plus SCTG, followed by removal and reinsertion. It must observe the matching
-ROM attachment/detachment callbacks, preserve traffic to unchanged devices,
-and record no entry into `MagicBus_HandleMagicBusFailure`. The existing
-machine configuration intentionally remains reset-applied until that contract
-is implemented.
+`tools/magicbus_hotplug_regression.py` is the no-reset acceptance gate. It
+starts with one keyboard, appends SCTG, proves a Set-2 Caps Lock/LED exchange,
+removes SCTG, waits for the ROM detach path, reinserts it, and proves both
+second attachment callbacks plus another keyboard exchange. The accepted
+trace has four address assignments and descriptor reads, one low-level
+missing-device error, zero high-level failures and a final peripheral count
+of two. Configuration choices therefore work live; reset-applied selection
+remains only the normal cold-start behavior.
 
 ### Address assignment and peripheral information
 
