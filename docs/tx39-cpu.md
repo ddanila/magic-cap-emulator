@@ -131,8 +131,11 @@ These registers are no longer unrestricted shadows:
   like the TX39 manual's Status-register mode stack.
 - Cache operations 0 (instruction index invalidate), 5 (data index LRU-bit
   clear), 9 (data index lock-bit clear), and 17 (data hit invalidate) are
-  recognized. Instruction index invalidation covers all four words sharing
-  the selected physical tag.
+  recognized. These are the complete set of operation/cache combinations
+  defined by the TX39 manual. Instruction index invalidation covers all four
+  words sharing the selected physical tag. Like an explicit CP0 instruction,
+  `CACHE` raises Coprocessor Unusable in user mode unless Status.CU0 is set;
+  kernel mode may use it regardless of CU0.
 
 The data cache now matches the documented 1 KiB geometry: 128 indices with
 two one-word ways. Every index retains an LRU replacement selector and at
@@ -253,7 +256,10 @@ survive beneath debug mode. A data-read or data-write bus error while DM is
 set is consumed as `BsF`; it does not alter Cause/EPC or enter the ordinary
 bus-error vector. Read/write taps inject both cases and prove execution
 continues at the following instruction. The R3900 has no TLB, so TLF has no
-applicable source.
+applicable source. The same exact-entry harness executes `CACHE` from user
+mode twice: with CU0 clear it observes Cause.CpU, CE=0, the faulting EPC and
+the shifted KU mode stack; with CU0 set the legal cache operation completes
+and execution reaches the following instruction.
 
 The DataRover has no external coprocessor, so its four condition callbacks
 default false. The injected branch regression nevertheless enables each

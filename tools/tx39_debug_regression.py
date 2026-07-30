@@ -37,7 +37,11 @@ RESULT_PATTERN = re.compile(
     rb"DEBUG_BSF_STORE DEBUG=([0-9A-F]{8}) R3=([0-9A-F]{8}) "
     rb"CAUSE=([0-9A-F]{8}) EPC=([0-9A-F]{8}).*"
     rb"NMI_CACHE SR=([0-9A-F]{8}) R3=([0-9A-F]{8}).*"
-    rb"NMI_CLEAR SR=([0-9A-F]{8}) R3=([0-9A-F]{8})",
+    rb"NMI_CLEAR SR=([0-9A-F]{8}) R3=([0-9A-F]{8}).*"
+    rb"CACHE_PRIVILEGE DENIED_CAUSE=([0-9A-F]{8}) "
+    rb"DENIED_EPC=([0-9A-F]{8}) DENIED_SR=([0-9A-F]{8}).*"
+    rb"CACHE_PRIVILEGE ALLOWED_R3=([0-9A-F]{8}) "
+    rb"ALLOWED_CAUSE=([0-9A-F]{8}) ALLOWED_SR=([0-9A-F]{8})",
     re.DOTALL,
 )
 EXPECTED = (
@@ -77,6 +81,12 @@ EXPECTED = (
     0x0000_0003,
     0x0000_0000,
     0x0000_0004,
+    0x0000_002C,
+    0x0000_1DC0,
+    0x0000_0008,
+    0x0000_0005,
+    0x0000_0000,
+    0x1000_0002,
 )
 
 
@@ -117,6 +127,10 @@ cpu.debug:bpset(
     "do d@0x00001b20=Debug; do d@0x00001b24=DEPC; " ..
     "do d@0x00001b28=EPC; do d@0x00001b2c=Cause; " ..
     "do d@0x00001b30=SR; g")
+cpu.debug:bpset(
+    0x80000080, "EPC==0x00001dc0",
+    "do d@0x00001b40=Cause; do d@0x00001b44=EPC; " ..
+    "do d@0x00001b48=SR; do pc=0xa0001df0; g")
 cpu.debug:go()
 
 local function clear_debug()
@@ -264,6 +278,35 @@ local function run_nmi_write_one_clear()
     cpu.state["PC"].value = 0xa0001d40
 end
 
+local function run_user_cache_unusable()
+    program:write_u32(0x00001dc0, 0xbc050000) -- cache 5,0(zero)
+    program:write_u32(0x00001dc4, 0x24030005) -- must not execute
+    program:write_u32(0x00001df0, 0x1000ffff) -- b .
+    program:write_u32(0x00001df4, 0x00000000) -- nop
+    for address = 0x00001b40, 0x00001b48, 4 do
+        program:write_u32(address, 0)
+    end
+    clear_debug()
+    cpu.state["Cause"].value = 0
+    cpu.state["EPC"].value = 0
+    cpu.state["R3"].value = 0
+    cpu.state["SR"].value = 0x00000002 -- user mode, CU0 clear
+    cpu.state["PC"].value = 0x00001dc0
+end
+
+local function run_user_cache_usable()
+    program:write_u32(0x00001e00, 0xbc050000) -- cache 5,0(zero)
+    program:write_u32(0x00001e04, 0x24030005) -- addiu r3,zero,5
+    program:write_u32(0x00001e08, 0x1000ffff) -- b .
+    program:write_u32(0x00001e0c, 0x00000000) -- nop
+    clear_debug()
+    cpu.state["Cause"].value = 0
+    cpu.state["EPC"].value = 0
+    cpu.state["R3"].value = 0
+    cpu.state["SR"].value = 0x10000002 -- user mode, CU0 set
+    cpu.state["PC"].value = 0x00001e00
+end
+
 emu.register_frame_done(function()
     frames = frames + 1
     if frames == 10 then
@@ -335,6 +378,19 @@ emu.register_frame_done(function()
         print(string.format(
             "NMI_CLEAR SR=%08X R3=%08X",
             cpu.state["SR"].value, cpu.state["R3"].value))
+        run_user_cache_unusable()
+    elseif frames == 22 then
+        print(string.format(
+            "CACHE_PRIVILEGE DENIED_CAUSE=%08X DENIED_EPC=%08X DENIED_SR=%08X",
+            program:read_u32(0x00001b40),
+            program:read_u32(0x00001b44),
+            program:read_u32(0x00001b48)))
+        run_user_cache_usable()
+    elseif frames == 23 then
+        print(string.format(
+            "CACHE_PRIVILEGE ALLOWED_R3=%08X ALLOWED_CAUSE=%08X ALLOWED_SR=%08X",
+            cpu.state["R3"].value, cpu.state["Cause"].value,
+            cpu.state["SR"].value))
         machine:exit()
     end
 end)
@@ -445,7 +501,8 @@ def run_regression(args: argparse.Namespace) -> int:
         "suppression contract, and coincident NMI/interrupt state reaches "
         "NIS/OES with the ordinary exception registers intact; debug-mode "
         "load/store bus errors set BsF without taking an ordinary exception, "
-        "and cached execution preserves NmI until a write-one clear"
+        "cached execution preserves NmI until a write-one clear, and user-mode "
+        "CACHE obeys Status.CU0"
     )
     print(f"Artifacts: {run_dir}")
     return 0
