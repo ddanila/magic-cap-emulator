@@ -297,6 +297,7 @@ python3 tools/tx39_regression.py
 python3 tools/tx39_refill_regression.py
 python3 tools/tx39_clock_regression.py
 python3 tools/tx39_timing_regression.py
+python3 tools/tx39_branch_regression.py
 python3 tools/pccard_regression.py
 python3 tools/modem_save_regression.py
 python3 tools/storage_card_regression.py

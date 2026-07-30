@@ -51,6 +51,12 @@ for one cycle when it reads the loaded GPR. The manual explicitly exempts an
 this is the byte-merge bypass needed by normal unaligned-load pairs. A
 destination of register zero never stalls.
 
+The integer ISA extensions also include `BEQL`, `BNEL`, `BLEZL`, `BGTZL`,
+`BLTZL`, `BGEZL`, `BLTZALL`, and `BGEZALL`. A taken branch executes its delay
+slot; a not-taken likely branch nullifies it. Both link-likely instructions
+write `r31 = PC + 8` unconditionally, as do the R3900's ordinary `BLTZAL` and
+`BGEZAL`. `SYNC` waits for a preceding load, store, or data-cache refill.
+
 ## ROM audit
 
 The hosted SDK ELF's executable `.text` section contains 792 aligned
@@ -86,6 +92,14 @@ the words as ordinary two-operand MIPS-I `MULT` updates only `HI:LO`, leaves
 the input registers unscaled, and reduces the transmitted waveform to
 roughly ±6. Implementing the TX39 destination write restores the intended
 16-bit DTMF amplitude.
+
+An aligned opcode scan of both unstripped Apollo ELFs found no branch-likely
+or `SYNC` word inside any sized `STT_FUNC` symbol. Apparent primary-opcode
+matches are ASCII strings and floating-point tables in the executable monitor
+section. The sole aligned `0x0000000f` is the `SYNC` entry in `asm_tab_op`,
+the monitor assembler's data table, not an executed instruction. These ISA
+extensions therefore improve CPU completeness without being credited for a
+currently observed Magic Cap path.
 
 The boot code also reads and writes TX39 CP0 registers 3 (Config) and 7
 (Cache) and issues cache operations 0, 5, and 17. `config_cache_toshiba`
@@ -175,6 +189,21 @@ discard the pending result. Pending results, countdowns and dependencies are
 save-state data. Other MIPS-I devices retain MAME's previous blocking divide
 and multiply timing.
 
+The R3900 decoder now distinguishes the Toshiba integer branch-likely
+extensions from the baseline MIPS-I REGIMM aliases. A not-taken likely branch
+advances past its delay slot without fetching or executing it; a taken branch
+uses the ordinary delayed-branch state. Link writes are unconditional.
+Baseline MIPS-I devices retain their original REGIMM alias behavior and reject
+the four likely primary opcodes. `SYNC` is accepted only by the R3900 and is
+currently an effective no-op because memory accesses and cache fills complete
+synchronously inside the interpreter. The disassembler applies the same
+device distinction.
+
+The TX39 self-debug unit (`SDBBP`, `DERET`, and its CP0 debug registers) is
+not modelled. Likely branches for external coprocessors are also outside the
+DataRover configuration, which has no such coprocessor. Neither class of
+opcode occurs in a sized function in the available SDK ELFs.
+
 Run the isolated CPU regressions with:
 
 ```sh
@@ -182,6 +211,7 @@ python3 tools/tx39_regression.py
 python3 tools/tx39_refill_regression.py
 python3 tools/tx39_clock_regression.py
 python3 tools/tx39_timing_regression.py
+python3 tools/tx39_branch_regression.py
 ```
 
 It writes a suite of tiny uncached-RAM programs into the running DataRover
@@ -255,3 +285,12 @@ cancelling an active divide. This distinguishes real divider overlap from the
 old implementation, which charged all 35 cycles at `DIV` and prevented
 unrelated execution. Artifacts stay under
 `$MAGIC_CAP_ASSETS/runtime/tx39-timing-regression/`.
+
+The branch companion executes taken and not-taken cases for all eight integer
+likely forms. It requires each taken delay slot to add `1`, each nullified
+slot to leave only the fallthrough's `0x40`, and both link-likely forms to
+write the exact uncached `PC + 8` address in either direction. Two not-taken
+ordinary link cases require the non-nullified `0x41` result and the same
+unconditional link. A final injected `SYNC` reaches the following
+instruction without a Reserved Instruction exception. Artifacts stay under
+`$MAGIC_CAP_ASSETS/runtime/tx39-branch-regression/`.
