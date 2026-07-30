@@ -200,16 +200,19 @@ The physical connector is broader than a keyboard. *Using Magic Cap*, p. 217,
 describes PCs, external modems, external keyboards and other accessories, with
 multiple devices commonly daisy-chained. The machine configuration can present
 one `ATKB` keyboard or a two-device topology containing that keyboard plus an
-`SCTG` SCSI target. The latter proves independent address assignment and ROM
-client attachment for two different descriptor classes. It does not yet model
-the SCSI target's data plane or a physical daisy-chain transport.
+`SCTG` SCSI target, or present the SCSI target alone for the IDT monitor. The
+combined topology proves independent address assignment and ROM client
+attachment for two different descriptor classes. The monitor path additionally
+exercises an SCTG request and data reply; SCSI block commands and a physical
+daisy-chain transport remain unmodeled.
 
 The controller completes transfers synchronously but preserves the ROM's four
 transaction classes:
 
 - type 1 returns peripheral data through `mbusData` for four bytes or through
-  receive DMA for larger blocks, then raises command-detect and, for DMA,
-  DMA-end;
+  receive DMA for larger blocks. A PIO reply raises receive-data,
+  command-detect and DMA-end (the monitor derives its four-byte length from
+  those bits); DMA replies raise command-detect and DMA-end;
 - type 2 accepts host data from `mbusData` or transmit DMA and raises the
   matching empty/DMA-end completion;
 - type 3 completes when the transmit shifter becomes empty; and
@@ -264,10 +267,10 @@ STABS types in the unstripped SDK image:
 Only after length and checksum validation does the ROM initialize its built-in
 `MagicBusATKeyboard` or `MagicBusSCSITargetClient`. “Magic Bus accessories” in
 MAME's machine configuration defaults to **One AT keyboard** and can select
-**None** or **AT keyboard and SCSI target**. A reset applies a changed
-selection. **None** deliberately leaves address assignment unanswered; this
-ROM counts that silence as a peripheral failure and can eventually show the
-attached-device alert.
+**None**, **AT keyboard and SCSI target**, or **One SCSI target**. A reset
+applies a changed selection. **None** deliberately leaves address assignment
+unanswered; this ROM counts that silence as a peripheral failure and can
+eventually show the attached-device alert.
 
 ### Keyboard request and control traffic
 
@@ -296,6 +299,26 @@ self-test/acknowledgement bytes rather than exposing them as key transitions.
 Magic Bus state, the scan FIFO, and all in-flight transaction state participate
 in save states.
 
+### SCSI-target monitor traffic
+
+The IDT monitor's `magicbus -i` command discovers an SCTG-only configuration,
+validates the same 88-byte information record, and reports `MagicBus SCSI
+controller connected`. Holding the modeled target-request input during
+enumeration presents the request after the information record is accepted.
+The monitor then:
+
+1. enters `CheckMagicBus`;
+2. reads a 16-byte command-1 request record whose length is four 32-bit words
+   and whose function byte is 18;
+3. routes that function to `GetDataFunction`; and
+4. issues command 3 to receive the aligned 16-byte target payload.
+
+The payload is deliberately a zeroed monitor command. Function zero is
+unsupported, so the ROM acknowledges the transfer without reading or modifying
+target memory. This proves SCTG request selection, PIO/DMA completion and its
+non-keyboard data transaction; it is not yet a SCSI disk, block-command parser
+or backing store.
+
 The acceptance probe exercises discovery plus both directions of keyboard
 traffic: it injects Caps Lock, observes Set-2 dispatch, and requires the ROM
 to send the corresponding LED update back to the device.
@@ -304,6 +327,7 @@ to send the corresponding LED update back to the device.
 python3 tools/magicbus_probe.py
 python3 tools/magicbus_probe.py --require-clean
 python3 tools/magicbus_probe.py --two-accessories --require-clean
+python3 tools/magicbus_scsi_probe.py
 ```
 
 The ordinary gate requires address assignment, validated peripheral info,
@@ -313,6 +337,14 @@ records plus entry into `MagicBusSCSITargetClient_Attached`. Both reject any
 entry into `MagicBusError` or `MagicBus_HandleMagicBusFailure`. The probe
 refuses the development ROM because those routine addresses shift and would
 silently measure nothing.
+
+The SCTG probe boots the release monitor, types `magicbus -i` through the
+terminal's real key matrix, holds a physical target request through discovery,
+and requires `InitMagicBus`, `CheckMagicBus`, and `GetDataFunction` plus the
+assigned SCTG address. It uses the SCSI-only configuration because the monitor
+assigns a keyboard-plus-target chain with an address gap that its simple
+standalone scanner does not traverse; the ordinary OS gate covers that combined
+topology.
 
 Magic Cap later repeats broadcast address assignment when it reinitializes
 the bus. Modeled endpoints discard their earlier addresses and answer that

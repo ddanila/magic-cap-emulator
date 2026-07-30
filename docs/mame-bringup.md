@@ -281,6 +281,7 @@ python3 tools/power_outputs_regression.py
 python3 tools/power_policy_regression.py
 python3 tools/magicbus_probe.py
 python3 tools/magicbus_probe.py --two-accessories --require-clean
+python3 tools/magicbus_scsi_probe.py
 python3 tools/ir_probe.py
 python3 tools/beam_regression.py
 python3 tools/tx39_regression.py
@@ -637,7 +638,7 @@ the separate serial-terminal view.
 | Sound output | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz |
 | Sound input | One-shot SIB receive DMA captures deterministic tone/silence with all expected status; the real Stamper UI records a 1 kHz microphone source, stops and drains its SIB command, then plays an audible WAV segment |
 | Built-in modem | ROM opens `System_iSoftwareModem`, keeps its 48-word telecom RX/TX ring enabled, and executes V.32 and fax code through TX39 DSP extensions; paired generic roles negotiate matching rates and complete V.32 plus LAPM; Web Browser selects an Internet Center provider mapped to `PPP dialup`, dials `555-1212`, starts its real PPP actor, completes LCP/IPCP with guest address `10.0.2.15`, exchanges dynamic TCP, sends `GET / HTTP/1.0`, receives `HTTP/1.0 200 OK`, and renders its deterministic body; direct DAA verification covers connected/off-hook and both ring edges; a held ring opens Phone Status; **receive fax** reaches live-call `AnswerModem`, both fax HDLC directions and non-silent PCM; a clocked two-DataRover product run creates a recipient, dials `5551212`, sustains image transfer, then relaunches the receiver and opens the retained In-box fax, one-page stationery and rendered page; the exchange also supplies deterministic dial tone and decodes DTMF/pulse dialing |
-| Magic Bus | ROM independently assigns addresses zero and one, validates checksummed `ATKB` and `SCTG` descriptors, attaches both client classes, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures |
+| Magic Bus | ROM independently assigns addresses zero and one, validates checksummed `ATKB` and `SCTG` descriptors, attaches both client classes, dispatches Set-2 Caps Lock input, and writes the LED state back with no bus failures; the IDT monitor also discovers SCTG alone and consumes a function-18 request plus command-3 data payload |
 | PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback and live-OS checks; blank storage setup, persistent `RAMC` remount, Option-insert reformat, Good/Low/Dead battery pins, a card-backed Notebook object and full built-in backup/restore also pass; `Translation.pkg` copies an authentic 1.x `new items` package into Built-in storage without source writes |
 | PC Card Ethernet | The archived EtherLink driver initializes the 3C589, completes ARP/TCP through rootless libslirp, renders deterministic local HTTP, and carries Browser 3.5's native HTTPS Rule through a loopback Crypto Ancienne proxy; the absolute request, decrypted request, and rendered result are checked |
 | PCLink | The Storeroom computer installs archived `DvorakKeyboard.pkg`; the optional 452K TLS-browser package also transfers, disconnects cleanly, and records zero ROM Magic Bus failures |
@@ -647,9 +648,9 @@ the separate serial-terminal view.
 
 The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
 still incomplete. The current gaps include an unrestricted, multi-request host
-bridge beyond the bounded built-in dial-up regression adapter, non-keyboard
-Magic Bus data planes, and hardware fidelity beyond the register behavior
-exercised by the ROM; see
-[`PLAN.md`](../PLAN.md#remaining-work). Magic Bus discovery and its
-multi-address topology plus AT-keyboard traffic are covered by the headless
-probe.
+bridge beyond the bounded built-in dial-up regression adapter, SCSI block I/O
+and other Magic Bus peripheral classes, and hardware fidelity beyond the
+register behavior exercised by the ROM; see
+[`PLAN.md`](../PLAN.md#remaining-work). Magic Bus discovery, its multi-address
+topology, AT-keyboard traffic and the monitor's SCTG request/data control path
+are covered by headless probes.

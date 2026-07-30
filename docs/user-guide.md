@@ -100,7 +100,7 @@ the contract for future archived WaveLAN, NE2000 and wireless-card work.
 | Storeroom and packages | Packages can be moved, unpacked, sent, backed up and restored through Storeroom (pp. 179–206) | PCLink installs a real package; Storeroom creates a card-resident built-in backup and restores it in a fresh process | Package installation and full built-in backup/restore covered |
 | Storage cards | A card inserted while off is offered for setup after power-on; Option-insert while running can erase/setup it; Magic Cap displays card battery state and can translate older packages (pp. 183–198, 210–215) | Erased `BLNK` setup/naming, persistent `RAMC` remount, live Option-insert reformat, Good/Low/Dead BVD states, a card-backed Notebook object, and built-in backup/restore pass across process boundaries; `Translation.pkg` copies an authentic 1.x `new items` package into Built-in storage and exposes its Notebook page without source writes | Covered |
 | Power | Main and backup batteries are displayed; AC operation recharges the main cell; automatic shutoff defaults to five minutes and is adjustable from 1–60 minutes, optionally while plugged in (pp. 209–211) | Battery ADC levels, AC/cover inputs, retained-RAM suspend/wake, LCD/Magic Bus rail effects and charger-driven main-ADC rise pass; the real Power Controls show 5, clamp at 1/60, and govern plugged-in `SLEE`/VCC-off shutdown | Covered |
-| Magic Bus | The connector supports PCs, external keyboards, external modems and other accessories, commonly daisy-chained (p. 217) | Independently addressed, checksummed `ATKB` and `SCTG` descriptors enumerate together and attach their distinct ROM clients; the keyboard is rediscovered after bus reinitialization and exchanges Set-2/LED traffic | Multi-address discovery and a second class are covered; SCSI-target data, external modems and physical chaining are not |
+| Magic Bus | The connector supports PCs, external keyboards, external modems and other accessories, commonly daisy-chained (p. 217) | Independently addressed, checksummed `ATKB` and `SCTG` descriptors enumerate together and attach their distinct ROM clients; the keyboard is rediscovered after bus reinitialization and exchanges Set-2/LED traffic; the IDT monitor consumes an SCTG function-18 request and command-3 payload | Multi-address discovery, keyboard traffic and the SCSI-target control-data path are covered; SCSI block I/O, external modems and physical chaining are not |
 | Persistence and privacy | Storage-card backup/restore and power-on password confirmation protect retained information (pp. 196–198, 207–208) | Battery-backed DRAM and RTC survive a two-process power cycle; a card backup restores retained RAM and reaches the success dialog | Hardware retention and backup/restore covered; password UI is not automated |
 
 ## Acceptance backlog derived from the guide
@@ -108,9 +108,9 @@ the contract for future archived WaveLAN, NE2000 and wireless-card work.
 These are product-level tests, ordered by how directly they close known
 hardware gaps:
 
-1. **Magic Bus non-keyboard traffic.** Extend the now-addressable `ATKB` +
-   `SCTG` collection beyond descriptor/client attachment by exercising SCSI
-   target data, or add and exercise a documented external-modem class.
+1. **Magic Bus SCSI block traffic.** Extend the verified SCTG request/control
+   transaction into concrete SCSI commands and a backing store, or add and
+   exercise a documented external-modem class.
 2. **Smaller UI contracts.** Add focused checks for Controls-initiated touch
    realignment, volume changes, password-on-wake and beaming a notebook page.
 
