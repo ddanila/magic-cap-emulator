@@ -228,7 +228,10 @@ The NMI input is edge-latched and sampled at instruction boundaries. It
 records EPC/BD, sets Status `NmI`, clears Config Halt/Doze, and enters the
 fixed uncached `0xbfc00000` vector without shifting the ordinary mode stacks.
 `NmI` is write-one-to-clear. An NMI arriving in debug mode remains pending
-until `DERET`.
+until `DERET`. Status bit 20 is cache parity-error state on baseline MIPS-I
+cores but the NMI latch on R3900; cache lookup therefore leaves it intact.
+The regression executes from cached kseg0 with `NmI` set, then separately
+proves that `MTC0 Status` with bit 20 set clears it.
 
 The focused debug model covers DBP/DSS, DBD, DM, SSt, BsF storage, DEPC,
 the documented return suppression, and the asynchronous coincidences the

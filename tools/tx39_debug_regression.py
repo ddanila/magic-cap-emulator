@@ -35,7 +35,9 @@ RESULT_PATTERN = re.compile(
     rb"DEBUG_BSF_LOAD DEBUG=([0-9A-F]{8}) R3=([0-9A-F]{8}) "
     rb"CAUSE=([0-9A-F]{8}) EPC=([0-9A-F]{8}).*"
     rb"DEBUG_BSF_STORE DEBUG=([0-9A-F]{8}) R3=([0-9A-F]{8}) "
-    rb"CAUSE=([0-9A-F]{8}) EPC=([0-9A-F]{8})",
+    rb"CAUSE=([0-9A-F]{8}) EPC=([0-9A-F]{8}).*"
+    rb"NMI_CACHE SR=([0-9A-F]{8}) R3=([0-9A-F]{8}).*"
+    rb"NMI_CLEAR SR=([0-9A-F]{8}) R3=([0-9A-F]{8})",
     re.DOTALL,
 )
 EXPECTED = (
@@ -71,6 +73,10 @@ EXPECTED = (
     0x0000_0002,
     0x0000_0000,
     0x0000_0000,
+    0x0010_0000,
+    0x0000_0003,
+    0x0000_0000,
+    0x0000_0004,
 )
 
 
@@ -236,6 +242,28 @@ local function run_debug_store_bus_error()
     cpu.state["PC"].value = 0xa0001c40
 end
 
+local function run_nmi_cache_latch()
+    program:write_u32(0x00001d00, 0x24030003) -- addiu r3,zero,3
+    program:write_u32(0x00001d04, 0x1000ffff) -- b .
+    program:write_u32(0x00001d08, 0x00000000) -- nop
+    clear_debug()
+    cpu.state["R3"].value = 0
+    cpu.state["SR"].value = 0x00100000 -- NmI
+    cpu.state["PC"].value = 0x80001d00 -- cached execution
+end
+
+local function run_nmi_write_one_clear()
+    program:write_u32(0x00001d40, 0x3c010010) -- lui r1,0x0010
+    program:write_u32(0x00001d44, 0x40816000) -- mtc0 r1,Status
+    program:write_u32(0x00001d48, 0x24030004) -- addiu r3,zero,4
+    program:write_u32(0x00001d4c, 0x1000ffff) -- b .
+    program:write_u32(0x00001d50, 0x00000000) -- nop
+    clear_debug()
+    cpu.state["R3"].value = 0
+    cpu.state["SR"].value = 0x00100000 -- NmI
+    cpu.state["PC"].value = 0xa0001d40
+end
+
 emu.register_frame_done(function()
     frames = frames + 1
     if frames == 10 then
@@ -297,6 +325,16 @@ emu.register_frame_done(function()
             "DEBUG_BSF_STORE DEBUG=%08X R3=%08X CAUSE=%08X EPC=%08X",
             cpu.state["Debug"].value, cpu.state["R3"].value,
             cpu.state["Cause"].value, cpu.state["EPC"].value))
+        run_nmi_cache_latch()
+    elseif frames == 20 then
+        print(string.format(
+            "NMI_CACHE SR=%08X R3=%08X",
+            cpu.state["SR"].value, cpu.state["R3"].value))
+        run_nmi_write_one_clear()
+    elseif frames == 21 then
+        print(string.format(
+            "NMI_CLEAR SR=%08X R3=%08X",
+            cpu.state["SR"].value, cpu.state["R3"].value))
         machine:exit()
     end
 end)
@@ -406,7 +444,8 @@ def run_regression(args: argparse.Namespace) -> int:
         "returns through DEPC, single-step honors its return/branch-delay "
         "suppression contract, and coincident NMI/interrupt state reaches "
         "NIS/OES with the ordinary exception registers intact; debug-mode "
-        "load/store bus errors set BsF without taking an ordinary exception"
+        "load/store bus errors set BsF without taking an ordinary exception, "
+        "and cached execution preserves NmI until a write-one clear"
     )
     print(f"Artifacts: {run_dir}")
     return 0

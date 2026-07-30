@@ -26,6 +26,8 @@ class Tx39DebugRegressionTests(unittest.TestCase):
             b"CAUSE=00000000 EPC=00000000\n"
             b"DEBUG_BSF_STORE DEBUG=40000400 R3=00000002 "
             b"CAUSE=00000000 EPC=00000000\n"
+            b"NMI_CACHE SR=00100000 R3=00000003\n"
+            b"NMI_CLEAR SR=00000000 R3=00000004\n"
         )
         self.assertEqual(parse_result(output), EXPECTED)
         self.assertEqual(verify_result(parse_result(output)), [])
@@ -38,7 +40,7 @@ class Tx39DebugRegressionTests(unittest.TestCase):
         result[-1] = 3
         failures = verify_result(tuple(result))
         self.assertEqual(len(failures), 1)
-        self.assertIn("field 31", failures[0])
+        self.assertIn("field 35", failures[0])
 
     def test_script_contains_debug_instructions(self) -> None:
         script = automation_script()
@@ -47,6 +49,7 @@ class Tx39DebugRegressionTests(unittest.TestCase):
             "0x40108000",
             "0x40918000",
             "0x40918800",
+            "0x40816000",
             "0x4200001f",
         ):
             self.assertIn(opcode, script)

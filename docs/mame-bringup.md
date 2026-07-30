@@ -551,7 +551,9 @@ enabled ordinary interrupt at single-step boundaries. Exact-entry debugger
 breakpoints require `NIS`/`OES` and snapshot the underlying EPC, Status and
 Cause before the ROM debug vector can change them. Address-space taps also
 inject load and store bus errors while DM is set; both must set `BsF`, leave
-Cause/EPC untouched, and execute the following marker. Its artifacts remain under
+Cause/EPC untouched, and execute the following marker. A cached-code pass
+then requires Status `NmI` to survive, followed by an explicit `MTC0`
+write-one clear. Its artifacts remain under
 `$MAGIC_CAP_ASSETS/runtime/tx39-debug-regression/`.
 
 The Dino clock companion parks the CPU and drives `masterClock` directly. It
