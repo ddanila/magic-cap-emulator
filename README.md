@@ -16,7 +16,8 @@ are shortened; the animations play at their recorded speed. How it is made:
 [`docs/demo.md`](docs/demo.md).*
 
 The emulated machine boots ROM build 3.1.2j to the interactive Magic Cap
-workbench: touchscreen, persistent storage and suspend/wake, speaker output
+workbench: touchscreen, persistent storage, suspend/wake and retained
+power-on password protection, speaker output
 and microphone sound-stamp recording/playback, live AC charging with LCD/Magic
 Bus power-rail effects and configurable
 automatic shutoff, both PC Card slots, package installation over serial PCLink,

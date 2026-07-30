@@ -450,6 +450,37 @@ path with `powerControl = 0x20002c09`. All generated states, NVRAM, logs, Lua,
 and PNGs remain outside Git under
 `$MAGIC_CAP_ASSETS/runtime/power-regression/`.
 
+### Password-protected wake
+
+The retained memory model also preserves Magic Cap's user-facing Privacy
+contract across that process boundary. Run:
+
+```sh
+python3 tools/password_wake_regression.py
+```
+
+The harness uses only the fixed synthetic PIN `1234` and an isolated NVRAM
+tree. A fresh first process calibrates the screen, opens Controls → Privacy,
+sets and confirms the PIN, and taps the policy selector twice to reach **every
+time**. ROM entry counters require `Lock_SetNewPassword`; stable
+`WaitForPowerDown` samples then require `shutdownReason == 'POFF'` with VCC
+off.
+
+The retained relaunch follows the already verified two-button cleanup/wake
+sequence. It requires one `ShouldShowPasswordScene` decision and one
+`PasswordScene_OpenScene` call. Four `9` taps plus **enter** must leave the
+password prompt pixel-identical; entering `1234` plus **enter** must leave the
+prompt and return to the Privacy panel. The policy area must match its earlier
+**every time** snapshot, proving that both the PIN and prompt selection
+survived suspend/relaunch. The ROM entries named `PasswordScene_BadPassword`
+and `PasswordScene_CloseScene` in the recovered equates are retained as
+diagnostic counters but are not called by this ordinary wrong/correct keypad
+path, so they are not acceptance oracles.
+
+Generated NVRAM, scripts, logs and screenshots stay outside Git under
+`$MAGIC_CAP_ASSETS/runtime/password-wake-regression/`; no personal password is
+read or written.
+
 ## Reproducing this analysis
 
 The SDK ELF and headers come from `tools/fetch_assets.sh sdk`

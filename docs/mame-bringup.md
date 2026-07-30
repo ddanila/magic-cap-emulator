@@ -232,6 +232,7 @@ python3 tools/desk_regression.py
 python3 tools/menu_touch_regression.py
 python3 tools/touch_alignment_regression.py
 python3 tools/power_regression.py
+python3 tools/password_wake_regression.py
 python3 tools/sound_regression.py
 python3 tools/sound_regression.py --checkpoint dma
 python3 tools/sound_input_regression.py
@@ -369,6 +370,17 @@ and live button status before proving execution has left the whole power-down
 path with VCC restored. Generated Lua, both process logs, NVRAM, and three LCD
 snapshots stay under
 `$MAGIC_CAP_ASSETS/runtime/power-regression/`.
+
+The password-wake harness independently starts from erased NVRAM, calibrates,
+opens Controls → Privacy, enters the synthetic PIN `1234` twice, and advances
+the prompt policy from **once per day** through **once per hour** to **every
+time**. It then performs the same VCC-off, retained-RAM process boundary as the
+power harness. On wake it requires the ROM's password decision and
+`PasswordScene_OpenScene`, verifies that `9999` leaves the prompt
+pixel-identical, enters `1234`, and requires a return to the Privacy panel with
+the **every time** policy still visible. Its private NVRAM, generated Lua,
+two logs and native LCD snapshots remain under
+`$MAGIC_CAP_ASSETS/runtime/password-wake-regression/`.
 
 The Beam harness starts two fresh communicators with isolated configuration
 and NVRAM, calibrates and creates owner name cards for Alice and Bob, then
@@ -716,7 +728,7 @@ the separate serial-terminal view.
 | Welcome | Circled hat, `Magic Cap™`, and `Touch the screen to begin` render and accept a pen tap |
 | Calibration | Upper-left, lower-right, and center targets accept synthesized Betty ADC samples on first boot and again through Controls → Screen → touch alignment; the latter commits the new calibration and returns to Screen |
 | Workbench | Live Dino buffer `0x003f6a00` reaches stable lower-workbench signature `0x9dab458b`; the clock-dependent full-screen checksum is informational |
-| Persistence | 4 MiB DRAM and Dino RTC use external NVRAM files; a two-process regression proves retained-RAM power-down and on-button wake |
+| Persistence | 4 MiB DRAM and Dino RTC use external NVRAM files; two-process regressions prove retained-RAM power-down/on-button wake and an every-time Privacy PIN that rejects a wrong entry before unlocking |
 | Power | LCD power blanks scanout without losing its framebuffer; Magic Bus Vcc-off drops and later rediscovers the accessory; AC plus charger enable raises the main-battery ADC; the real controls clamp 1–60 minutes and their AC-idle checkbox governs automatic `SLEE`/VCC-off shutdown |
 | Sound output | ROM programs Betty and Dino for 11.025 kHz output; the captured startup tone measures about 750 Hz; Controls → Sound clamps the visible volume at maximum/off and makes the same effect audible/silent in the matching WAV windows |
 | Sound input | One-shot SIB receive DMA captures deterministic tone/silence with all expected status; the real Stamper UI records a 1 kHz microphone source, stops and drains its SIB command, then plays an audible WAV segment |
