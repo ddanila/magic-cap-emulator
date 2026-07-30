@@ -161,8 +161,18 @@ operation. Leaving the prefetched words resident makes
 the DMA range lets the monitor discover the SCTG endpoint while retaining the
 documented four-word data refill. DALc-locked lines remain private on-chip
 storage and are deliberately not invalidated. Multiply, divide and ordinary
-load-use timing are modelled as described below; external-bus wait states and
-cache-miss/refill timing are not yet claimed.
+load-use timing are modelled as described below.
+
+The remaining cache timing boundary is now narrower than an unknown register
+set. Apollo's SDK headers and `MM_InitializeDino` establish the exact Dino
+BIU configuration, including CS0 ROM waits, CS0 burst, card waits, 32-bit
+page-mode DRAM, refresh and watchdog values. They do not state Dino's external
+`ACK*` latency for DRAM. The Toshiba bus protocol latches a word one clock
+after observing `ACK*`, so refill duration depends on that missing board-side
+parameter. See
+[`memory-map.md`](memory-map.md#bus-interface-configuration) for the complete
+decode and regression. External-bus and cache-miss cycle timing are therefore
+not guessed.
 
 ## Emulator behavior and regression
 

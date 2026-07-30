@@ -171,14 +171,18 @@ The full regression list and expected checkpoints are in
   interlocks only HI/LO readers, survives exceptions, and is cancelled by
   `MTHI`, `MTLO`, or a replacement divide. Loads now stall an immediately
   dependent GPR reader for one cycle while independent instructions and the
-  documented `LWL`/`LWR` target-register pairing continue. External-bus wait
-  states and cache-miss/refill timing, the unidentified physical clock/rate
-  behind master-clock bit 14, and functional Dino consumer-IR/SPI/CHI engines
-  remain behavioral or absent. The ROM only checks those three engines for
-  idle during doze/shutdown, and Apollo's exported consumer-IR send method is
-  an empty stub. The verified boot, power, sound, telecom, and peripheral
-  paths act on the bits the ROM uses, but a complete functional Dino is not
-  claimed
+  documented `LWL`/`LWR` target-register pairing continue. The Apollo SDK and
+  release ROM now establish and regression-check Dino's exact BIU register
+  state: 32-bit page-mode DRAM, a 32-bit CS0 ROM bus, CS/MCS/card wait values,
+  CS0 burst, refresh and watchdog. Exact external-bus and cache-miss/refill
+  cycle timing still needs Dino's undocumented DRAM `ACK*` latency; applying
+  CS0's ROM wait value to DRAM would be incorrect. The unidentified physical
+  clock/rate behind master-clock bit 14 and functional Dino
+  consumer-IR/SPI/CHI engines remain behavioral or absent. The ROM only checks
+  those three engines for idle during doze/shutdown, and Apollo's exported
+  consumer-IR send method is an empty stub. The verified boot, power, sound,
+  telecom, and peripheral paths act on the bits the ROM uses, but a complete
+  functional Dino is not claimed
   ([`tx39-cpu.md`](docs/tx39-cpu.md), [`memory-map.md`](docs/memory-map.md)).
   The TX39 self-debug unit (`SDBBP`, `DERET`, and its CP0 debug registers) and
   likely branches for absent external coprocessors are also not modelled; no

@@ -286,6 +286,7 @@ python3 tools/battery_regression.py
 python3 tools/power_outputs_regression.py
 python3 tools/power_policy_regression.py
 python3 tools/dino_clock_regression.py
+python3 tools/dino_biu_regression.py
 python3 tools/rtc_set_regression.py
 python3 tools/magicbus_probe.py
 python3 tools/magicbus_probe.py --two-accessories --require-clean
@@ -547,6 +548,15 @@ The same run reads the periodic timer's upper-half live counter, observes
 gating, then requires the interrupt on the fifth resumed tick.
 Generated Lua, isolated configuration/NVRAM and output remain under
 `$MAGIC_CAP_ASSETS/runtime/dino-clock-regression/`.
+
+The Dino BIU companion waits for the release ROM's memory-controller
+initialization and reads configuration registers 0–4 back through the live
+device. It requires the Apollo header values for 32-bit page-mode DRAM and
+CS0 ROM, all CS/MCS/card wait fields, CS0 burst, refresh and watchdog. This
+locks down the known board contract without inventing the undocumented DRAM
+`ACK*` latency; the decode and exact cache-timing boundary are in
+[`memory-map.md`](memory-map.md#bus-interface-configuration). Artifacts remain
+under `$MAGIC_CAP_ASSETS/runtime/dino-biu-regression/`.
 
 The RTC-set companion calls the development ROM's real `SetTimer` at
 `0x13c04f04`. It requires the routine to return success after exercising both

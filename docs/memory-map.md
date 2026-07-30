@@ -145,6 +145,52 @@ and an encoded end address to `+0x034`.
 Betty is **not** this register block. It is an external device reached through
 Dino's SIB subframe registers; see [`betty-registers.md`](betty-registers.md).
 
+### Bus-interface configuration
+
+The Apollo-specific `Apollo.asm.h`, the common `Dino.asm.h`, and the release
+ROM's `MM_InitializeDino` agree on the first five BIU registers. After boot,
+the ROM has programmed:
+
+| Offset | Value | Decoded configuration |
+|---:|---:|---|
+| `0x000` | `0x01011091` | Page-mode writes; bank 0 is 32-bit DRAM with row selector 1 and column selector 9; CS0 is a 32-bit bus |
+| `0x004` | `0xffffffff` | Both access-value fields for MCS0–MCS3 are 15 |
+| `0x008` | `0x2222ff66` | CS3 and CS2 access values are 2/2, CS1 is 15/15, and CS0 is 6/6 |
+| `0x00c` | `0x44ff0100` | Both PC Card common-memory waits are 4, both card I/O waits are 15, and CS0 burst is enabled |
+| `0x010` | `0x01604000` | 12.0 µs bus watchdog; bank-0 refresh enabled with the 15 µs selector |
+
+CS0 is the ROM window, while the Apollo header maps Glacier 1 and 2 to CS2
+and CS3. The driver resets the preserved CS0-width strap high; the ROM then
+keeps that bit while replacing the other `memoryConfiguration0` fields.
+This matters even though MAME presents a naturally 32-bit program space:
+software can read the register and the 840F firmware performs four-byte-lane
+flash operations.
+
+The values above do **not** provide a defensible cycle count for DRAM cache
+misses. The header names the CS and card nibbles as wait states, but does not
+define how each pair of `AccVal1`/`AccVal2` fields composes a complete bus
+cycle. More importantly, bank-0 DRAM has no corresponding wait-state field.
+The Toshiba family manual's bus chapter (printed pages 220–221) says that the
+core samples the external `ACK*` signal and latches data on the following
+clock; burst words can proceed one per clock only when the external controller
+supplies consecutive acknowledgements. Neither the SDK nor the available ROM
+specifies Dino's ACK latency for this Apollo DRAM geometry.
+
+Accordingly, the cache model implements refill contents and CPU-side
+interlocks, while external accesses remain synchronous. Adding arbitrary
+penalties from the CS0 value would slow ROM reads but would not establish
+DRAM refill timing. A real-device bus trace or a Dino hardware manual is the
+remaining evidence needed for exact cache-miss timing.
+
+The live register contract is covered by:
+
+```sh
+python3 tools/dino_biu_regression.py
+```
+
+Generated Lua, NVRAM, and logs stay under
+`$MAGIC_CAP_ASSETS/runtime/dino-biu-regression/`.
+
 ### Timer module
 
 The SDK defines `timerControl` at offset `0x150` and `perTimer` at `0x154`.
