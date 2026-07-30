@@ -287,6 +287,7 @@ python3 tools/ir_probe.py
 python3 tools/beam_regression.py
 python3 tools/tx39_regression.py
 python3 tools/tx39_refill_regression.py
+python3 tools/tx39_clock_regression.py
 python3 tools/pccard_regression.py
 python3 tools/modem_save_regression.py
 python3 tools/storage_card_regression.py
@@ -456,6 +457,13 @@ and four-word data refill, verifies that a burst also applies DALc to every
 filled word, and proves that a four-word instruction refill prefetches code
 not yet executed. It keeps its generated inputs and log under
 `$MAGIC_CAP_ASSETS/runtime/tx39-refill-regression/`.
+
+The clock companion executes an identical counter loop for a fixed emulated
+time at each Config RF value. It requires the counts to follow the documented
+full, half, quarter, and eighth processor rates within 3%, then sets RF=`10`
+with Config.Lock and proves a later full-rate write changes neither Config nor
+the measured quarter rate. Its artifacts remain under
+`$MAGIC_CAP_ASSETS/runtime/tx39-clock-regression/`.
 
 The PC Card harness copies the verified 840F flasher into its persistent run
 directory, inserts that disposable copy after the workbench appears, and

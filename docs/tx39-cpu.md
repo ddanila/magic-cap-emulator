@@ -76,12 +76,21 @@ writes Config `0x74`, enabling both caches, selecting burst refill, and
 choosing an eight-word instruction refill. `LockHalfDataCache` sets Cache
 `DALc`, reads the first 512 bytes, then clears `DALc`.
 
+The ROM also uses Config RF rather than treating it as an identification bit.
+`SlowDownProcessor` (`0x13c00330`) sets RF to `10` for quarter-rate execution,
+while `SpeedUpProcessor` (`0x13c00358`) restores `00`. `DeepDoze` repeats the
+same quarter-rate selection in `QuarterDozeLoop` while cycling its DRAM
+refresh and stop-CPU sequence.
+
 These registers are no longer unrestricted shadows:
 
 - Config reports the TMPR3902U's read-only 4 KiB instruction-cache and 1 KiB
   data-cache fields, ignores reserved bits, and resets with both caches
-  enabled. ICE and DCE select cached versus uncached accesses. Once software
-  sets Config.Lock, further writes are ignored until reset.
+  enabled. ICE and DCE select cached versus uncached accesses. RF values
+  `00/01/10/11` scale processor execution to 1, 1/2, 1/4, or 1/8 of the
+  master rate while independently clocked peripherals retain their rates.
+  Once software sets Config.Lock, further writes—including RF changes—are
+  ignored until reset.
 - Cache accepts only its six `IALo/DALo`, `IALp/DALp`, and `IALc/DALc` mode
   bits. An exception pushes current → previous → old and clears current; RFE
   restores previous → current and old → previous while retaining old, just
@@ -107,8 +116,8 @@ fills the data cache's native one-word line; with DCBR set, DRSize selects a
 4/8/16/32-word aligned burst. DALc locks every data-cache word brought in by
 that burst. The instruction-cache backing still represents each word
 separately, so this models the refill's contents but not a shared physical tag
-object. External-bus timing, reduced-frequency clock timing, and cycle costs
-are not claimed.
+object. External-bus timing and detailed per-instruction cycle costs are not
+claimed.
 
 ## Emulator behavior and regression
 
@@ -124,6 +133,7 @@ Run the isolated CPU regressions with:
 ```sh
 python3 tools/tx39_regression.py
 python3 tools/tx39_refill_regression.py
+python3 tools/tx39_clock_regression.py
 ```
 
 It writes a suite of tiny uncached-RAM programs into the running DataRover
@@ -165,3 +175,12 @@ instruction executes, proving instruction prefetch. The expected observations
 are `BBBBBBBB`, `22222222`, `22222222`, and `00001234`, respectively.
 Generated inputs and logs stay under
 `$MAGIC_CAP_ASSETS/runtime/tx39-refill-regression/`.
+
+The clock companion runs the same three-instruction counter loop for one
+video-frame interval at every RF value. A reference run counted `204779`,
+`102380`, `51180`, and `25579` iterations: each normalized count is within
+0.08% of the full-rate result. It then sets RF=`10` and Config.Lock together,
+attempts to restore RF=`00`, and counts `51177` iterations while reading back
+the still-locked quarter-rate Config value. This verifies the functional
+processor divider without claiming external-bus wait-state accuracy.
+Artifacts stay under `$MAGIC_CAP_ASSETS/runtime/tx39-clock-regression/`.

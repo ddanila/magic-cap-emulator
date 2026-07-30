@@ -355,7 +355,9 @@ DINO->powerControl |=  kPowerStopCpuMask;   /* CPU stops here */
 ```
 
 `DeepDoze` (`0x13c3b28c`) additionally reconfigures DRAM and enables one more
-interrupt before falling into `RefreshMemory`:
+interrupt before falling into `RefreshMemory`. Its `QuarterDozeLoop`
+temporarily selects TX39 Config RF=`10`, so the refresh/stop loop runs at one
+quarter of the processor's master rate before restoring the previous Config:
 
 ```c
 DINO->memoryConfiguration4 = (cfg | 0x20000000) & 0xffff3fff;
