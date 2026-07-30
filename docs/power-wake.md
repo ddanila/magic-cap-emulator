@@ -409,9 +409,17 @@ its frame and DMA timers. The battery-backed RTC is not gated: the release ROM
 clears all master clocks during normal power-down and immediately uses
 `rtcLow` for a delay. Video, Magic Bus and UART gates are detailed and
 independently regressed in
-[the Dino register map](memory-map.md#master-clock-gates). The fast-timer
-clock and the power-control stop timer's exact duration remain unmodeled
-rather than using an inferred scale.
+[the Dino register map](memory-map.md#master-clock-gates).
+
+The power-control stop timer is another always-on consumer of the 32.768 kHz
+timebase, not the unidentified `masterClock` bit-14 consumer. It counts at
+RTC/256 (128 Hz): value 2 raises interrupt-bank-5 bit 28 after 512 RTC ticks
+for each nominal 16 ms (exactly 15.625 ms) Betty-reset phase, and value 8
+raises it after 2,048 ticks for the nominal 64 ms (exactly 62.5 ms)
+`DeepDoze` refresh wake. The focused clock regression checks both edges with
+all master clocks clear, and the full retained-state regression proves the
+resulting doze/cleanup/wake sequence. The separately named fast-timer clock
+remains unresolved.
 
 ## Automated acceptance
 

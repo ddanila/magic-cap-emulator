@@ -181,6 +181,14 @@ the release ROM writes `masterClock = 0` at `0x13c3a428`, then
 `0x13c3a4e8`–`0x13c3a540`. Gating RTC/alarm timekeeping with bit 15 deadlocks
 that real path, so the model keeps the RTC, alarm and rollover timers live.
 
+The power-control stop timer is independently always-on as well. The IDT
+monitor initializes `masterClock` to `0x00002abb`, with bit 14 clear, and then
+uses three stop-timer completions in `HardResetBetty`; gating the one-shot on
+bit 14 strands that real boot path. Its tick is RTC/256, or 128 Hz: the
+monitor's `Wait8msec` safety loop uses 264 RTC ticks per nominal interval,
+while stop values 2 and 8 correspond to the ROM's nominal 16 ms Betty-reset
+phases and 64 ms `DeepDoze` DRAM-refresh wake (exactly 15.625 ms and 62.5 ms).
+
 Run the isolated acceptance check with:
 
 ```sh
@@ -191,9 +199,12 @@ It parks the CPU before direct register writes, proves both UART clocks
 (including pulsed mode), then checks SIB boundaries, Magic Bus command
 completion, periodic interrupt suppression/resume, and continued RTC
 advancement. The video gate is also covered by normal boot/Workbench
-validation and the driver's shared clock-and-LCD blanking path. Bit 14's
-fast-timer engine and the exact power-control stop-timer duration remain
-unresolved; neither has been assigned guessed timing.
+validation and the driver's shared clock-and-LCD blanking path. With every
+master clock clear, the same regression starts stop values 2 and 8, proves
+that interrupt-bank-5 bit 28 stays clear through RTC ticks 511 and 2,047, and
+appears immediately after ticks 512 and 2,048. Bit 14's separately named
+fast-timer consumer remains unresolved rather than being conflated with this
+observed power timer.
 
 Bit 2 is not coupled to the pulsed UART transport. A complete two-peer Beam
 run leaves `kClockEnIrClkMask` clear while UART B exchanges SIR frames in both
@@ -241,7 +252,8 @@ boot, OS, and peripheral regressions:
   framebuffer, Magic Bus Vcc-off removes the peripheral and its assigned
   address, and charger enable advances the selected main-battery ADC only
   while AC is attached and the battery cover is fitted.
-- Synchronous stop-timer completion used by the low-level Betty reset.
+- A scheduled RTC/256 power stop timer used by the low-level Betty reset and
+  `DeepDoze`, independent of the peripheral master clocks.
 - Power-on mode input bit 3: high boots Magic Cap, low stays in the IDT
   monitor.
 - Video high-buffer selection and 480×320, 2 bpp framebuffer scanout.

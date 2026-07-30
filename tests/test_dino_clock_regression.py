@@ -5,6 +5,7 @@ from tools.dino_clock_regression import (
     MBUS_EVENTS,
     PERIODIC_EVENT,
     SIB_BOUNDARIES,
+    STOP_TIMER_EVENT,
     UART_A_TX,
     UART_B_TX,
     UART_ENABLED,
@@ -23,6 +24,8 @@ class DinoClockRegressionTests(unittest.TestCase):
             b"CLOCK_ON UARTA=C0000101 UARTB=C0000001 "
             b"INT1=00000180 INT2=04010A00 "
             b"INT5=20000000 MBUS=C0000001 RTC=00002000\n"
+            b"STOP_TIMER V2_PRE=00000000 V2_POST=10000000 "
+            b"V8_PRE=00000000 V8_POST=10000000\n"
         )
         self.assertIsNotNone(parse_results(output))
         self.assertEqual(verify_results(parse_results(output)), [])
@@ -47,8 +50,12 @@ class DinoClockRegressionTests(unittest.TestCase):
             0,
             0,
             2,
+            STOP_TIMER_EVENT,
+            0,
+            STOP_TIMER_EVENT,
+            0,
         )
-        self.assertGreaterEqual(len(verify_results(bad)), 13)
+        self.assertGreaterEqual(len(verify_results(bad)), 17)
 
     def test_script_controls_major_clock_domains(self) -> None:
         script = automation_script()
@@ -58,6 +65,10 @@ class DinoClockRegressionTests(unittest.TestCase):
         self.assertIn("program:write_u32(UART_B_HOLD", script)
         self.assertIn("program:write_u32(MBUS_COMMAND", script)
         self.assertIn("program:write_u32(PERIODIC_TIMER", script)
+        self.assertIn("stop_timer_start(2)", script)
+        self.assertIn("stop_timer_start(8)", script)
+        self.assertIn("program:write_u32(MASTER_CLOCK, 0)", script)
+        self.assertIn("emu.attotime.from_ticks", script)
 
 
 if __name__ == "__main__":

@@ -26,7 +26,9 @@ RESULT_PATTERN = re.compile(
     rb"CLOCK_ON UARTA=([0-9A-F]{8}) UARTB=([0-9A-F]{8}) "
     rb"INT1=([0-9A-F]{8}) "
     rb"INT2=([0-9A-F]{8}) INT5=([0-9A-F]{8}) "
-    rb"MBUS=([0-9A-F]{8}) RTC=([0-9A-F]{8})",
+    rb"MBUS=([0-9A-F]{8}) RTC=([0-9A-F]{8}).*"
+    rb"STOP_TIMER V2_PRE=([0-9A-F]{8}) V2_POST=([0-9A-F]{8}) "
+    rb"V8_PRE=([0-9A-F]{8}) V8_POST=([0-9A-F]{8})",
     re.DOTALL,
 )
 UART_ENABLED = 0x80000000
@@ -36,6 +38,7 @@ SIB_BOUNDARIES = 0x00000180
 MBUS_ENABLED = 0x80000000
 MBUS_EVENTS = 0x00000A00
 PERIODIC_EVENT = 0x20000000
+STOP_TIMER_EVENT = 0x10000000
 
 
 def automation_script() -> str:
@@ -45,8 +48,10 @@ local cpu = machine.devices[":maincpu"]
 local program = cpu.spaces["program"]
 local frames = 0
 local rtc_a = 0
+local clock_checks_done = false
 
 local MASTER_CLOCK = 0x10c001c0
+local POWER_CONTROL = 0x10c001c4
 local SIB_CONTROL = 0x10c00074
 local UART_A_CONTROL1 = 0x10c000b0
 local UART_A_HOLD = 0x10c000c4
@@ -61,6 +66,8 @@ local RTC_LOW = 0x10c00144
 local TIMER_CONTROL = 0x10c00150
 local PERIODIC_TIMER = 0x10c00154
 local ACTIVE_CLOCKS = 0x00028803
+local STOP_TIMER_ENABLE = 0x00000800
+local STOP_TIMER_EVENT = 0x10000000
 
 local function park_cpu()
     program:write_u32(0x00001000, 0x1000ffff)
@@ -123,9 +130,46 @@ emu.register_frame_done(function()
             program:read_u32(INTERRUPT5),
             program:read_u32(MBUS_CONTROL1),
             program:read_u32(RTC_LOW)))
-        machine:exit()
+        clock_checks_done = true
     end
 end)
+
+while not clock_checks_done do
+    emu.wait_next_frame()
+end
+
+local function wait_ticks(ticks)
+    emu.wait(emu.attotime.from_ticks(ticks, 32768))
+end
+
+local function stop_timer_start(value)
+    local control = program:read_u32(POWER_CONTROL) & 0xffff07ff
+    program:write_u32(POWER_CONTROL, control)
+    program:write_u32(INTERRUPT5, STOP_TIMER_EVENT)
+    program:write_u32(POWER_CONTROL, control | (value << 12))
+    program:write_u32(
+        POWER_CONTROL, control | (value << 12) | STOP_TIMER_ENABLE)
+end
+
+-- The monitor leaves every master clock off while its HardResetBetty path
+-- uses this one-shot, so the power stop timer must remain on independently.
+program:write_u32(MASTER_CLOCK, 0)
+stop_timer_start(2)
+wait_ticks(511)
+local v2_pre = program:read_u32(INTERRUPT5)
+wait_ticks(1)
+local v2_post = program:read_u32(INTERRUPT5)
+
+stop_timer_start(8)
+wait_ticks(2047)
+local v8_pre = program:read_u32(INTERRUPT5)
+wait_ticks(1)
+local v8_post = program:read_u32(INTERRUPT5)
+
+print(string.format(
+    "STOP_TIMER V2_PRE=%08X V2_POST=%08X V8_PRE=%08X V8_POST=%08X",
+    v2_pre, v2_post, v8_pre, v8_post))
+machine:exit()
 """
 
 
@@ -156,6 +200,10 @@ def verify_results(values: tuple[int, ...] | None) -> list[str]:
         on_int5,
         on_mbus,
         rtc_running,
+        v2_pre,
+        v2_post,
+        v8_pre,
+        v8_post,
     ) = values
     failures: list[str] = []
     if off_uart_a & UART_ENABLED or off_uart_b & UART_ENABLED:
@@ -191,6 +239,18 @@ def verify_results(values: tuple[int, ...] | None) -> list[str]:
             f"RTC stopped during the clock-restore interval: "
             f"{rtc_b:08X}->{rtc_running:08X}"
         )
+    for label, value in (
+        ("two-tick timer fired before 512 RTC ticks", v2_pre),
+        ("eight-tick timer fired before 2,048 RTC ticks", v8_pre),
+    ):
+        if value & STOP_TIMER_EVENT:
+            failures.append(label)
+    for label, value in (
+        ("two-tick timer did not fire after 512 RTC ticks", v2_post),
+        ("eight-tick timer did not fire after 2,048 RTC ticks", v8_post),
+    ):
+        if not value & STOP_TIMER_EVENT:
+            failures.append(label)
     return failures
 
 
@@ -275,7 +335,8 @@ def run_regression(args: argparse.Namespace) -> int:
 
     print(
         "PASS: Dino master clocks gate and resume both UARTs, SIB, "
-        "Magic Bus, and the periodic timer while the RTC remains independent"
+        "Magic Bus and the periodic timer; the RTC and exact 128 Hz power "
+        "stop timer remain independent"
     )
     print(f"Artifacts: {run_dir}")
     return 0

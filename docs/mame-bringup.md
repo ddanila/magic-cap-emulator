@@ -498,7 +498,10 @@ disabled, rejects UART/IrDA/Magic Bus completions, sees no SIB frame or
 periodic interrupt, and requires the independent RTC to keep advancing. It
 then restores the UART, Magic Bus, SIB and timer clocks and requires both UART
 transmits including UART-B pulsed mode, bus completion, SIB frame boundaries
-and periodic interrupt while checking uninterrupted RTC advancement.
+and periodic interrupt while checking uninterrupted RTC advancement. Finally,
+with every master clock clear, it proves that stop-timer values 2 and 8 raise
+interrupt-bank-5 bit 28 after exactly 512 and 2,048 RTC ticks. This distinguishes
+the always-on power timer from the still-unidentified bit-14 fast-timer clock.
 Generated Lua, isolated configuration/NVRAM and output remain under
 `$MAGIC_CAP_ASSETS/runtime/dino-clock-regression/`.
 
