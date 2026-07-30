@@ -110,14 +110,16 @@ The full regression list and expected checkpoints are in
   separate from the working PC Card PPP path
   ([`builtin-modem.md`](docs/builtin-modem.md)).
 
-- **Complete other Magic Bus peripheral classes and topology.** The driver now
+- **Complete deeper Magic Bus topology and peer semantics.** The driver now
   enumerates independently addressed `ATKB` and `SCTG` descriptors on the
   shared bus, attaches both built-in ROM clients, and drives the IDT monitor's
   SCTG functions 18 and 19 through command-3 receive and command-7 transmit
-  DMA. Keyboard and SCTG monitor traffic are bidirectional. The remaining
-  evidence-backed gaps are an external-modem class, higher-level SCTG/PCLink
-  peer semantics, and physical daisy-chain timing—not a presumed disk or
-  backing store
+  DMA. Keyboard and SCTG monitor traffic are bidirectional. The Magic Internet
+  Kit proves its similarly named external modem is a 38,400-baud
+  `iSerialBServer` stream, not another packet-bus descriptor; that UART-B path
+  now passes a bidirectional host probe. The remaining evidence-backed gaps
+  are higher-level SCTG/PCLink peer semantics and physical daisy-chain
+  timing—not a presumed disk, backing store, or invented modem class
   ([`memory-map.md`](docs/memory-map.md#magic-bus)).
 
 - **Improve hardware fidelity beyond observed ROM needs.** TX39 configuration

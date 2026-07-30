@@ -247,6 +247,13 @@ forks. It includes:
   38,400 bit/s, with DTR, modem-power and sleep-confirmation behavior; and
 - an older Xircom PC Card Ethernet driver with source.
 
+Despite its product-facing name, that modem is not a `MagicBusClient` and
+does not supply a packet-bus ID or command set. It wraps the communicator's
+second serial server. The emulator consequently exposes it through RS-232
+port 2, dynamically applies Dino's divider/framing writes, and verifies the
+38,400-baud byte path with `tools/uart_b_probe.py`. This keeps connector
+terminology from becoming an invented packet peripheral.
+
 The high-level material is useful for understanding how browser and
 communications actors attach PPP or Ethernet links and register DNS. The
 power-aware modem source is also a concrete example: an active connection

@@ -122,7 +122,20 @@ are generated directly by the field order in the SDK's `Dino.h`.
 Each UART is six 32-bit registers: control 1, control 2, DMA control 1, DMA
 control 2, DMA count, and hold. The monitor's `uart_hw` table contains
 `0xb0c000b0` and `0xb0c000c8`, confirming both bases independently of the C
-structure.
+structure. Dino derives the line rate as
+`230400 / (control2[9:0] + 1)`; control-1 selects seven/eight data bits,
+parity and one/two stop bits. Writes now reconfigure MAME's serial engines
+rather than merely shadowing those fields.
+
+UART A is the 19,200-baud IDT/PCLink route exposed as MAME RS-232 port 1.
+UART B is exposed as RS-232 port 2 and defaults to the external-modem
+driver's 38,400 baud. The latter UART is also switched to the dedicated IrDA
+transport when the ROM sets pulsed mode. `tools/uart_b_probe.py` uses the IDT
+monitor's own `fill` and `dump` commands to select divider 5, sends `0x52`
+from a host PTY, verifies enabled/empty/RX-full state and the received word,
+then sends `0x54` back to the host. Because the PTY endpoint remains
+configured for 38,400 baud, this exchange also detects a serial engine left
+at the former hard-coded 19,200 rate.
 
 The video-control bit-depth field is bits 7:6 (`0x00` mono, `0x40` 2-bit gray,
 `0x80` 4-bit gray, `0xc0` 8-bit color). Bit 0 enables video scanning and bit 1
@@ -196,15 +209,22 @@ the driver synthesizes them rather than returning whatever the OS last wrote.
 `TestMBReqLine` (`0x13c28364`) samples bit 29 as the peripheral request line.
 Its positive and negative edges latch interrupt-bank-2 bits `0x08` and `0x04`.
 
-The physical connector is broader than a keyboard. *Using Magic Cap*, p. 217,
-describes PCs, external modems, external keyboards and other accessories, with
-multiple devices commonly daisy-chained. The machine configuration can present
-one `ATKB` keyboard or a two-device topology containing that keyboard plus an
-`SCTG` SCSI target, or present the SCSI target alone for the IDT monitor. The
-combined topology proves independent address assignment and ROM client
-attachment for two different descriptor classes. The monitor path additionally
-exercises both directions of the SCTG transport. Higher-level PCLink peer
-semantics and a physical daisy-chain transport remain unmodeled.
+The physical connector is broader than the packet controller. *Using Magic
+Cap*, p. 217, describes PCs, external modems, external keyboards and other
+accessories, with multiple devices commonly daisy-chained. The Magic Internet
+Kit resolves an important naming trap: its `MagicBusModem` class does not
+enumerate a packet-bus peripheral. It targets `iSerialBServer` at 38,400 baud,
+so its hardware route is the UART-B transport described above. The Rosemary
+SDK marks the old `MagicBusSerialPort` class obsolete and removes unused
+Magic Bus clients; there is no evidence for inventing a modem descriptor here.
+
+The machine configuration can present one `ATKB` keyboard or a two-device
+topology containing that keyboard plus an `SCTG` SCSI target, or present the
+SCSI target alone for the IDT monitor. The combined topology proves independent
+address assignment and ROM client attachment for two different descriptor
+classes. The monitor path additionally exercises both directions of the SCTG
+transport. Higher-level PCLink peer semantics and a physical daisy-chain
+transport remain unmodeled.
 
 The controller completes transfers synchronously but preserves the ROM's four
 transaction classes:

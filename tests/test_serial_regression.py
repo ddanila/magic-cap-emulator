@@ -40,8 +40,15 @@ class SerialRegressionTests(unittest.TestCase):
     def test_betty_checkpoint_calls_rom_diagnostic(self) -> None:
         checkpoint = serial_regression.CHECKPOINTS["betty"]
 
-        self.assertEqual(checkpoint["command"], r"call 13c076b0\n")
+        self.assertEqual(checkpoint["command"], "call 13c076b0\n")
         self.assertEqual(checkpoint["seconds"], 8)
+
+    def test_monitor_command_uses_key_matrix(self) -> None:
+        script = serial_regression.monitor_command_script("call 13c076b0\n")
+
+        self.assertIn('":terminal:keyboard:GENKBD_ROW', script)
+        self.assertIn("command_index", script)
+        self.assertIn("set_value", script)
 
 
 if __name__ == "__main__":

@@ -31,9 +31,21 @@ CHECKPOINTS = {
         "expected": REPO_ROOT / "tests" / "data" / "betty-test.txt",
         "output": "betty-test.txt",
         "seconds": 8,
-        "command": r"call 13c076b0\n",
-        "delay": 4,
+        "command": "call 13c076b0\n",
     },
+}
+TERMINAL_KEYS = {
+    "a": (2, 0x0002),
+    "b": (3, 0x0040),
+    "c": (3, 0x0010),
+    "l": (2, 0x0200),
+    " ": (3, 0x8000),
+    "\n": (2, 0x1000),
+    "0": (0, 0x0400),
+    "1": (0, 0x0002),
+    "3": (0, 0x0008),
+    "6": (0, 0x0040),
+    "7": (0, 0x0080),
 }
 
 
@@ -68,6 +80,43 @@ def monitor_config(system: str = "datarover840") -> str:
         </input>
     </system>
 </mameconfig>
+"""
+
+
+def monitor_command_script(command: str) -> str:
+    """Return Lua that types a monitor command through the real key matrix."""
+    keys = "\n".join(
+        (
+            '    { machine.ioport.ports['
+            f'":terminal:keyboard:GENKBD_ROW{row}"]:field(0x{mask:04x}), '
+            f"0x{mask:04x} }},"
+        )
+        for row, mask in (TERMINAL_KEYS[character] for character in command)
+    )
+    return f"""local machine = manager.machine
+local command = {{
+{keys}
+}}
+local command_index = 1
+local key_down = false
+local frames = 0
+
+emu.register_frame_done(function()
+    frames = frames + 1
+    if frames < 180 or command_index > #command then
+        return
+    end
+
+    local key = command[command_index]
+    if key_down then
+        key[1]:set_value(0)
+        command_index = command_index + 1
+        key_down = false
+    else
+        key[1]:set_value(key[2])
+        key_down = true
+    end
+end)
 """
 
 
@@ -161,13 +210,17 @@ def run_regression(args: argparse.Namespace) -> int:
         "-oslog",
     ]
     if "command" in checkpoint:
+        script = workdir / f"{args.checkpoint}.lua"
+        script.write_text(
+            monitor_command_script(str(checkpoint["command"])),
+            encoding="utf-8",
+        )
         command.extend(
             [
-                "-natural",
                 "-autoboot_delay",
-                str(checkpoint["delay"]),
-                "-autoboot_command",
-                str(checkpoint["command"]),
+                "0",
+                "-autoboot_script",
+                str(script),
             ]
         )
     try:
