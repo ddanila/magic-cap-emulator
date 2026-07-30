@@ -48,6 +48,25 @@ command -v \
   mutool tesseract tshark socat picocom unar unshield ffmpeg sox
 ```
 
+Use the optional tools by evidence type:
+
+- run MAME automation with `lua5.4` and lint standalone Lua helpers with
+  `luacheck`; MAME-console scripts may need an explicit allow-list for the
+  emulator-provided globals;
+- generate `compile_commands.json` with `bear`, then apply `cppcheck`,
+  `clang-tidy`, or include-what-you-use only to the changed C/C++ scope;
+- prefer `eu-readelf`/`eu-nm` for ELF metadata, and use `pahole` to check
+  recovered DWARF record layouts rather than inferring padding by eye;
+- use Scapy and `tshark` for synthetic packet fixtures and captured protocols;
+  do not require privileged live capture for a deterministic regression;
+- use `xdelta3` and `bsdiff` for private byte-level comparison of ROM or media
+  revisions. Do not commit a delta that reconstructs a non-redistributable
+  input; publish hashes, offsets and independently stated findings instead;
+  and
+- aim AFL++ at repository parsers with synthetic or lawfully redistributable
+  corpora. Keep proprietary ROM, package and disk bytes outside Git even when
+  they make useful local seeds.
+
 ## Ghidra
 
 The installed release is the official

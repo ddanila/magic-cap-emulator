@@ -805,7 +805,9 @@ the separate serial-terminal view.
 The four systems no longer carry `MACHINE_NOT_WORKING`: the covered product
 workflows and every variant are usable as intended. They retain the narrower
 `MACHINE_IMPERFECT_TIMING` warning because exact Dino external-bus and
-physical Magic Bus timing is not known; see
+Apollo-specific Magic Bus timing and live MBIC chaining are not implemented;
+the related General Magic patent timing is now documented as a bounded
+reference rather than assumed identical hardware. See
 [`PLAN.md`](../PLAN.md#remaining-work). Magic Bus discovery, its multi-address
 topology, AT-keyboard traffic and both directions of the monitor's SCTG
 request/data path are covered by headless probes. The production

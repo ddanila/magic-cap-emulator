@@ -424,8 +424,9 @@ SCSI target alone for the IDT monitor. The combined topology proves independent
 address assignment and ROM client attachment for two different descriptor
 classes. The monitor path additionally exercises both directions of the SCTG
 transport and one non-destructive command/response buffer. The product
-client's request handler is empty, so physical daisy-chain/electrical timing
-rather than an undiscovered product payload remains unmodeled.
+client's request handler is empty, so live MBIC chaining and Apollo-specific
+electrical timing rather than an undiscovered product payload remain
+unmodeled.
 
 The controller completes transfers synchronously but preserves the ROM's four
 transaction classes:
@@ -443,6 +444,80 @@ Enabling the controller reports transmit-buffer-available, which the IDT
 monitor waits for before writing `mbusCommand`. The command write then reports
 both transmit-buffer-available and empty. This distinction matters because the
 ROM reprograms `mbusControl1` several times while staging DMA.
+
+### Physical topology and electrical contract
+
+Three General Magic patents supply the missing board-level contract:
+[*Method for transmitting information over an intelligent low power serial
+bus*](https://patents.google.com/patent/US5675811A/en),
+[*Support structures for an intelligent low power serial
+bus*](https://patents.google.com/patent/US5812796A/en), and
+[*Method for configuring an intelligent low power serial
+bus*](https://patents.google.com/patent/US5938742A/en). They describe the
+IDCS/Magic Bus generation used with Magic Cap, but are not proof that every
+numeric address or timing choice is unchanged in Apollo. The Apollo SDK ROM
+remains authoritative where the two differ.
+
+The shared physical bus has five named conductors: bidirectional `MBDATA` and
+`MBCLK`, unidirectional upstream `MBINT`, `MBVCC`, and `MBGND`. The documented
+embodiment supplies 3.3 V ±10% at 45 mA maximum. It permits six peripherals,
+uses a single command master, and allows an addressed peripheral to source
+both clock and data during a Get transaction. Its nominal clock range is
+0.5–14.75 MHz; the published minimum setup and hold times are 15 ns. One
+shielded-cable embodiment limits each link to about one metre and pairs
+data/ground and clock/power.
+
+Every peripheral contains a Magic Bus Interface Circuit (MBIC) between its
+upstream connector, downstream connector and local microcontroller. A
+mid-peripheral passes traffic through; the last peripheral terminates its
+downstream clock/data path. SOT/EOT transitions temporarily reverse the
+necessary MBIC buffers for peripheral-to-host traffic. Consequently, the
+current driver's collection of synchronous logical endpoints is enough to
+test ROM payload behavior but is not yet a physical chain.
+
+The distinction is also fundamental to hot-plug. A mid-peripheral passes a
+downstream interrupt upstream, while the last peripheral inverts the
+downstream interrupt. Attaching a new device beyond the old tail therefore
+creates a distinguishable interrupt; assigning the former tail its mid role
+opens the new downstream link. Removing a device makes the immediately
+upstream MBIC signal the break. An interrupt is not merely a wired-OR
+request from one logical endpoint.
+
+### Live attachment contract and current blocker
+
+The unstripped Apollo SDK ROM makes the product-side sequence concrete.
+`MagicBus_HandleAttachedPeripherals` disables request-line interrupts and
+debounces for 1,000 ms. If a peripheral was already known, it sends command
+27 to address zero and requires the request line to remain asserted. It then
+sends command 28 to address six and requires an asserted response, sends
+command 25 to the previous highest assigned address, and begins attaching
+peripherals at the old count. `MagicBus_AssignMagicBusAddresses` accepts only
+addresses zero through five and waits another 500 ms after assignment.
+
+This aligns command 27 with the patent generation's Assign-Mid operation and
+address six with its newly exposed, unassigned-device poll. The relationship
+is stronger evidence than treating either as an ordinary peripheral payload,
+but the patent embodiment assigns addresses in a different order. The Apollo
+ROM's literal zero-through-five behavior must therefore win in the emulator.
+
+A development experiment changed the MAME accessory choice live and generated
+only a synthetic request-line pulse. Both insertion and removal/reinsertion
+reached `MagicBus_HandleMagicBusFailure`; neither completed clean attachment.
+That negative result was not retained as driver code. It demonstrates that
+the next implementation must model, at minimum:
+
+1. an ordered chain with upstream, downstream, mid and last MBIC state;
+2. the distinct attach/detach interrupt polarity and ownership;
+3. command-27 exposure of the new tail and address-six polling; and
+4. preservation or teardown of assigned endpoints according to their physical
+   position.
+
+The acceptance target is a no-reset transition from one keyboard to keyboard
+plus SCTG, followed by removal and reinsertion. It must observe the matching
+ROM attachment/detachment callbacks, preserve traffic to unchanged devices,
+and record no entry into `MagicBus_HandleMagicBusFailure`. The existing
+machine configuration intentionally remains reset-applied until that contract
+is implemented.
 
 ### Address assignment and peripheral information
 

@@ -100,17 +100,20 @@ the contract for future archived WaveLAN, NE2000 and wireless-card work.
 | Storeroom and packages | Packages can be moved, unpacked, sent, backed up and restored through Storeroom (pp. 179–206) | PCLink installs a real package; Storeroom creates a card-resident built-in backup and restores it in a fresh process | Package installation and full built-in backup/restore covered |
 | Storage cards | A card inserted while off is offered for setup after power-on; Option-insert while running can erase/setup it; Magic Cap displays card battery state and can translate older packages (pp. 183–198, 210–215) | Erased `BLNK` setup/naming, persistent `RAMC` remount, live Option-insert reformat, Good/Low/Dead BVD states, a card-backed Notebook object, and built-in backup/restore pass across process boundaries; `Translation.pkg` copies an authentic 1.x `new items` package into Built-in storage and exposes its Notebook page without source writes | Covered |
 | Power | Main and backup batteries are displayed; AC operation recharges the main cell; automatic shutoff defaults to five minutes and is adjustable from 1–60 minutes, optionally while plugged in (pp. 209–211) | Battery ADC levels, AC/cover inputs, retained-RAM suspend/wake, LCD/Magic Bus rail effects and charger-driven main-ADC rise pass; the real Power Controls show 5, clamp at 1/60, and govern plugged-in `SLEE`/VCC-off shutdown | Covered |
-| Magic Bus | The connector supports PCs, external keyboards, external modems and other accessories, commonly daisy-chained (p. 217) | Independently addressed, checksummed `ATKB` and `SCTG` descriptors enumerate together and attach their distinct ROM clients; the keyboard is rediscovered after bus reinitialization and exchanges Set-2/LED traffic; the IDT monitor completes SCTG functions 18/19 through commands 3/7 and returns an exact `FastChecksum` result; the Magic Internet Kit's external-modem route is identified as 38,400-baud UART B and passes a bidirectional RS-232 probe; the production SCTG client's request method is an empty stub | Multi-address discovery, all ROM-observed keyboard/SCTG command traffic and the external-modem byte transport are covered; physical chaining/electrical timing remains |
+| Magic Bus | The connector supports PCs, external keyboards, external modems and other accessories, commonly daisy-chained (p. 217) | Independently addressed, checksummed `ATKB` and `SCTG` descriptors enumerate together and attach their distinct ROM clients; the keyboard is rediscovered after bus reinitialization and exchanges Set-2/LED traffic; the IDT monitor completes SCTG functions 18/19 through commands 3/7 and returns an exact `FastChecksum` result; the Magic Internet Kit's external-modem route is identified as 38,400-baud UART B and passes a bidirectional RS-232 probe; the production SCTG client's request method is an empty stub | Multi-address discovery, all ROM-observed keyboard/SCTG command traffic and the external-modem byte transport are covered; live MBIC chaining and Apollo-specific electrical timing remain |
 | Persistence and privacy | Storage-card backup/restore and power-on password confirmation protect retained information (pp. 196–198, 207–208) | Battery-backed DRAM and RTC survive a two-process power cycle; a card backup restores retained RAM and reaches the success dialog; Controls → Privacy sets and confirms a synthetic PIN, selects **every time**, rejects a wrong wake PIN and accepts the correct one after retained relaunch | Covered |
 
 ## Acceptance backlog derived from the guide
 
 One guide-derived product-level gap remains:
 
-1. **Physical Magic Bus topology.** Recover and exercise daisy-chain and
-   electrical timing. The external modem is a UART-B stream rather than
-   another packet-bus class, the production SCTG request handler is empty,
-   and the ROM symbol audit does not support treating `SCTG` as a disk.
+1. **Physical Magic Bus topology.** Implement the recovered MBIC chain
+   contract and exercise live attach, detach and reinsertion without a reset.
+   The five signals, mid/last interrupt behavior, command-27 transition,
+   address-six poll, six-device limit and ROM debounce are now documented.
+   The external modem is a UART-B stream rather than another packet-bus
+   class, the production SCTG request handler is empty, and the ROM symbol
+   audit does not support treating `SCTG` as a disk.
 
 The smaller UI contracts formerly listed here—Controls-initiated touch
 realignment, volume clamps, password-on-wake, beaming a Notebook page and

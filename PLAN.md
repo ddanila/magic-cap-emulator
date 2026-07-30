@@ -123,7 +123,14 @@ The full regression list and expected checkpoints are in
 
 ## Remaining work
 
-- **Model physical Magic Bus chaining and electrical timing.** The driver now
+- **Model physical Magic Bus chaining and electrical timing.** The primary
+  patent family and Apollo SDK ROM now define the five-wire, six-device MBIC
+  chain: mid/last interrupt polarity, command-27 exposure of a new tail,
+  address-six polling, a 1,000 ms attachment debounce and the 500 ms
+  post-assignment wait. A bare live configuration change plus synthetic MBReq
+  pulse enters `MagicBus_HandleMagicBusFailure`, so it was not retained.
+  Implement ordered upstream/downstream MBIC state and prove no-reset attach,
+  detach and reinsertion without disrupting unchanged devices. The driver now
   enumerates independently addressed `ATKB` and `SCTG` descriptors on the
   shared bus, attaches both built-in ROM clients, and drives the IDT monitor's
   SCTG functions 18 and 19 through command-3 receive and command-7 transmit
@@ -136,9 +143,9 @@ The full regression list and expected checkpoints are in
   now passes a bidirectional host probe. The production ROM's
   `MagicBusSCSITargetClient_PeripheralRequest` is an empty `jr ra; nop`, so
   there is no deeper Magic Cap SCTG payload dispatcher to implement. The
-  remaining evidence-backed gap is physical daisy-chain/electrical timing,
-  not additional invented peer messages, a presumed disk, backing store, or
-  modem class
+  remaining evidence-backed gap is live MBIC chaining and Apollo-specific
+  electrical timing, not additional invented peer messages, a presumed disk,
+  backing store, or modem class
   ([`memory-map.md`](docs/memory-map.md#magic-bus)).
 
 - **Improve hardware fidelity beyond observed ROM needs.** TX39 Config now

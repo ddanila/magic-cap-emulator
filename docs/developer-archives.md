@@ -423,9 +423,11 @@ behavior:
 4. **More PC Card devices are feasible but substantial.** The packages name
    real supported cards and provide MIPS binaries, while each underlying NIC
    or radio still needs a hardware model and deterministic host transport.
-5. **Magic Bus topology has a concrete upper bound and accessory pattern.**
-   Model up to six addressed endpoints before considering an MCU-level
-   peripheral implementation.
+5. **Magic Bus topology has a concrete physical contract.** The General Magic
+   patent family confirms the six-device bound and defines upstream/downstream
+   MBIC buffers, mid/last interrupt behavior, hot attachment and removal. The
+   Apollo ROM adds the exact command-27/address-six sequence and debounce.
+   Model that chain before considering an MCU-level peripheral implementation.
 6. **Earlier 68K targets remain preservation work.** Astro, Envoy and
    PIC-2000 material should stay isolated from the Apollo driver until ROMs
    and matching hardware evidence exist.
