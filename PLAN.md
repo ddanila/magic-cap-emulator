@@ -125,11 +125,14 @@ The full regression list and expected checkpoints are in
   enumerates independently addressed `ATKB` and `SCTG` descriptors on the
   shared bus, attaches both built-in ROM clients, and drives the IDT monitor's
   SCTG functions 18 and 19 through command-3 receive and command-7 transmit
-  DMA. Keyboard and SCTG monitor traffic are bidirectional. The Magic Internet
+  DMA. A non-destructive 24-byte peer command now executes the monitor's real
+  `FastChecksum` dispatcher against its own buffer and verifies the returned
+  status and exact `0x92350908` result. Keyboard and SCTG monitor traffic are
+  bidirectional. The Magic Internet
   Kit proves its similarly named external modem is a 38,400-baud
   `iSerialBServer` stream, not another packet-bus descriptor; that UART-B path
   now passes a bidirectional host probe. The remaining evidence-backed gaps
-  are higher-level SCTG/PCLink peer semantics and physical daisy-chain
+  are additional observed SCTG peer messages and physical daisy-chain
   timing—not a presumed disk, backing store, or invented modem class
   ([`memory-map.md`](docs/memory-map.md#magic-bus)).
 

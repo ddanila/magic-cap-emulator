@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise both directions of the IDT monitor's Magic Bus SCTG transport."""
+"""Execute FastChecksum through both directions of the monitor SCTG transport."""
 
 from __future__ import annotations
 
@@ -22,6 +22,8 @@ DEFAULT_WORKDIR = ASSETS_ROOT / "runtime" / "magicbus-scsi-probe"
 SUPPORTED_SYSTEMS = ("datarover840", "datarover840f", "datarover840j")
 SCSI_TARGET_PERIPH = 0x0000_C1E8
 NUMBER_MAGICBUS_PERIPHS = 0x0000_C168
+SCTG_COMMAND = 0x80
+SCTG_FAST_CHECKSUM = 0x9235_0908
 SCRATCH = 0x0030_0100
 WATCHED = (
     ("init", 0x13C0_5620, "InitMagicBus"),
@@ -44,7 +46,10 @@ RESULT = re.compile(
     rb"command=(\d+) open=(\d+) assign=(\d+) transaction=(\d+) "
     rb"peripherals=(\d+)"
 )
-HOST_DATA = re.compile(rb"Magic Bus SCTG accepted (\d+) host bytes")
+HOST_DATA = re.compile(
+    rb"Magic Bus SCTG accepted (\d+) host bytes, "
+    rb"command=([0-9a-f]+) status=(\d+) result=([0-9a-f]+)"
+)
 MONITOR_COMMAND = "magicbus -i\n"
 TERMINAL_KEYS = {
     "a": (2, 0x0002),
@@ -215,6 +220,9 @@ def parse_result(output: bytes) -> dict[str, int] | None:
     )
     host_data = HOST_DATA.search(output)
     result["host_bytes"] = int(host_data.group(1)) if host_data else 0
+    result["host_command"] = int(host_data.group(2), 16) if host_data else -1
+    result["host_status"] = int(host_data.group(3)) if host_data else -1
+    result["host_result"] = int(host_data.group(4), 16) if host_data else -1
     return result
 
 
@@ -240,8 +248,20 @@ def acceptance_errors(result: dict[str, int]) -> list[str]:
     ):
         if result[name] < 1:
             errors.append(f"{name}={result[name]} (need 1)")
-    if result["host_bytes"] != 16:
-        errors.append(f"host_bytes={result['host_bytes']} (need 16)")
+    if result["host_bytes"] != 24:
+        errors.append(f"host_bytes={result['host_bytes']} (need 24)")
+    if result["host_command"] != SCTG_COMMAND:
+        errors.append(
+            f"host_command={result['host_command']:#04x} "
+            f"(need {SCTG_COMMAND:#04x})"
+        )
+    if result["host_status"] != 0:
+        errors.append(f"host_status={result['host_status']} (need 0)")
+    if result["host_result"] != SCTG_FAST_CHECKSUM:
+        errors.append(
+            f"host_result={result['host_result']:#010x} "
+            f"(need {SCTG_FAST_CHECKSUM:#010x})"
+        )
     return errors
 
 
@@ -325,8 +345,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Artifacts: {run_dir}")
         return 1
     print(
-        "PASS: IDT monitor discovered SCTG at address 0 and completed its "
-        "command-3 receive and command-7 send transactions"
+        "PASS: IDT monitor discovered SCTG, executed FastChecksum through "
+        "command 3, and returned 0x92350908 through command 7"
     )
     print(f"Artifacts: {run_dir}")
     return 0

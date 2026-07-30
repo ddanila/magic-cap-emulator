@@ -14,6 +14,21 @@ controller: the ROM's PCLink service demonstrably uses UART A, while the
 pin/multiplexer relationship at that jack is not yet proven, so the product
 name alone is not evidence that PCLink bytes belong in the packet controller.
 
+There is a second, distinct monitor transport: the IDT monitor can discover an
+`SCTG` descriptor on Dino's packet-oriented Magic Bus and route functions 18
+and 19 through its `GetDataFunction` and `SendDataFunction`. The maintained
+SCTG probe now sends the monitor's non-destructive `FastChecksum` command
+through command 3 and receives the exact `0x92350908` result through command
+7. This proves a higher-level command/response buffer over SCTG, but it does
+not make the Magic Cap Storeroom service below use that path. The two proven
+transports remain:
+
+- Magic Cap PCLink package installation over UART A; and
+- the IDT monitor's SCTG command buffer over Magic Bus.
+
+The recovered SCTG buffer layout, complete command-selector audit and focused
+probe are documented in [`memory-map.md`](memory-map.md#sctg-monitorpclink-transport).
+
 No package, ROM, or Windows executable is committed. Keep all of them in the
 persistent `$MAGIC_CAP_ASSETS/` tree.
 

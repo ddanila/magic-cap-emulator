@@ -53,7 +53,8 @@ class ResultTests(unittest.TestCase):
             b"MAGICBUS SCTG address=0 init=1 init_done=1 check=4 get_data=1 "
             b"get_done=1 send_dispatch=1 send_data=1 command=2 open=2 "
             b"assign=2 transaction=17 peripherals=1\n"
-            b"Magic Bus SCTG accepted 16 host bytes\n"
+            b"Magic Bus SCTG accepted 24 host bytes, "
+            b"command=80 status=0 result=92350908\n"
         )
         result = probe.parse_result(output)
 
@@ -73,7 +74,10 @@ class ResultTests(unittest.TestCase):
                 "assign": 2,
                 "transaction": 17,
                 "peripherals": 1,
-                "host_bytes": 16,
+                "host_bytes": 24,
+                "host_command": 0x80,
+                "host_status": 0,
+                "host_result": 0x9235_0908,
             },
         )
         assert result is not None
@@ -95,6 +99,9 @@ class ResultTests(unittest.TestCase):
             "transaction": 0,
             "peripherals": 0,
             "host_bytes": 0,
+            "host_command": -1,
+            "host_status": -1,
+            "host_result": -1,
         }
 
         self.assertEqual(
@@ -112,7 +119,10 @@ class ResultTests(unittest.TestCase):
                 "open=0 (need 1)",
                 "assign=0 (need 1)",
                 "transaction=0 (need 1)",
-                "host_bytes=0 (need 16)",
+                "host_bytes=0 (need 24)",
+                "host_command=-0x1 (need 0x80)",
+                "host_status=-1 (need 0)",
+                "host_result=-0x0000001 (need 0x92350908)",
             ],
         )
 

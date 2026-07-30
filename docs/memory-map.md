@@ -430,21 +430,41 @@ enumeration presents the request after the information record is accepted.
 For the target-to-host direction, the monitor:
 
 1. enters `CheckMagicBus`;
-2. reads a 16-byte command-1 request record whose length is four 32-bit words
+2. reads a 16-byte command-1 request record whose length is six 32-bit words
    and whose function byte is 18;
 3. routes that function to `GetDataFunction`; and
-4. issues command 3 to receive the aligned 16-byte target payload.
+4. issues command 3 to receive the aligned 24-byte target payload.
 
-The payload is deliberately a zeroed monitor command. Function zero is
-unsupported, so the ROM acknowledges the transfer without reading or modifying
-target memory.
+The payload executes the monitor's safe `FastChecksum` command (`0x80`) against
+the first 16 bytes of `mBusBuffer` itself. Its recovered command layout is:
+
+| Offset | Size | Probe value | Meaning |
+|---:|---:|---:|---|
+| `0` | 1 | `0x80` | command selector |
+| `2` | 1 | returned `0` | status; `GetDataFunction` clears it before dispatch and writes `1` for an unsupported selector |
+| `4` | 4 | `0x0000b280` | source address (`mBusBuffer`) |
+| `8` | 4 | `0x00000010` | byte length |
+| `16` | 4 | `0x12345678` | initial 32-bit sum |
+| `20` | 4 | returned `0x92350908` | result |
+
+`FastChecksum` adds four big-endian words to the supplied initial value, so
+the independently predictable result is
+`0x12345678 + 0x80000000 + 0x0000b280 + 0x10 = 0x92350908`.
+The source excludes the result field, keeping the operation deterministic and
+confined to the monitor's own scratch buffer.
 
 The opposite request record uses function byte 19. `CheckMagicBus` routes it
-to `SendDataFunction`, which issues command 7 and transmits a 16-byte
-monitor/PCLink buffer to the target through Dino DMA. The modeled target
-consumes the complete record and raises DMA-end completion. The probe invokes
-`magicbus -i` once for each direction because one monitor command services one
-transport request.
+to `SendDataFunction`, which issues command 7 and transmits the modified
+24-byte monitor/PCLink buffer to the target through Dino DMA. The modeled target
+checks command, status, length and exact result before raising DMA-end
+completion. The probe invokes `magicbus -i` once for each direction because
+one monitor command services one transport request.
+
+The same dispatcher also exposes selectors `0x20` (`SystemStatus`), `0x40`
+(`ProgramTheFlash`), `0xa0` (`SetCardPower`) and `0xc0` (`CCITTChecksum`).
+Those routines are now mapped from the SDK ELF, but the peer deliberately does
+not invoke the destructive flash/card-power operations. `CCITTChecksum` adds
+no new transport behavior beyond the verified checksum round trip.
 
 Dino receive DMA writes physical DRAM behind the CPU's cached low-address
 mapping. After each modeled receive write, the driver invalidates matching
@@ -488,7 +508,8 @@ The SCTG probe boots the release monitor, types `magicbus -i` through the
 terminal's real key matrix, and holds the target-to-host request through
 discovery. After function 18 and command 3 complete, it invokes the command a
 second time with the host-to-target request and requires `SendDataFunction`
-plus a 16-byte command-7 DMA receipt. It also requires the monitor's open,
+plus a 24-byte command-7 DMA receipt containing command `0x80`, status zero
+and result `0x92350908`. It also requires the monitor's open,
 assignment, command and low-level transaction checkpoints and a final
 peripheral count of one, covering Dino-to-R3900 cache coherency during the
 checksummed discovery DMA. It uses the SCSI-only configuration
