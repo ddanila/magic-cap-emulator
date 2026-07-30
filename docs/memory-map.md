@@ -145,6 +145,62 @@ and an encoded end address to `+0x034`.
 Betty is **not** this register block. It is an external device reached through
 Dino's SIB subframe registers; see [`betty-registers.md`](betty-registers.md).
 
+### Master clock gates
+
+`masterClock` at offset `0x1c0` is more than a shadow register. The SDK's
+`Dino.asm.h` assigns these independent peripheral clocks:
+
+| Bit | Mask | Clocked engine |
+|---:|---:|---|
+| 18 | `0x00040000` | video |
+| 17 | `0x00020000` | Magic Bus |
+| 15 | `0x00008000` | periodic timer |
+| 14 | `0x00004000` | fast timer |
+| 11 | `0x00000800` | SIB |
+| 2 | `0x00000004` | consumer-infrared block |
+| 1 | `0x00000002` | UART A |
+| 0 | `0x00000001` | UART B |
+
+Release-ROM accesses confirm that these are active gates, not merely power
+bookkeeping. Early initialization writes `0x00002abb`; timer setup adds bit
+15, SIB command traffic clears and restores bit 11, `VideoOff` clears bit 18,
+and Magic Bus issue/disable paths set and clear bit 17 independently.
+
+The driver now applies those clocks to every represented consumer. Video
+scanout requires both its clock and Apollo's LCD supply while retaining the
+framebuffer. UART status, receive and transmit require the corresponding UART
+clock, including pulsed IrDA mode. Magic Bus stops reporting enabled and does
+not complete new commands while clocked off. SIB frame service and
+sound/telecom DMA timers pause. Clearing the timer clock suppresses the
+periodic timer; programmed registers and DMA positions are retained across
+these clock transitions.
+
+The battery-backed RTC is deliberately independent. During normal power-down,
+the release ROM writes `masterClock = 0` at `0x13c3a428`, then
+`PowerDownPeripherals` immediately samples `rtcLow` in its delay loop at
+`0x13c3a4e8`–`0x13c3a540`. Gating RTC/alarm timekeeping with bit 15 deadlocks
+that real path, so the model keeps the RTC, alarm and rollover timers live.
+
+Run the isolated acceptance check with:
+
+```sh
+python3 tools/dino_clock_regression.py
+```
+
+It parks the CPU before direct register writes, proves both UART clocks
+(including pulsed mode), then checks SIB boundaries, Magic Bus command
+completion, periodic interrupt suppression/resume, and continued RTC
+advancement. The video gate is also covered by normal boot/Workbench
+validation and the driver's shared clock-and-LCD blanking path. Bit 14's
+fast-timer engine and the exact power-control stop-timer duration remain
+unresolved; neither has been assigned guessed timing.
+
+Bit 2 is not coupled to the pulsed UART transport. A complete two-peer Beam
+run leaves `kClockEnIrClkMask` clear while UART B exchanges SIR frames in both
+directions. That clock belongs to Dino's separate consumer-infrared register
+block at `0x0a0`–`0x0a8`, which is not modeled; applying it to IrDA breaks an
+observed release-ROM path.
+
 ### Implemented semantics
 
 The current behavioral model implements the subset exercised by the verified
@@ -189,6 +245,8 @@ boot, OS, and peripheral regressions:
 - Power-on mode input bit 3: high boots Magic Cap, low stays in the IDT
   monitor.
 - Video high-buffer selection and 480×320, 2 bpp framebuffer scanout.
+- Functional `masterClock` gates for video, both UARTs, Magic Bus,
+  SIB, and the periodic timer; RTC/alarm/rollover timekeeping remains live.
 - Main DRAM backed by MAME NVRAM, kept in the external runtime directory
   selected with `-nvram_directory`.
 

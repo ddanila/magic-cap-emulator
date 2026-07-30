@@ -280,6 +280,7 @@ python3 tools/fax_pair_regression.py \
 python3 tools/battery_regression.py
 python3 tools/power_outputs_regression.py
 python3 tools/power_policy_regression.py
+python3 tools/dino_clock_regression.py
 python3 tools/magicbus_probe.py
 python3 tools/magicbus_probe.py --two-accessories --require-clean
 python3 tools/magicbus_scsi_probe.py
@@ -356,8 +357,11 @@ bridges their dedicated IrDA PTYs. It drives the real Magic Lamp → Beam UI,
 pulses Dino's IrDA carrier input, requires the sender to discover and select
 `bob Receiver`, and transfers `alice Sender`'s name card. The check decodes
 complete SIR frames, requires traffic and peer names in both directions, and
-requires the serialized name-card payload. Raw wire captures, both MAME logs,
-generated Lua, NVRAM, and UI snapshots remain under
+requires the serialized name-card payload. A Linux PTY `EIO` after either
+emulator closes its slave is treated as end-of-file, so normal teardown cannot
+preempt collection of the peer reports and wire evidence; other PTY errors
+still fail the run. Raw wire captures, both MAME logs, generated Lua, NVRAM,
+and UI snapshots remain under
 `$MAGIC_CAP_ASSETS/runtime/beam-regression/`.
 
 The sound harness boots with SDL's dummy audio backend and asks MAME to write
@@ -464,6 +468,16 @@ full, half, quarter, and eighth processor rates within 3%, then sets RF=`10`
 with Config.Lock and proves a later full-rate write changes neither Config nor
 the measured quarter rate. Its artifacts remain under
 `$MAGIC_CAP_ASSETS/runtime/tx39-clock-regression/`.
+
+The Dino clock companion parks the CPU and drives `masterClock` directly. It
+first clears the register and requires both UARTs and Magic Bus to report
+disabled, rejects UART/IrDA/Magic Bus completions, sees no SIB frame or
+periodic interrupt, and requires the independent RTC to keep advancing. It
+then restores the UART, Magic Bus, SIB and timer clocks and requires both UART
+transmits including UART-B pulsed mode, bus completion, SIB frame boundaries
+and periodic interrupt while checking uninterrupted RTC advancement.
+Generated Lua, isolated configuration/NVRAM and output remain under
+`$MAGIC_CAP_ASSETS/runtime/dino-clock-regression/`.
 
 The PC Card harness copies the verified 840F flasher into its persistent run
 directory, inserts that disposable copy after the workbench appears, and

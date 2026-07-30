@@ -19,6 +19,7 @@ Offsets are into the Dino module at `0xb0c0_0000` (kseg1 → physical
 | `0x110` | `interrupt5` | Holds the on-button edge latches — the wake reason |
 | `0x118`–`0x12c` | `interrupt1Enable`–`interrupt6Enable` | Per-bank enables; the shutdown path rewrites all six |
 | `0x180` | `ioControl` | Polled while powering down (bit 2) |
+| `0x1c0` | `masterClock` | Independent video, bus, SIB, periodic-timer and UART clocks used by this ROM |
 | `0x1c4` | `powerControl` | Power state, stop-CPU, and live on-button status |
 
 `powerControl` bits, named by `Dino.asm.h`:
@@ -401,6 +402,16 @@ The driver therefore:
 - derives power-control bit 31 from the live input port and applies the SDK's
   exact `kPowerWriteMask` (`0x0000ffbf`); and
 - resets Betty/SIB on a VCC-off wake, but preserves them across a VCC-on doze.
+
+`masterClock` is modeled separately from these CPU/VCC transitions. Its timer
+bit stops and restarts the periodic timer, while the SIB bit does the same for
+its frame and DMA timers. The battery-backed RTC is not gated: the release ROM
+clears all master clocks during normal power-down and immediately uses
+`rtcLow` for a delay. Video, Magic Bus and UART gates are detailed and
+independently regressed in
+[the Dino register map](memory-map.md#master-clock-gates). The fast-timer
+clock and the power-control stop timer's exact duration remain unmodeled
+rather than using an inferred scale.
 
 ## Automated acceptance
 

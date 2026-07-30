@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import importlib.util
+import errno
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 MODULE_PATH = Path(__file__).parents[1] / "tools" / "beam_regression.py"
@@ -84,6 +86,19 @@ class SirFrameTests(unittest.TestCase):
         self.assertEqual(
             beam.decode_sir_frames(bytes([beam.SIR_BEGIN, 0x01])), []
         )
+
+
+class PtyTests(unittest.TestCase):
+    def test_treats_linux_eio_after_slave_closure_as_eof(self) -> None:
+        with patch.object(beam.os, "read", side_effect=OSError(errno.EIO, "closed")):
+            self.assertIsNone(beam._read_irda(10))
+
+    def test_does_not_hide_other_pty_read_errors(self) -> None:
+        with patch.object(
+            beam.os, "read", side_effect=OSError(errno.EBADF, "bad descriptor")
+        ):
+            with self.assertRaises(OSError):
+                beam._read_irda(10)
 
 
 if __name__ == "__main__":

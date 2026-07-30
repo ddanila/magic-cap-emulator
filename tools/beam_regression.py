@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import os
 import re
 import selectors
@@ -315,7 +316,20 @@ def _open_irda(path: str) -> int:
     return fd
 
 
-def _write_all(fd: int, data: bytes) -> None:
+def _read_irda(fd: int) -> bytes | None:
+    """Read a PTY, treating Linux EIO after slave closure as EOF."""
+    try:
+        return os.read(fd, 65_536)
+    except BlockingIOError:
+        return b""
+    except OSError as error:
+        if error.errno == errno.EIO:
+            return None
+        raise
+
+
+def _write_all(fd: int, data: bytes) -> bool:
+    """Write a complete chunk, returning false if the PTY slave closed."""
     view = memoryview(data)
     while view:
         try:
@@ -326,7 +340,20 @@ def _write_all(fd: int, data: bytes) -> None:
             select.select(1)
             select.close()
             continue
+        except OSError as error:
+            if error.errno == errno.EIO:
+                return False
+            raise
         view = view[count:]
+    return True
+
+
+def _close_irda(selector: selectors.BaseSelector, peer: Peer) -> None:
+    if peer.ir_fd is None:
+        return
+    selector.unregister(peer.ir_fd)
+    os.close(peer.ir_fd)
+    peer.ir_fd = None
 
 
 def _parse_report(output: bytes) -> tuple[dict[str, int], int, int] | None:
@@ -443,18 +470,20 @@ def run_regression(args: argparse.Namespace) -> int:
                                 peer.ir_fd, selectors.EVENT_READ, ("irda", peer)
                             )
                 else:
-                    assert peer.ir_fd is not None
-                    try:
-                        chunk = os.read(peer.ir_fd, 65_536)
-                    except BlockingIOError:
+                    if peer.ir_fd is None:
+                        continue
+                    chunk = _read_irda(peer.ir_fd)
+                    if chunk is None:
+                        _close_irda(selector, peer)
                         continue
                     if not chunk:
                         continue
+                    assert peer.ir_tx is not None
+                    peer.ir_tx.extend(chunk)
                     other = peers[1] if peer is peers[0] else peers[0]
                     if other.ir_fd is not None:
-                        _write_all(other.ir_fd, chunk)
-                        assert peer.ir_tx is not None
-                        peer.ir_tx.extend(chunk)
+                        if not _write_all(other.ir_fd, chunk):
+                            _close_irda(selector, other)
         else:
             raise TimeoutError("paired MAME run timed out")
 
