@@ -289,6 +289,7 @@ python3 tools/magicbus_probe.py --two-accessories --require-clean
 python3 tools/magicbus_scsi_probe.py
 python3 tools/ir_probe.py
 python3 tools/beam_regression.py
+python3 tools/beam_regression.py --item notebook
 python3 tools/tx39_regression.py
 python3 tools/tx39_refill_regression.py
 python3 tools/tx39_clock_regression.py
@@ -385,14 +386,17 @@ two logs and native LCD snapshots remain under
 The Beam harness starts two fresh communicators with isolated configuration
 and NVRAM, calibrates and creates owner name cards for Alice and Bob, then
 bridges their dedicated IrDA PTYs. It drives the real Magic Lamp → Beam UI,
-pulses Dino's IrDA carrier input, requires the sender to discover and select
-`bob Receiver`, and transfers `alice Sender`'s name card. The check decodes
-complete SIR frames, requires traffic and peer names in both directions, and
-requires the serialized name-card payload. A Linux PTY `EIO` after either
-emulator closes its slave is treated as end-of-file, so normal teardown cannot
-preempt collection of the peer reports and wire evidence; other PTY errors
-still fail the run. Raw wire captures, both MAME logs, generated Lua, NVRAM,
-and UI snapshots remain under
+pulses Dino's IrDA carrier input, and requires the sender to discover and
+select `bob Receiver`. The default transfers `alice Sender`'s name card;
+`--item notebook` instead opens the Desk Notebook and sends its displayed
+page. The check decodes complete SIR frames, requires traffic and peer names
+in both directions, and distinguishes the serialized bodies: a third
+`alice Sender` identifies the name-card body, while the page carries the
+ROM's `Note Card` label. Both runs require the receiver Inbox to advance to
+two. A Linux PTY `EIO` after either emulator closes its slave is treated as
+end-of-file, so normal teardown cannot preempt collection of the peer reports
+and wire evidence; other PTY errors still fail the run. Raw wire captures,
+both MAME logs, generated Lua, NVRAM, and UI snapshots remain under
 `$MAGIC_CAP_ASSETS/runtime/beam-regression/`.
 
 The sound harness boots with SDL's dummy audio backend and asks MAME to write
@@ -737,7 +741,7 @@ the separate serial-terminal view.
 | PC Cards | Both Glacier-backed slots pass common-memory, CIS, write/readback and live-OS checks; blank storage setup, persistent `RAMC` remount, Option-insert reformat, Good/Low/Dead battery pins, a card-backed Notebook object and full built-in backup/restore also pass; `Translation.pkg` copies an authentic 1.x `new items` package into Built-in storage without source writes |
 | PC Card Ethernet | The archived EtherLink driver initializes the 3C589, completes ARP/TCP through rootless libslirp, renders deterministic local HTTP, and carries Browser 3.5's native HTTPS Rule through a loopback Crypto Ancienne proxy; the absolute request, decrypted request, and rendered result are checked |
 | PCLink | The Storeroom computer installs archived `DvorakKeyboard.pkg`; the optional 452K TLS-browser package also transfers, disconnects cleanly, and records zero ROM Magic Bus failures |
-| IrDA / Beam | Two fresh peers exchange SIR discovery frames, select `bob Receiver`, and transfer `alice Sender`'s name card into the receiver's Inbox |
+| IrDA / Beam | Two fresh peers exchange SIR discovery frames, select `bob Receiver`, and transfer either `alice Sender`'s name card or the displayed Notebook page into the receiver's Inbox |
 | PC Card modem | Magic Cap detects the card, completes its Hayes sequence, emits an async-HDLC PPP LCP frame, and preserves its 16550/RX/IREQ state without a false card edge across save/load |
 | Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
 

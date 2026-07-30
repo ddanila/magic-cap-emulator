@@ -21,8 +21,8 @@ power-on password protection, speaker output
 and microphone sound-stamp recording/playback, live AC charging with LCD/Magic
 Bus power-rail effects and configurable
 automatic shutoff, both PC Card slots, package installation over serial PCLink,
-IrDA beaming
-between two emulated communicators, Web Browser 4.0 fetching local HTTP over
+IrDA beaming of name cards and Notebook pages between two emulated
+communicators, Web Browser 4.0 fetching local HTTP over
 both live PC Card PPP and the original EtherLink III driver, and deterministic
 native `https://` dispatch through Web Browser 3.5's TLS proxy Rule and Crypto
 Ancienne all work, each covered by an automated regression. Blank, formatted,

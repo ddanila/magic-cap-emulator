@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from PIL import Image, ImageChops
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ASSETS_ROOT = Path(
@@ -108,8 +110,9 @@ def automation_script(
     sender: bool,
     exit_frame: int,
     debug_counters: bool = False,
+    item: str = "name-card",
 ) -> str:
-    """Drive calibration, owner setup, and the sender's Beam command."""
+    """Drive owner setup and beam either a name card or Notebook page."""
     first_start = 4800
     last_start = first_start + 100 + len(first_name) * NAME_KEY_INTERVAL
     done_frame = last_start + (len(last_name) + 1) * NAME_KEY_INTERVAL
@@ -139,8 +142,9 @@ def automation_script(
         if debug_counters
         else "if frames == 1220 then press(240, 160)"
     )
+    item_x = 135 if item == "name-card" else 335
     sender_steps = (
-        """    elseif frames == 7300 then press(135, 170)
+        f"""    elseif frames == 7300 then press({item_x}, 170)
     elseif frames == 7320 then release()
     elseif frames == 7500 then press(181, 301)
     elseif frames == 7520 then release()
@@ -259,6 +263,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--workdir", type=Path, default=DEFAULT_WORKDIR)
     parser.add_argument("--frames", type=int, default=9200)
     parser.add_argument("--timeout", type=float, default=900)
+    parser.add_argument(
+        "--item",
+        choices=("name-card", "notebook"),
+        default="name-card",
+        help="displayed object to beam (default: name-card)",
+    )
     parser.add_argument(
         "--debug-counters",
         action="store_true",
@@ -392,6 +402,21 @@ def decode_sir_frames(data: bytes) -> list[bytes]:
     return frames
 
 
+def item_payload_present(item: str, data: bytes) -> bool:
+    """Distinguish the two serialized item bodies in the sender stream."""
+    if item == "notebook":
+        return b"Note Card" in data
+    return data.count(b"alice Sender") >= 3 and b"Note Card" not in data
+
+
+def image_region_changed(first: Path, second: Path, box: tuple[int, ...]) -> bool:
+    """Return whether the selected RGB screenshot region changed."""
+    with Image.open(first) as first_image, Image.open(second) as second_image:
+        first_crop = first_image.convert("RGB").crop(box)
+        second_crop = second_image.convert("RGB").crop(box)
+        return ImageChops.difference(first_crop, second_crop).getbbox() is not None
+
+
 def run_regression(args: argparse.Namespace) -> int:
     mame = args.mame.expanduser().resolve()
     rompath = args.rompath.expanduser().resolve()
@@ -427,6 +452,7 @@ def run_regression(args: argparse.Namespace) -> int:
                     sender,
                     args.frames,
                     args.debug_counters,
+                    args.item,
                 ),
                 encoding="utf-8",
             )
@@ -536,7 +562,9 @@ def run_regression(args: argparse.Namespace) -> int:
                 b"Dear bob," not in sender_data
                 or b"The following item was received via beam:" not in sender_data
             ):
-                failures.append("sender did not transmit the name-card payload")
+                failures.append("sender did not transmit the Beam envelope")
+            if not item_payload_present(args.item, sender_data):
+                failures.append(f"sender did not transmit the {args.item} item body")
             expected_snapshots = (
                 root / "sender" / "snapshots" / "beam-peer-discovery.png",
                 root / "sender" / "snapshots" / "beam-recipient-selected.png",
@@ -545,13 +573,26 @@ def run_regression(args: argparse.Namespace) -> int:
             )
             if not all(path.is_file() for path in expected_snapshots):
                 failures.append("Beam workflow snapshots are incomplete")
+            else:
+                receiver_before = (
+                    root / "receiver" / "snapshots" / "owner-setup-complete.png"
+                )
+                receiver_after = expected_snapshots[-1]
+                if not receiver_before.is_file() or not image_region_changed(
+                    receiver_before, receiver_after, (176, 52, 236, 110)
+                ):
+                    failures.append("receiver Inbox count did not advance")
         if failures:
             print("FAIL: " + "; ".join(failures), file=sys.stderr)
             print(f"Artifacts: {root}")
             return 1
         print(
             "PASS: paired IrDA discovery selected the receiver and transferred "
-            "the sender's name card"
+            + (
+                "the sender's Notebook page"
+                if args.item == "notebook"
+                else "the sender's name card"
+            )
         )
         print(f"Artifacts: {root}")
         return 0

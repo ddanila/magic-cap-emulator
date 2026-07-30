@@ -3,9 +3,12 @@ from __future__ import annotations
 import importlib.util
 import errno
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+from PIL import Image
 
 
 MODULE_PATH = Path(__file__).parents[1] / "tools" / "beam_regression.py"
@@ -28,9 +31,7 @@ class NameAutomationTests(unittest.TestCase):
             beam.name_key_steps("alice-1", 1000)
 
     def test_script_drives_real_beam_ui_and_instruments_link(self) -> None:
-        script = beam.automation_script(
-            "sender", "alice", "sender", True, 10_000, True
-        )
+        script = beam.automation_script("sender", "alice", "sender", True, 10_000, True)
         self.assertIn("frames == 4400 then press(376, 301)", script)
         self.assertIn("frames == 7300 then press(135, 170)", script)
         self.assertIn("frames == 7500 then press(181, 301)", script)
@@ -41,6 +42,18 @@ class NameAutomationTests(unittest.TestCase):
         self.assertIn("BEAM_REPORT role=sender", script)
         for _name, address in beam.WATCHED:
             self.assertIn(f"0x{address:08x}", script)
+
+    def test_notebook_mode_opens_the_desk_notebook_stack(self) -> None:
+        script = beam.automation_script(
+            "sender",
+            "alice",
+            "sender",
+            True,
+            10_000,
+            item="notebook",
+        )
+        self.assertIn("frames == 7300 then press(335, 170)", script)
+        self.assertNotIn("frames == 7300 then press(135, 170)", script)
 
 
 class ReportTests(unittest.TestCase):
@@ -83,9 +96,29 @@ class SirFrameTests(unittest.TestCase):
         )
 
     def test_ignores_incomplete_frame(self) -> None:
-        self.assertEqual(
-            beam.decode_sir_frames(bytes([beam.SIR_BEGIN, 0x01])), []
-        )
+        self.assertEqual(beam.decode_sir_frames(bytes([beam.SIR_BEGIN, 0x01])), [])
+
+    def test_item_payloads_are_type_specific(self) -> None:
+        name_card = b"alice Sender" * 3
+        notebook = b"alice Sender" * 2 + b"Note Card"
+        self.assertTrue(beam.item_payload_present("name-card", name_card))
+        self.assertFalse(beam.item_payload_present("notebook", name_card))
+        self.assertTrue(beam.item_payload_present("notebook", notebook))
+        self.assertFalse(beam.item_payload_present("name-card", notebook))
+
+    def test_image_region_change_is_scoped(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "first.png"
+            second = root / "second.png"
+            Image.new("RGB", (480, 320), "white").save(first)
+            changed = Image.new("RGB", (480, 320), "white")
+            changed.putpixel((200, 80), (0, 0, 0))
+            changed.save(second)
+            self.assertTrue(
+                beam.image_region_changed(first, second, (176, 52, 236, 110))
+            )
+            self.assertFalse(beam.image_region_changed(first, second, (0, 0, 100, 40)))
 
 
 class PtyTests(unittest.TestCase):

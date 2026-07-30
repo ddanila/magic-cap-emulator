@@ -90,6 +90,7 @@ Run:
 
 ```sh
 python3 tools/beam_regression.py
+python3 tools/beam_regression.py --item notebook
 ```
 
 The headless harness:
@@ -97,20 +98,22 @@ The headless harness:
 1. starts two release-ROM machines with independent fresh NVRAM;
 2. calibrates both and creates `alice Sender` and `bob Receiver` owner cards;
 3. opens both IrDA PTYs and bridges their bytes in both directions;
-4. drives the sender through Name cards → Magic Lamp → Beam;
+4. displays either Alice's name card or the Desk Notebook page, then opens
+   Magic Lamp → Beam;
 5. pulses carrier, requires discovery of `bob Receiver`, selects and accepts
    that peer, then touches **send**; and
-6. decodes the captured SIR frames and requires the peer names and serialized
-   name-card payload.
+6. decodes the captured SIR frames and requires the peer names, common Beam
+   envelope and the selected serialized item body.
 
 This matches the product workflow in *Using Magic Cap*, pp. 78–79 and 133:
 show a card or page, open the Magic lamp, choose Beam, allow discovery to fill
 the recipient, select a name if more than one peer is visible, then send. The
 guide also defines two boundaries that the PTY transport intentionally does not
 pretend to model: physical line-of-sight/range, and incompatibility between
-Magic Cap 3.1 beaming and earlier Magic Cap versions. A notebook-page transfer
-and an explicit old-version rejection remain optional product-level extensions;
-see [`user-guide.md`](user-guide.md).
+Magic Cap 3.1 beaming and earlier Magic Cap versions. The displayed-page
+contract is covered by `--item notebook`; an explicit old-version rejection
+remains an optional product-level extension; see
+[`user-guide.md`](user-guide.md).
 
 A representative passing transfer sent 22 complete frames / 1,491 bytes from
 Alice and 15 frames / 323 bytes from Bob. The sender stream contains
@@ -118,6 +121,12 @@ Alice and 15 frames / 323 bytes from Bob. The sender stream contains
 `The following item was received via beam:` notification; the reverse stream
 contains `bob Receiver`. The final receiver capture shows its Desk Inbox
 counter advance from 1 to 2.
+
+The Notebook variant sent 27 complete frames / 2,033 bytes from Alice and 20
+frames / 414 bytes from Bob. It uses the same envelope and peer discovery but
+contains the distinct serialized `Note Card` item label; the name-card control
+does not. The sender returns to the visible Notebook and the receiver Inbox
+likewise advances from 1 to 2.
 
 Every run keeps raw `irda-transmit.bin` streams, generated Lua, MAME output,
 isolated NVRAM, and snapshots of discovery, selected recipient, sender result,
