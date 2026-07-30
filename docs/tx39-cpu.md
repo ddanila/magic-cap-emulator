@@ -34,6 +34,16 @@ function values 0 and 1. Those add a signed or unsigned 32×32 product to the
 existing `HI:LO` accumulator, write the 64-bit result back to `HI:LO`, and
 also write its low word to `rd`.
 
+The same manual supplies an exact arithmetic-pipeline contract. `MULT`,
+`MULTU`, `MADD`, and `MADDU` can be issued on consecutive cycles, and their
+HI/LO result is available to the immediately following instruction. A
+following instruction that instead reads the multiply's GPR destination
+stalls for one cycle. `DIV` and `DIVU` take 35 cycles in a unit independent of
+the integer pipeline: unrelated instructions continue, while `MFHI`, `MFLO`,
+`MADD`, and `MADDU` interlock until the result is ready. Division continues
+through exceptions, pauses with the CPU in Halt/Doze, and is cancelled by
+`MTHI`, `MTLO`, or a new divide.
+
 ## ROM audit
 
 The hosted SDK ELF's executable `.text` section contains 792 aligned
@@ -129,8 +139,9 @@ operation. Leaving the prefetched words resident makes
 `AssignMagicBusAddresses` reject a byte-for-byte correct record; invalidating
 the DMA range lets the monitor discover the SCTG endpoint while retaining the
 documented four-word data refill. DALc-locked lines remain private on-chip
-storage and are deliberately not invalidated. External-bus timing and detailed
-per-instruction cycle costs are not claimed.
+storage and are deliberately not invalidated. Multiply/divide timing is
+modelled as described below; external-bus wait states, cache-refill timing and
+the load-use interlock are not yet claimed.
 
 ## Emulator behavior and regression
 
@@ -141,12 +152,24 @@ raise Reserved Instruction for primary opcode `0x1c`. The R3900
 disassembler shows a nonzero destination explicitly, while other MIPS-I
 devices retain the conventional spelling.
 
+The R3900 arithmetic pipeline is also device-specific. Multiply and
+multiply/add accept one instruction per emulated processor cycle. A nonzero
+GPR destination records a one-cycle dependency, charged only if the next
+executed instruction actually reads it; exceptions flush that dependency.
+Division retains a pending result and 35-cycle countdown while independent
+integer and exception-handler instructions execute. HI/LO consumers spend the
+remaining cycles at their interlock, while `MTHI`, `MTLO`, or another divide
+discard the pending result. Pending results, countdowns and dependencies are
+save-state data. Other MIPS-I devices retain MAME's previous blocking divide
+and multiply timing.
+
 Run the isolated CPU regressions with:
 
 ```sh
 python3 tools/tx39_regression.py
 python3 tools/tx39_refill_regression.py
 python3 tools/tx39_clock_regression.py
+python3 tools/tx39_timing_regression.py
 ```
 
 It writes a suite of tiny uncached-RAM programs into the running DataRover
@@ -204,3 +227,14 @@ attempts to restore RF=`00`, and counts `51177` iterations while reading back
 the still-locked quarter-rate Config value. This verifies the functional
 processor divider without claiming external-bus wait-state accuracy.
 Artifacts stay under `$MAGIC_CAP_ASSETS/runtime/tx39-clock-regression/`.
+
+The timing companion compares fixed-duration uncached loops. A reference run
+counted `204744` three-cycle baseline iterations; after normalization, the
+one-cycle-issue `MULT`, `MADD`, and unconsumed `DIV` loops differed by less
+than 0.01%. An immediate GPR consumer reduced `MULT` throughput by exactly one
+cycle per loop. `DIV` followed by `MFLO` completed `15749` 39-cycle loops,
+returned `100 / 7 = 14`, and a separate `MTHI` case retained `0x1234` after
+cancelling an active divide. This distinguishes real divider overlap from the
+old implementation, which charged all 35 cycles at `DIV` and prevented
+unrelated execution. Artifacts stay under
+`$MAGIC_CAP_ASSETS/runtime/tx39-timing-regression/`.
