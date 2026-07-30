@@ -21,9 +21,7 @@ class ScriptTests(unittest.TestCase):
                 self.assertIn(f"0x{address:08x}", script)
 
     def test_each_counter_gets_its_own_slot(self) -> None:
-        slots = {
-            probe.SCRATCH + index * 4 for index, _ in enumerate(probe.WATCHED)
-        }
+        slots = {probe.SCRATCH + index * 4 for index, _ in enumerate(probe.WATCHED)}
 
         self.assertEqual(len(slots), len(probe.WATCHED))
 
@@ -31,7 +29,7 @@ class ScriptTests(unittest.TestCase):
         # Two chained `do` commands halt the machine instead of continuing,
         # which reads as the code under test hanging.
         script = probe.automation_script(9000)
-        action = script[script.index('"do d@'):]
+        action = script[script.index('"do d@') :]
         self.assertEqual(action[: action.index('"', 1)].count("do "), 1)
 
     def test_report_frame_is_configurable(self) -> None:
@@ -43,6 +41,29 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('":magicbus_keyboard:pc_keyboard_3"', script)
         self.assertIn("caps_lock:set_value(caps_lock.mask)", script)
         self.assertIn("caps_lock:set_value(0)", script)
+        self.assertNotIn("magicbus_keyboard2", script)
+
+    def test_two_accessory_script_waits_for_both_clients(self) -> None:
+        script = probe.automation_script(9000, accessories=2)
+
+        self.assertIn('":magicbus_keyboard:pc_keyboard_3"', script)
+        scsi_slot = (
+            probe.SCRATCH
+            + next(
+                index
+                for index, (name, _address, _symbol) in enumerate(probe.WATCHED)
+                if name == "scsi_attached"
+            )
+            * 4
+        )
+        self.assertIn(f"program:read_u32({scsi_slot}) >= 1", script)
+        self.assertNotIn("magicbus_keyboard2", script)
+
+    def test_machine_config_selects_two_endpoints(self) -> None:
+        config = probe.machine_config("datarover840", 2)
+
+        self.assertIn('tag=":MAGICBUS_ACCESSORY"', config)
+        self.assertIn('mask="3" defvalue="1" value="2"', config)
 
 
 class CountTests(unittest.TestCase):
@@ -84,7 +105,33 @@ class CountTests(unittest.TestCase):
 
         self.assertEqual(
             probe.acceptance_errors(counts),
-            ["failures=2", "low_errors=1", "keyboard_dispatch=0"],
+            [
+                "failures=2",
+                "low_errors=1",
+                "keyboard_dispatch=0 (need 1)",
+            ],
+        )
+
+    def test_two_accessories_require_two_descriptors_and_both_clients(self) -> None:
+        counts = {
+            "failures": 0,
+            "low_errors": 0,
+            "assign": 1,
+            "peripheral_info": 1,
+            "keyboard_attached": 1,
+            "scsi_attached": 0,
+            "keyboard_requests": 1,
+            "keyboard_dispatch": 1,
+            "keyboard_led": 1,
+        }
+
+        self.assertEqual(
+            probe.acceptance_errors(counts, required_accessories=2),
+            [
+                "assign=1 (need 2)",
+                "peripheral_info=1 (need 2)",
+                "scsi_attached=0 (need 1)",
+            ],
         )
 
 

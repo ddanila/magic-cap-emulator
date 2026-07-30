@@ -196,13 +196,13 @@ the driver synthesizes them rather than returning whatever the OS last wrote.
 `TestMBReqLine` (`0x13c28364`) samples bit 29 as the peripheral request line.
 Its positive and negative edges latch interrupt-bank-2 bits `0x08` and `0x04`.
 
-The physical connector is broader than the current endpoint. *Using Magic
-Cap*, p. 217, describes PCs, external modems, external keyboards and other
-accessories, with multiple devices commonly daisy-chained. The present machine
-configuration intentionally models only one optional `ATKB` keyboard. A future
-topology should enumerate multiple independently addressed descriptors rather
-than treating “more Magic Bus” as extra keyboard scan codes; the acceptance
-backlog is in [`user-guide.md`](user-guide.md).
+The physical connector is broader than a keyboard. *Using Magic Cap*, p. 217,
+describes PCs, external modems, external keyboards and other accessories, with
+multiple devices commonly daisy-chained. The machine configuration can present
+one `ATKB` keyboard or a two-device topology containing that keyboard plus an
+`SCTG` SCSI target. The latter proves independent address assignment and ROM
+client attachment for two different descriptor classes. It does not yet model
+the SCSI target's data plane or a physical daisy-chain transport.
 
 The controller completes transfers synchronously but preserves the ROM's four
 transaction classes:
@@ -224,26 +224,33 @@ ROM reprograms `mbusControl1` several times while staging DMA.
 
 The SDK ELF retains both the command table and the debug types needed to
 recover the protocol. A wire command is the command-table halfword XORed with
-the addressed peripheral's code. The modeled endpoint uses address zero and
-implements every command the ROM sends to its built-in keyboard client:
+the addressed peripheral's code. The complete recovered address-code table is
+`0c00, 0a00, 0804, 0600, 0404, 0204, 0000, 0e04` for addresses zero through
+seven. `MagicBus_AssignMagicBusAddresses` assigns only zero through five;
+seven is broadcast. The two modeled endpoints take addresses zero and one:
 
-| Wire word | High-level command | Use |
-|---:|---:|---|
-| `def0` | 31, broadcast | ask an unaddressed peripheral to identify itself |
-| `dca8` | 24, address 0 | accept address zero |
-| `dce0` | 21, address 0 | finish assignment |
-| `dcf8` | 32, address 0 | begin peripheral discovery |
-| `cc5c` / `cc60` | 12 / 13 | select the ID or full information record |
-| `cc24` | 2 | read the selected record or keyboard data |
-| `cc18` | 1 | read a pending request record |
-| `cc3c` | 5 | write keyboard reset, LED or typematic control |
-| `dcc8` / `decc` | 28 | addressed/broadcast request polling |
+| Address 0 | Address 1 | High-level command | Use |
+|---:|---:|---:|---|
+| `def0` | `def0` | 31, broadcast | ask an unaddressed peripheral to identify itself |
+| `dca8` | `daa8` | 24 | accept the proposed address |
+| `dce0` | `dae0` | 21 | finish assignment |
+| `dcb0` | `dab0` | 25 | acknowledge another endpoint on shared MBReq |
+| `dcf8` | `daf8` | 32 | begin peripheral discovery |
+| `cc5c` / `cc60` | `ca5c` / `ca60` | 12 / 13 | select ID or full information |
+| `cc24` | `ca24` | 2 | read selected data |
+| `cc18` | `ca18` | 1 | read a pending request record |
+| `cc3c` | `ca3c` | 5 | write client data |
+| `dcc8` | `dac8` | 28 | addressed request polling |
 
-`MagicBus_AssignMagicBusAddress` broadcasts command 31. The keyboard raises
-MBReq, accepts command 24, and drops MBReq; the ROM then finishes assignment
-and reads ID `ATKB`. It next accepts an 88-byte
-`MagicbusPeripheralInfo` record. The record layout was recovered from STABS
-types in the unstripped SDK image:
+Broadcast commands continue to use address seven, including `def0` for command
+31 and `decc` for command 28.
+
+`MagicBus_AssignMagicBusAddress` broadcasts command 31. Every unaddressed
+endpoint raises the shared MBReq line. Command 24 assigns the first responder;
+the remaining endpoint keeps MBReq asserted, and the ROM repeats discovery at
+the next address. It reads IDs `ATKB` and `SCTG`, then accepts an 88-byte
+`MagicbusPeripheralInfo` record for each. The record layout was recovered from
+STABS types in the unstripped SDK image:
 
 - length at byte 2 and peripheral ID at byte 4;
 - hardware, software and protocol revisions at bytes 8–10;
@@ -254,12 +261,13 @@ types in the unstripped SDK image:
 - variable strings beginning at byte 80; and
 - a big-endian 16-bit checksum after `pInfoLength + 2` bytes.
 
-The ROM initializes its built-in `MagicBusATKeyboard` client only after that
-length and checksum validate. “Magic Bus accessory” in MAME's machine
-configuration defaults to **AT keyboard** and can be changed to **None**. A
-reset applies a changed selection. **None** deliberately leaves address
-assignment unanswered; this ROM counts that silence as a peripheral failure
-and can eventually show the attached-device alert.
+Only after length and checksum validation does the ROM initialize its built-in
+`MagicBusATKeyboard` or `MagicBusSCSITargetClient`. “Magic Bus accessories” in
+MAME's machine configuration defaults to **One AT keyboard** and can select
+**None** or **AT keyboard and SCSI target**. A reset applies a changed
+selection. **None** deliberately leaves address assignment unanswered; this
+ROM counts that silence as a peripheral failure and can eventually show the
+attached-device alert.
 
 ### Keyboard request and control traffic
 
@@ -272,6 +280,14 @@ low while the request record sits in the ROM's software queue and is raised
 again only if another batch remains. Reasserting it immediately was found to
 trap `GetPollingCommand` in repeated request reads and is therefore covered by
 the regression.
+
+With multiple endpoints, command 28 opens an address-specific poll window:
+non-addressed peripherals temporarily release the physically shared line, so
+MBReq reflects only the selected endpoint. `GetPollingCommand` samples that
+level after each command-28 completion and advances to the next address when
+it is low. Modeling MBReq as an unconditional wired OR incorrectly attributed
+keyboard traffic to the SCSI target; the two-accessory acceptance covers this
+distinction, including the separate Set-2 make and break batches.
 
 Traffic also works in the other direction. The ROM's eight-byte `K` packets
 reset the keyboard, update its LEDs, and set its repeat rate. The driver
@@ -287,19 +303,22 @@ to send the corresponding LED update back to the device.
 ```sh
 python3 tools/magicbus_probe.py
 python3 tools/magicbus_probe.py --require-clean
+python3 tools/magicbus_probe.py --two-accessories --require-clean
 ```
 
-The gate requires address assignment, validated peripheral info, keyboard
-attachment, request handling, scan dispatch and LED control, with zero entries
-into `MagicBusError` or `MagicBus_HandleMagicBusFailure`. The probe refuses the
-development ROM because those routine addresses shift and would silently
-measure nothing.
+The ordinary gate requires address assignment, validated peripheral info,
+keyboard attachment, request handling, scan dispatch and LED control. The
+two-accessory gate additionally requires two assignments and information
+records plus entry into `MagicBusSCSITargetClient_Attached`. Both reject any
+entry into `MagicBusError` or `MagicBus_HandleMagicBusFailure`. The probe
+refuses the development ROM because those routine addresses shift and would
+silently measure nothing.
 
 Magic Cap later repeats broadcast address assignment when it reinitializes
-the bus. The single modeled keyboard answers that broadcast even after an
-earlier assignment, allowing the ROM to discard and recreate its client at
-address zero. `tools/storage_backup_regression.py` exercises this path during
-both backup and restore and rejects any entry into
+the bus. Modeled endpoints discard their earlier addresses and answer that
+broadcast again, allowing the ROM to recreate its clients.
+`tools/storage_backup_regression.py` exercises the default keyboard path
+during both backup and restore and rejects any entry into
 `MagicBus_HandleMagicBusFailure`.
 
 ## Glacier blocks

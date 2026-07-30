@@ -48,6 +48,7 @@ WATCHED = (
     ("peripheral_info", 0x13C29284, "GetPeripheralInfo"),
     ("low_errors", 0x13C28B3C, "MagicBusError"),
     ("keyboard_attached", 0x13C27594, "MagicBusATKeyboard_Attached"),
+    ("scsi_attached", 0x13E82D10, "MagicBusSCSITargetClient_Attached"),
     ("keyboard_requests", 0x13C27B20, "MagicBusATKeyboard_PeripheralRequest"),
     ("keyboard_dispatch", 0x13C2763C, "MagicBusATKeyboard_DispatchATKeys"),
     ("keyboard_led", 0x13C27C84, "MagicBusATKeyboard_SetLedStatus"),
@@ -57,14 +58,22 @@ COUNTS = re.compile(rb"MAGICBUS COUNTS ([^\n]+)")
 KEY_FRAME = 600
 
 
-def automation_script(frames: int) -> str:
+def automation_script(frames: int, accessories: int = 1) -> str:
     """Return Lua that counts entries into each watched routine."""
+    if accessories not in (1, 2):
+        raise ValueError("Magic Bus probe supports one or two accessories")
     keyboard_attached_index = next(
         index
         for index, (name, _address, _symbol) in enumerate(WATCHED)
         if name == "keyboard_attached"
     )
     keyboard_attached_slot = SCRATCH + keyboard_attached_index * 4
+    scsi_attached_index = next(
+        index
+        for index, (name, _address, _symbol) in enumerate(WATCHED)
+        if name == "scsi_attached"
+    )
+    scsi_attached_slot = SCRATCH + scsi_attached_index * 4
     setup = "\n".join(
         f'    watch({SCRATCH + index * 4}, 0x{address:08x}, "{name}")'
         for index, (name, address, _symbol) in enumerate(WATCHED)
@@ -72,6 +81,11 @@ def automation_script(frames: int) -> str:
     report = " .. ".join(
         f'string.format("{name}=%d ", program:read_u32({SCRATCH + index * 4}))'
         for index, (name, _address, _symbol) in enumerate(WATCHED)
+    )
+    second_ready = (
+        f"\n            and program:read_u32({scsi_attached_slot}) >= 1"
+        if accessories == 2
+        else ""
     )
     return f"""local machine = manager.machine
 local cpu = machine.devices[":maincpu"]
@@ -100,11 +114,11 @@ emu.register_frame_done(function()
     -- cannot retain a key pressed before that power cycle either.
     if frames >= {KEY_FRAME}
             and key_down_frame == nil
-            and program:read_u32({keyboard_attached_slot}) > 0 then
+            and program:read_u32({keyboard_attached_slot}) >= 1{second_ready} then
         key_down_frame = frames
         print(string.format(
-            "MAGICBUS KEY_DOWN MFIO=%08X CONTROL=%08X",
-            program:read_u32(0x10c00184),
+            "MAGICBUS KEY_DOWN FRAME=%d MFIO=%08X CONTROL=%08X",
+            frames, program:read_u32(0x10c00184),
             program:read_u32(0x10c000e0)))
         caps_lock:set_value(caps_lock.mask)
     elseif key_down_frame ~= nil and frames == key_down_frame + 10 then
@@ -129,23 +143,38 @@ def parse_counts(output: bytes) -> dict[str, int]:
     }
 
 
-def acceptance_errors(counts: dict[str, int]) -> list[str]:
+def acceptance_errors(
+    counts: dict[str, int], required_accessories: int = 1
+) -> list[str]:
     """Explain which observable parts of a complete transaction are absent."""
     errors = []
     for name in ("failures", "low_errors"):
         if counts.get(name):
             errors.append(f"{name}={counts[name]}")
+    for name in ("assign", "peripheral_info"):
+        if counts.get(name, 0) < required_accessories:
+            errors.append(f"{name}={counts.get(name, 0)} (need {required_accessories})")
     for name in (
-        "assign",
-        "peripheral_info",
         "keyboard_attached",
         "keyboard_requests",
         "keyboard_dispatch",
         "keyboard_led",
     ):
-        if not counts.get(name):
-            errors.append(f"{name}=0")
+        if counts.get(name, 0) < 1:
+            errors.append(f"{name}={counts.get(name, 0)} (need 1)")
+    if required_accessories == 2 and counts.get("scsi_attached", 0) < 1:
+        errors.append(f"scsi_attached={counts.get('scsi_attached', 0)} (need 1)")
     return errors
+
+
+def machine_config(system: str, accessories: int) -> str:
+    """Select one or two attached endpoints through the machine config."""
+    return f"""<?xml version="1.0"?>
+<mameconfig version="10"><system name="{system}"><input>
+<port tag=":MAGICBUS_ACCESSORY" type="CONFIG"
+      mask="3" defvalue="1" value="{accessories}" />
+</input></system></mameconfig>
+"""
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -167,6 +196,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--require-clean",
         action="store_true",
         help="require discovery, keyboard delivery, and zero bus errors",
+    )
+    parser.add_argument(
+        "--two-accessories",
+        action="store_true",
+        help="enumerate an AT keyboard and independently addressed SCSI target",
     )
     return parser.parse_args(argv)
 
@@ -191,20 +225,39 @@ def main(argv: list[str] | None = None) -> int:
     (run_dir / "nvram").mkdir(parents=True)
     (run_dir / "cfg").mkdir()
     lua_path = run_dir / "magicbus.lua"
-    lua_path.write_text(automation_script(args.frames), encoding="utf-8")
+    accessories = 2 if args.two_accessories else 1
+    lua_path.write_text(automation_script(args.frames, accessories), encoding="utf-8")
+    (run_dir / "cfg" / f"{args.system}.cfg").write_text(
+        machine_config(args.system, accessories), encoding="utf-8"
+    )
 
     completed = subprocess.run(
         [
-            str(mame), args.system,
-            "-rompath", str(rompath),
-            "-cfg_directory", str(run_dir / "cfg"),
-            "-nvram_directory", str(run_dir / "nvram"),
-            "-autoboot_delay", "0",
-            "-autoboot_script", str(lua_path),
-            "-debug", "-debugger", "none",
-            "-video", "none", "-sound", "none",
-            "-videodriver", "dummy", "-audiodriver", "dummy",
-            "-nothrottle", "-skip_gameinfo",
+            str(mame),
+            args.system,
+            "-rompath",
+            str(rompath),
+            "-cfg_directory",
+            str(run_dir / "cfg"),
+            "-nvram_directory",
+            str(run_dir / "nvram"),
+            "-autoboot_delay",
+            "0",
+            "-autoboot_script",
+            str(lua_path),
+            "-debug",
+            "-debugger",
+            "none",
+            "-video",
+            "none",
+            "-sound",
+            "none",
+            "-videodriver",
+            "dummy",
+            "-audiodriver",
+            "dummy",
+            "-nothrottle",
+            "-skip_gameinfo",
         ],
         cwd=mame.parent,
         capture_output=True,
@@ -223,7 +276,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {name:<{width}}  {counts.get(name, 0):4d}  {symbol}")
     print(f"Artifacts: {run_dir}")
 
-    errors = acceptance_errors(counts)
+    errors = acceptance_errors(counts, accessories)
     if args.require_clean and errors:
         print(
             "FAIL: incomplete Magic Bus transaction: " + ", ".join(errors),
@@ -231,7 +284,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
     if args.require_clean:
-        print("PASS: AT keyboard discovered and key data dispatched with no errors")
+        print(
+            f"PASS: {accessories} independently addressed accessor"
+            f"{'ies' if accessories != 1 else 'y'} discovered; "
+            "AT keyboard data dispatched with no errors"
+        )
     return 0
 
 
