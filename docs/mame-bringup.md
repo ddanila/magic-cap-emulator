@@ -299,6 +299,7 @@ python3 tools/tx39_refill_regression.py
 python3 tools/tx39_clock_regression.py
 python3 tools/tx39_timing_regression.py
 python3 tools/tx39_branch_regression.py
+python3 tools/tx39_debug_regression.py
 python3 tools/pccard_regression.py
 python3 tools/modem_save_regression.py
 python3 tools/storage_card_regression.py
@@ -532,6 +533,11 @@ full, half, quarter, and eighth processor rates within 3%, then sets RF=`10`
 with Config.Lock and proves a later full-rate write changes neither Config nor
 the measured quarter rate. Its artifacts remain under
 `$MAGIC_CAP_ASSETS/runtime/tx39-clock-regression/`.
+
+The self-debug companion covers `SDBBP` breakpoint and delay-slot entry,
+Debug/DEPC moves, `DERET`, DSS, and the special suppression applied when
+DERET returns to a branch and its delay slot. Its artifacts remain under
+`$MAGIC_CAP_ASSETS/runtime/tx39-debug-regression/`.
 
 The Dino clock companion parks the CPU and drives `masterClock` directly. It
 first clears the register and requires both UARTs and Magic Bus to report

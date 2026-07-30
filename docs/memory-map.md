@@ -51,11 +51,12 @@ which is a MIPS `j` with target bits `0x03c0001c`. Pseudo-direct jumps retain
 the high nibble of `PC + 4`, so executing that word at the reset vector lands
 at `0xb3c0001c`, the normal uncached ROM alias—not at `0xbfc0001c`.
 
-Consequently, the `0x1fc00000` physical alias is software-visible only for the
-reset instruction and its delay slot. The monitor then runs from
-`0xb3c00000`; its occasional explicit jumps to `0x13c0xxxx` exercise the
-cached/KUser ROM mapping. The hardware may keep the reset alias enabled, but
-the ROM does not require it after the first jump.
+The monitor then runs from `0xb3c00000`; its occasional explicit jumps to
+`0x13c0xxxx` exercise the cached/KUser ROM mapping. The first KiB of the boot
+alias remains mapped because the R3900's fixed BEV general-exception vector is
+`0xbfc00180` and its debug-exception vector is `0xbfc00200`. Normal boot only
+uses the first instruction and delay slot, but truncating the alias there
+makes both architectural exception vectors unreadable.
 
 ## DRAM and framebuffer
 

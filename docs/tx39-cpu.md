@@ -209,10 +209,25 @@ currently an effective no-op because memory accesses and cache fills complete
 synchronously inside the interpreter. The disassembler applies the same
 device distinction.
 
-The TX39 self-debug unit (`SDBBP`, `DERET`, and its CP0 debug registers) is
-not modelled. Likely branches for external coprocessors are also outside the
-DataRover configuration, which has no such coprocessor. Neither class of
-opcode occurs in a sized function in the available SDK ELFs.
+The R3900 self-debug unit now exposes CP0 register 16 `Debug` and register 17
+`DEPC`. `SDBBP` enters debug mode at fixed vector `0xbfc00200` without
+modifying ordinary Status, Cause or EPC state; a breakpoint in a branch delay
+slot records the branch address and DBD. `DERET` jumps through writable DEPC,
+clears DM, sets current KU/IE, and disables the next single-step event. If its
+return instruction branches, suppression extends through the delay slot.
+Debug mode also forces cache auto-lock off. The disassembler recognizes both
+instructions and names all four R3900-specific CP0 registers.
+
+The focused model covers DBP/DSS, DBD, DM, SSt, BsF storage, DEPC and the
+documented return suppression. Simultaneous NMI/ordinary-exception status
+(`NIS`/`OES`) and debug-handler bus-error reporting are not generated because
+the core has no NMI input and its synchronous interpreter cannot presently
+represent coincident exceptions. The R3900 has no TLB, so TLF has no
+applicable source.
+
+Likely branches for external coprocessors remain outside the DataRover
+configuration, which has no such coprocessor. Neither they nor the self-debug
+instructions occur in a sized function in the available SDK ELFs.
 
 Run the isolated CPU regressions with:
 
@@ -222,6 +237,7 @@ python3 tools/tx39_refill_regression.py
 python3 tools/tx39_clock_regression.py
 python3 tools/tx39_timing_regression.py
 python3 tools/tx39_branch_regression.py
+python3 tools/tx39_debug_regression.py
 ```
 
 It writes a suite of tiny uncached-RAM programs into the running DataRover
@@ -304,3 +320,10 @@ ordinary link cases require the non-nullified `0x41` result and the same
 unconditional link. A final injected `SYNC` reaches the following
 instruction without a Reserved Instruction exception. Artifacts stay under
 `$MAGIC_CAP_ASSETS/runtime/tx39-branch-regression/`.
+
+The self-debug companion executes `SDBBP` both normally and in a branch delay
+slot, reads Debug through real `MFC0`, rewrites DEPC with `MTC0`, and returns
+with `DERET`. It then enables SSt and proves the pending instruction has not
+executed when DSS arrives. A final DERET returns to a branch and requires the
+branch plus delay slot to execute before DSS stops at the target. Artifacts
+stay under `$MAGIC_CAP_ASSETS/runtime/tx39-debug-regression/`.
