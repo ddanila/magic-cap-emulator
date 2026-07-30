@@ -21,6 +21,7 @@ DEFAULT_ROMPATH = ASSETS_ROOT / "roms"
 DEFAULT_WORKDIR = ASSETS_ROOT / "runtime" / "magicbus-scsi-probe"
 SUPPORTED_SYSTEMS = ("datarover840", "datarover840f", "datarover840j")
 SCSI_TARGET_PERIPH = 0x0000_C1E8
+NUMBER_MAGICBUS_PERIPHS = 0x0000_C168
 SCRATCH = 0x0030_0100
 WATCHED = (
     ("init", 0x13C0_5620, "InitMagicBus"),
@@ -30,12 +31,18 @@ WATCHED = (
     ("get_done", 0x13C0_6108, "GetDataFunction return"),
     ("send_dispatch", 0x13C0_5C3C, "SendDataFunction dispatch"),
     ("send_data", 0x13C0_6148, "SendDataFunction"),
+    ("command", 0x13C0_5300, "magicbus_cmd"),
+    ("open", 0x13C0_541C, "scsiopen"),
+    ("assign", 0x13C0_5694, "AssignMagicBusAddresses"),
+    ("transaction", 0x13C0_65E0, "MagicBusCommand"),
 )
 GET_DONE_SLOT = SCRATCH + 16
 SEND_DATA_SLOT = SCRATCH + 24
 RESULT = re.compile(
     rb"MAGICBUS SCTG address=(\d+) init=(\d+) init_done=(\d+) check=(\d+) "
-    rb"get_data=(\d+) get_done=(\d+) send_dispatch=(\d+) send_data=(\d+)"
+    rb"get_data=(\d+) get_done=(\d+) send_dispatch=(\d+) send_data=(\d+) "
+    rb"command=(\d+) open=(\d+) assign=(\d+) transaction=(\d+) "
+    rb"peripherals=(\d+)"
 )
 HOST_DATA = re.compile(rb"Magic Bus SCTG accepted (\d+) host bytes")
 MONITOR_COMMAND = "magicbus -i\n"
@@ -100,8 +107,10 @@ end
 local function report()
     print(string.format(
         "MAGICBUS SCTG address=%d init=%d init_done=%d check=%d get_data=%d "
-        .. "get_done=%d send_dispatch=%d send_data=%d",
-        program:read_u32({SCSI_TARGET_PERIPH}), {counters}))
+        .. "get_done=%d send_dispatch=%d send_data=%d command=%d open=%d "
+        .. "assign=%d transaction=%d peripherals=%d",
+        program:read_u32({SCSI_TARGET_PERIPH}),
+        {counters}, program:read_u32({NUMBER_MAGICBUS_PERIPHS})))
 end
 
 emu.register_frame_done(function()
@@ -194,6 +203,11 @@ def parse_result(output: bytes) -> dict[str, int] | None:
                 "get_done",
                 "send_dispatch",
                 "send_data",
+                "command",
+                "open",
+                "assign",
+                "transaction",
+                "peripherals",
             ),
             (int(value) for value in match.groups()),
             strict=True,
@@ -209,6 +223,8 @@ def acceptance_errors(result: dict[str, int]) -> list[str]:
     errors = []
     if result["address"] != 0:
         errors.append(f"address={result['address']} (need 0)")
+    if result["peripherals"] != 1:
+        errors.append(f"peripherals={result['peripherals']} (need 1)")
     for name in (
         "init",
         "init_done",
@@ -217,6 +233,10 @@ def acceptance_errors(result: dict[str, int]) -> list[str]:
         "get_done",
         "send_dispatch",
         "send_data",
+        "command",
+        "open",
+        "assign",
+        "transaction",
     ):
         if result[name] < 1:
             errors.append(f"{name}={result[name]} (need 1)")

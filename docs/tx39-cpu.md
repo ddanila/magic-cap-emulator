@@ -116,8 +116,21 @@ fills the data cache's native one-word line; with DCBR set, DRSize selects a
 4/8/16/32-word aligned burst. DALc locks every data-cache word brought in by
 that burst. The instruction-cache backing still represents each word
 separately, so this models the refill's contents but not a shared physical tag
-object. External-bus timing and detailed per-instruction cycle costs are not
-claimed.
+object.
+
+Dino's receive channels are external bus masters. Their Magic Bus, sound and
+telecom writes now invalidate matching, unlocked R3900 data-cache words before
+raising completion. This matters once burst refill is enabled: the CPU may
+have prefetched a destination word that software never explicitly loaded. The
+release monitor supplies a direct behavioral oracle—it receives the 88-byte
+Magic Bus peripheral-information record into an ordinary cached stack buffer
+and immediately validates its length and checksum without issuing a cache
+operation. Leaving the prefetched words resident makes
+`AssignMagicBusAddresses` reject a byte-for-byte correct record; invalidating
+the DMA range lets the monitor discover the SCTG endpoint while retaining the
+documented four-word data refill. DALc-locked lines remain private on-chip
+storage and are deliberately not invalidated. External-bus timing and detailed
+per-instruction cycle costs are not claimed.
 
 ## Emulator behavior and regression
 
@@ -175,6 +188,13 @@ instruction executes, proving instruction prefetch. The expected observations
 are `BBBBBBBB`, `22222222`, `22222222`, and `00001234`, respectively.
 Generated inputs and logs stay under
 `$MAGIC_CAP_ASSETS/runtime/tx39-refill-regression/`.
+
+`tools/magicbus_scsi_probe.py` is the cross-subsystem DMA-coherency regression.
+In addition to the SCTG command-3/command-7 transport checkpoints, it requires
+the monitor's address-assignment and transaction routines to execute and
+`numberMagicBusPeriphs` to reach one. The latter remained zero when a stale
+burst-refilled word caused the monitor's information checksum validation to
+fail.
 
 The clock companion runs the same three-instruction counter loop for one
 video-frame interval at every RF value. A reference run counted `204779`,

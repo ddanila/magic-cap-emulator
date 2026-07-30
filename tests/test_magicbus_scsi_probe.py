@@ -51,7 +51,8 @@ class ResultTests(unittest.TestCase):
     def test_complete_result_is_accepted(self) -> None:
         output = (
             b"MAGICBUS SCTG address=0 init=1 init_done=1 check=4 get_data=1 "
-            b"get_done=1 send_dispatch=1 send_data=1\n"
+            b"get_done=1 send_dispatch=1 send_data=1 command=2 open=2 "
+            b"assign=2 transaction=17 peripherals=1\n"
             b"Magic Bus SCTG accepted 16 host bytes\n"
         )
         result = probe.parse_result(output)
@@ -67,6 +68,11 @@ class ResultTests(unittest.TestCase):
                 "get_done": 1,
                 "send_dispatch": 1,
                 "send_data": 1,
+                "command": 2,
+                "open": 2,
+                "assign": 2,
+                "transaction": 17,
+                "peripherals": 1,
                 "host_bytes": 16,
             },
         )
@@ -83,6 +89,11 @@ class ResultTests(unittest.TestCase):
             "get_done": 0,
             "send_dispatch": 0,
             "send_data": 0,
+            "command": 0,
+            "open": 0,
+            "assign": 0,
+            "transaction": 0,
+            "peripherals": 0,
             "host_bytes": 0,
         }
 
@@ -90,12 +101,17 @@ class ResultTests(unittest.TestCase):
             probe.acceptance_errors(result),
             [
                 "address=1 (need 0)",
+                "peripherals=0 (need 1)",
                 "init_done=0 (need 1)",
                 "check=0 (need 1)",
                 "get_data=0 (need 1)",
                 "get_done=0 (need 1)",
                 "send_dispatch=0 (need 1)",
                 "send_data=0 (need 1)",
+                "command=0 (need 1)",
+                "open=0 (need 1)",
+                "assign=0 (need 1)",
+                "transaction=0 (need 1)",
                 "host_bytes=0 (need 16)",
             ],
         )

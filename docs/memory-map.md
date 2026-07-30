@@ -446,6 +446,17 @@ consumes the complete record and raises DMA-end completion. The probe invokes
 `magicbus -i` once for each direction because one monitor command services one
 transport request.
 
+Dino receive DMA writes physical DRAM behind the CPU's cached low-address
+mapping. After each modeled receive write, the driver invalidates matching
+unlocked R3900 data-cache words before signaling DMA completion. This includes
+Magic Bus plus SIB sound and telecom receive channels. The monitor's
+peripheral-information path is the regression oracle: it validates an
+88-byte DMA record in a cached stack buffer with no explicit cache operation.
+The SCTG probe therefore also requires `AssignMagicBusAddresses`,
+`MagicBusCommand`, and the final one-peripheral count; those checks catch stale
+prefetched destination words even when the emitted record and checksum are
+correct.
+
 The ROM's PCLink module exposes only
 `MagicBusSCSITargetClient_Attached`, `Detached`, and `CanHandlePeripheral`;
 the symbol and call audit found no disk or block-read/write client methods.
@@ -477,7 +488,10 @@ The SCTG probe boots the release monitor, types `magicbus -i` through the
 terminal's real key matrix, and holds the target-to-host request through
 discovery. After function 18 and command 3 complete, it invokes the command a
 second time with the host-to-target request and requires `SendDataFunction`
-plus a 16-byte command-7 DMA receipt. It uses the SCSI-only configuration
+plus a 16-byte command-7 DMA receipt. It also requires the monitor's open,
+assignment, command and low-level transaction checkpoints and a final
+peripheral count of one, covering Dino-to-R3900 cache coherency during the
+checksummed discovery DMA. It uses the SCSI-only configuration
 because the monitor assigns a keyboard-plus-target chain with an address gap
 that its simple standalone scanner does not traverse; the ordinary OS gate
 covers that combined topology.
