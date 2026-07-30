@@ -126,7 +126,7 @@ directory and write the asset tree as `$MAGIC_CAP_ASSETS`.
 | [`rom-layout.md`](docs/rom-layout.md) | ROM/SDK provenance, checksums, asset mirror, image format |
 | [`memory-map.md`](docs/memory-map.md) | Memory map, Dino peripheral block, Magic Bus, Glacier |
 | [`betty-registers.md`](docs/betty-registers.md) | Betty SIB ASIC registers, sound and telecom DMA |
-| [`tx39-cpu.md`](docs/tx39-cpu.md) | TX39/R3900 CPU audit, arithmetic extensions, and CP0 cache controls |
+| [`tx39-cpu.md`](docs/tx39-cpu.md) | TX39/R3900 CPU audit, arithmetic extensions, and cache model |
 | [`power-wake.md`](docs/power-wake.md) | Power, sleep/wake path, batteries, AC and cover inputs |
 | [`pclink.md`](docs/pclink.md) | Recovered PCLink wire format and package-install regression |
 | [`modem.md`](docs/modem.md) | PC Card modem, Slirp PPP, Web Browser 4.0 acceptance |

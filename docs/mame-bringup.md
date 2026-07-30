@@ -442,7 +442,9 @@ The TX39 harness executes signed and unsigned multiply and multiply/add
 instructions from uncached RAM and verifies `rd`, `HI`, and `LO`. It also
 checks Config's cache-size, writable-mask, and write-lock contract, then runs
 a real `syscall` handler and RFE to prove Cache current/previous/old mode
-stacking. Its
+stacking. Three aliasing physical words then prove two-way residency and LRU
+replacement, DALc per-index locking, cache-only writes to a locked line,
+`IndexLockBitClear`, and write-through store misses without allocation. Its
 generated inputs and log remain under
 `$MAGIC_CAP_ASSETS/runtime/tx39-regression/`; the CPU audit and
 reference-manual download command are in

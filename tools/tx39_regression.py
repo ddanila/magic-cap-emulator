@@ -36,6 +36,14 @@ CP0_PATTERN = re.compile(
     rb"CACHE EXCEPTION=([0-9A-F]{8}) RETURN=([0-9A-F]{8})",
     re.DOTALL,
 )
+CACHE_PATTERN = re.compile(
+    rb"CACHE_LRU HIT=([0-9A-F]{8}) EVICTED=([0-9A-F]{8}).*"
+    rb"CACHE_LOCK RETAINED=([0-9A-F]{8}) "
+    rb"CACHED_STORE=([0-9A-F]{8}) MEMORY=([0-9A-F]{8}).*"
+    rb"CACHE_UNLOCK RELOADED=([0-9A-F]{8}).*"
+    rb"CACHE_NOALLOC RELOADED=([0-9A-F]{8})",
+    re.DOTALL,
+)
 EXPECTED = (
     0xFFFFFFFF,
     0xFFFFFFFF,
@@ -57,6 +65,15 @@ EXPECTED_CP0 = (
     0x001000DF,
     0x00000C00,
     0x00000300,
+)
+EXPECTED_CACHE = (
+    0x11111111,
+    0xBBBBBBBB,
+    0x11111111,
+    0x44444444,
+    0xAAAAAAAA,
+    0x55555555,
+    0x77777777,
 )
 
 
@@ -207,6 +224,148 @@ emu.register_frame_done(function()
             "CACHE EXCEPTION=%08X RETURN=%08X",
             cpu.state["R16"].value,
             cpu.state["Cache"].value))
+
+        -- Start with three backing words that alias one two-way cache index.
+        program:write_u32(0x00003000, 0x11111111)
+        program:write_u32(0x00003200, 0x22222222)
+        program:write_u32(0x00003400, 0x33333333)
+        program:write_u32(0x00001200, 0x40803800)
+        program:write_u32(0x00001204, 0x3c088000)
+        program:write_u32(0x00001208, 0x35083000)
+        program:write_u32(0x0000120c, 0xbd110000)
+        program:write_u32(0x00001210, 0x25080200)
+        program:write_u32(0x00001214, 0xbd110000)
+        program:write_u32(0x00001218, 0x25080200)
+        program:write_u32(0x0000121c, 0xbd110000)
+        program:write_u32(0x00001220, 0x2508fc00)
+        program:write_u32(0x00001224, 0x8d090000)
+        program:write_u32(0x00001228, 0x25080200)
+        program:write_u32(0x0000122c, 0x8d0a0000)
+        program:write_u32(0x00001230, 0x1000ffff)
+        program:write_u32(0x00001234, 0x00000000)
+        run_at(0x00001200)
+    elseif frames == 19 then
+        -- Change backing RAM behind A and B.  Touching A makes B least
+        -- recently used; loading C must evict B rather than A.
+        program:write_u32(0x00003000, 0xaaaaaaaa)
+        program:write_u32(0x00003200, 0xbbbbbbbb)
+        program:write_u32(0x00001240, 0x3c088000)
+        program:write_u32(0x00001244, 0x35083000)
+        program:write_u32(0x00001248, 0x8d0b0000)
+        program:write_u32(0x0000124c, 0x25080400)
+        program:write_u32(0x00001250, 0x8d0c0000)
+        program:write_u32(0x00001254, 0x2508fe00)
+        program:write_u32(0x00001258, 0x8d0d0000)
+        program:write_u32(0x0000125c, 0x1000ffff)
+        program:write_u32(0x00001260, 0x00000000)
+        run_at(0x00001240)
+    elseif frames == 20 then
+        print(string.format(
+            "CACHE_LRU HIT=%08X EVICTED=%08X",
+            cpu.state["R11"].value,
+            cpu.state["R13"].value))
+
+        -- Empty the index, enable DALc for one load of A, then leave the
+        -- resulting per-index lock active while clearing the CP0 mode.
+        program:write_u32(0x00003000, 0x11111111)
+        program:write_u32(0x00003200, 0x22222222)
+        program:write_u32(0x00003400, 0x33333333)
+        program:write_u32(0x00001280, 0x40803800)
+        program:write_u32(0x00001284, 0x3c088000)
+        program:write_u32(0x00001288, 0x35083000)
+        program:write_u32(0x0000128c, 0xbd090000)
+        program:write_u32(0x00001290, 0xbd110000)
+        program:write_u32(0x00001294, 0x25080200)
+        program:write_u32(0x00001298, 0xbd110000)
+        program:write_u32(0x0000129c, 0x25080200)
+        program:write_u32(0x000012a0, 0xbd110000)
+        program:write_u32(0x000012a4, 0x2508fc00)
+        program:write_u32(0x000012a8, 0x24090100)
+        program:write_u32(0x000012ac, 0x40893800)
+        program:write_u32(0x000012b0, 0x8d0e0000)
+        program:write_u32(0x000012b4, 0x40803800)
+        program:write_u32(0x000012b8, 0x1000ffff)
+        program:write_u32(0x000012bc, 0x00000000)
+        run_at(0x00001280)
+    elseif frames == 21 then
+        -- Churn the unlocked way with B and C.  A must remain cached despite
+        -- its changed backing word.  A store hit changes only the locked line.
+        program:write_u32(0x00003000, 0xaaaaaaaa)
+        program:write_u32(0x000012c0, 0x3c088000)
+        program:write_u32(0x000012c4, 0x35083000)
+        program:write_u32(0x000012c8, 0x25080200)
+        program:write_u32(0x000012cc, 0x8d0a0000)
+        program:write_u32(0x000012d0, 0x25080200)
+        program:write_u32(0x000012d4, 0x8d0b0000)
+        program:write_u32(0x000012d8, 0x2508fc00)
+        program:write_u32(0x000012dc, 0x8d0f0000)
+        program:write_u32(0x000012e0, 0x3c0a4444)
+        program:write_u32(0x000012e4, 0x354a4444)
+        program:write_u32(0x000012e8, 0xad0a0000)
+        program:write_u32(0x000012ec, 0x8d100000)
+        program:write_u32(0x000012f0, 0x3c08a000)
+        program:write_u32(0x000012f4, 0x35083000)
+        program:write_u32(0x000012f8, 0x8d110000)
+        program:write_u32(0x000012fc, 0x1000ffff)
+        program:write_u32(0x00001300, 0x00000000)
+        run_at(0x000012c0)
+    elseif frames == 22 then
+        print(string.format(
+            "CACHE_LOCK RETAINED=%08X CACHED_STORE=%08X MEMORY=%08X",
+            cpu.state["R15"].value,
+            cpu.state["R16"].value,
+            cpu.state["R17"].value))
+
+        -- Clear the per-index lock, write the cached value through, and churn
+        -- both ways.  An uncached backing change must then be visible on A.
+        program:write_u32(0x00001320, 0x3c088000)
+        program:write_u32(0x00001324, 0x35083000)
+        program:write_u32(0x00001328, 0xbd090000)
+        program:write_u32(0x0000132c, 0xad100000)
+        program:write_u32(0x00001330, 0x25080200)
+        program:write_u32(0x00001334, 0x8d090000)
+        program:write_u32(0x00001338, 0x25080200)
+        program:write_u32(0x0000133c, 0x8d0a0000)
+        program:write_u32(0x00001340, 0x3c08a000)
+        program:write_u32(0x00001344, 0x35083000)
+        program:write_u32(0x00001348, 0x3c095555)
+        program:write_u32(0x0000134c, 0x35295555)
+        program:write_u32(0x00001350, 0xad090000)
+        program:write_u32(0x00001354, 0x3c088000)
+        program:write_u32(0x00001358, 0x35083000)
+        program:write_u32(0x0000135c, 0x8d120000)
+        program:write_u32(0x00001360, 0x1000ffff)
+        program:write_u32(0x00001364, 0x00000000)
+        run_at(0x00001320)
+    elseif frames == 23 then
+        print(string.format(
+            "CACHE_UNLOCK RELOADED=%08X",
+            cpu.state["R18"].value))
+
+        -- A cached store miss is write-through but must not allocate a line.
+        program:write_u32(0x00003000, 0x11111111)
+        program:write_u32(0x00001380, 0x40803800)
+        program:write_u32(0x00001384, 0x3c088000)
+        program:write_u32(0x00001388, 0x35083000)
+        program:write_u32(0x0000138c, 0xbd110000)
+        program:write_u32(0x00001390, 0x3c096666)
+        program:write_u32(0x00001394, 0x35296666)
+        program:write_u32(0x00001398, 0xad090000)
+        program:write_u32(0x0000139c, 0x1000ffff)
+        program:write_u32(0x000013a0, 0x00000000)
+        run_at(0x00001380)
+    elseif frames == 24 then
+        program:write_u32(0x00003000, 0x77777777)
+        program:write_u32(0x000013c0, 0x3c088000)
+        program:write_u32(0x000013c4, 0x35083000)
+        program:write_u32(0x000013c8, 0x8d130000)
+        program:write_u32(0x000013cc, 0x1000ffff)
+        program:write_u32(0x000013d0, 0x00000000)
+        run_at(0x000013c0)
+    elseif frames == 25 then
+        print(string.format(
+            "CACHE_NOALLOC RELOADED=%08X",
+            cpu.state["R19"].value))
         machine:exit()
     end
 end)
@@ -222,6 +381,13 @@ def parse_results(output: bytes) -> tuple[int, ...] | None:
 
 def parse_cp0_results(output: bytes) -> tuple[int, ...] | None:
     match = CP0_PATTERN.search(output)
+    if not match:
+        return None
+    return tuple(int(value, 16) for value in match.groups())
+
+
+def parse_cache_results(output: bytes) -> tuple[int, ...] | None:
+    match = CACHE_PATTERN.search(output)
     if not match:
         return None
     return tuple(int(value, 16) for value in match.groups())
@@ -314,9 +480,18 @@ def run_regression(args: argparse.Namespace) -> int:
         )
         return 1
 
+    actual_cache = parse_cache_results(completed.stdout)
+    if actual_cache != EXPECTED_CACHE:
+        print(
+            f"FAIL: TX39 cache result {actual_cache!r}, "
+            f"expected {EXPECTED_CACHE!r}; see {log_path}",
+            file=sys.stderr,
+        )
+        return 1
+
     print(
-        "PASS: TX39 arithmetic, Config locking/cache sizes, and Cache "
-        "exception modes are correct"
+        "PASS: TX39 arithmetic, CP0 modes, two-way LRU, and data-cache "
+        "line locking are correct"
     )
     print(f"Artifacts: {run_dir}")
     return 0

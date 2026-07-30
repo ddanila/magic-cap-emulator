@@ -86,12 +86,25 @@ These registers are no longer unrestricted shadows:
   bits. An exception pushes current → previous → old and clears current; RFE
   restores previous → current and old → previous while retaining old, just
   like the TX39 manual's Status-register mode stack.
-- Cache operations 0 (instruction index invalidate), 5 (data index lock/LRU
-  clear), and 17 (data hit invalidate) remain recognized.
+- Cache operations 0 (instruction index invalidate), 5 (data index LRU-bit
+  clear), 9 (data index lock-bit clear), and 17 (data hit invalidate) are
+  recognized. Instruction index invalidation covers all four words sharing
+  the selected physical tag.
 
-MAME's underlying MIPS-I cache is still direct-mapped and word-line based.
-The TMPR3902U's per-line two-way replacement/locking, burst refill timing,
-reduced-frequency clock timing, and cycle costs are therefore not claimed.
+The data cache now matches the documented 1 KiB geometry: 128 indices with
+two one-word ways. Every index retains an LRU replacement selector and at
+most one locked way. Loads fill an invalid way before replacing the LRU way;
+hits update LRU; a DALc access locks its selected way and confines later
+replacement to the other. Cached store misses write through without
+allocating. A store hit on a locked line updates only the cache, matching the
+manual's required read → clear lock → store sequence for committing that
+value to memory. Both cache arrays, LRU selectors, and lock state survive
+MAME save/load, and reset invalidates every line and clears every lock.
+
+The instruction-cache backing still represents each word separately, even
+though invalidation observes its documented four-word tag. Multiword
+instruction refill, Config-selected instruction/data burst refill, external
+bus timing, reduced-frequency clock timing, and cycle costs are not claimed.
 
 ## Emulator behavior and regression
 
@@ -123,5 +136,15 @@ and observe the unchanged value `0x001000df`. Finally they set both current
 Cache modes, execute a real `syscall`, record `0x00000c00` in the exception
 handler, and execute RFE in the return jump's delay slot. The restored Cache
 value is `0x00000300`.
+
+The final programs use addresses `0x3000`, `0x3200`, and `0x3400`, which share
+one of the data cache's 128 indices. They prove both ways remain resident,
+touch A to make B least-recently-used, and observe B's changed backing value
+only after loading C evicts it. A DALc load then keeps A resident while B and
+C churn the unlocked way. A locked store reads back only through the cache
+while an uncached alias still sees backing RAM; after operation 9 clears the
+index lock, both-way churn exposes a later backing value. A final store-miss
+case changes backing RAM after the write and observes the change on the next
+cached load, proving the store did not allocate.
 Generated Lua, NVRAM, and logs stay under
 `$MAGIC_CAP_ASSETS/runtime/tx39-regression/`.

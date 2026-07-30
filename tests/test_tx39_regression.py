@@ -2,8 +2,10 @@ import unittest
 
 from tools.tx39_regression import (
     EXPECTED,
+    EXPECTED_CACHE,
     EXPECTED_CP0,
     automation_script,
+    parse_cache_results,
     parse_cp0_results,
     parse_results,
 )
@@ -33,6 +35,19 @@ class Tx39RegressionTests(unittest.TestCase):
     def test_rejects_missing_cp0_results(self) -> None:
         self.assertIsNone(parse_cp0_results(b"CONFIG missing"))
 
+    def test_parses_cache_results(self) -> None:
+        output = (
+            b"CACHE_LRU HIT=11111111 EVICTED=BBBBBBBB\n"
+            b"CACHE_LOCK RETAINED=11111111 "
+            b"CACHED_STORE=44444444 MEMORY=AAAAAAAA\n"
+            b"CACHE_UNLOCK RELOADED=55555555\n"
+            b"CACHE_NOALLOC RELOADED=77777777\n"
+        )
+        self.assertEqual(parse_cache_results(output), EXPECTED_CACHE)
+
+    def test_rejects_missing_cache_results(self) -> None:
+        self.assertIsNone(parse_cache_results(b"CACHE_LRU missing"))
+
     def test_script_contains_tx39_opcodes(self) -> None:
         script = automation_script()
         self.assertIn("0x71095000", script)
@@ -42,6 +57,8 @@ class Tx39RegressionTests(unittest.TestCase):
         self.assertIn("0x40881800", script)
         self.assertIn("0x40883800", script)
         self.assertIn("0x42000010", script)
+        self.assertIn("0xbd090000", script)
+        self.assertIn("0xbd110000", script)
         self.assertIn('cpu.state["HI"]', script)
         self.assertIn('cpu.state["LO"]', script)
 
