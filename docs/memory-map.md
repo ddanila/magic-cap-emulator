@@ -353,8 +353,9 @@ topology containing that keyboard plus an `SCTG` SCSI target, or present the
 SCSI target alone for the IDT monitor. The combined topology proves independent
 address assignment and ROM client attachment for two different descriptor
 classes. The monitor path additionally exercises both directions of the SCTG
-transport and one non-destructive command/response buffer. Additional observed
-peer messages and a physical daisy-chain transport remain unmodeled.
+transport and one non-destructive command/response buffer. The product
+client's request handler is empty, so physical daisy-chain/electrical timing
+rather than an undiscovered product payload remains unmodeled.
 
 The controller completes transfers synchronously but preserves the ROM's four
 transaction classes:
@@ -506,13 +507,15 @@ The SCTG probe therefore also requires `AssignMagicBusAddresses`,
 prefetched destination words even when the emitted record and checksum are
 correct.
 
-The ROM's PCLink module exposes only
-`MagicBusSCSITargetClient_Attached`, `Detached`, and `CanHandlePeripheral`;
-the symbol and call audit found no disk or block-read/write client methods.
-`SCTG` is therefore documented as a SCSI-target-shaped PCLink transport
-endpoint, not as evidence for a disk peripheral. Remaining work must start
-from observed peer messages rather than inventing a block-command parser or
-backing store.
+The production ROM exposes five methods on `MagicBusSCSITargetClient`.
+`Attached` sets its attached byte after inherited setup, `Detached` delegates
+to the base class, `CanHandlePeripheral` recognizes the literal `SCTG`, and
+`ReinitializeClass` registers the class metadata. The fifth,
+`PeripheralRequest` at `0x13e82e10`, is exactly `jr ra; nop`. The symbol and
+call audit found no disk, block-read/write, or other payload client methods.
+`SCTG` is therefore a SCSI-target-shaped endpoint used by the IDT monitor,
+not evidence for a Magic Cap disk or an alternate Storeroom transport.
+Inventing a deeper request parser would contradict the shipped handler.
 
 The acceptance probe exercises discovery plus both directions of keyboard
 traffic: it injects Caps Lock, observes Set-2 dispatch, and requires the ROM

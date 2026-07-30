@@ -26,6 +26,13 @@ transports remain:
 - Magic Cap PCLink package installation over UART A; and
 - the IDT monitor's SCTG command buffer over Magic Bus.
 
+The production ROM closes the apparent gap between them:
+`MagicBusSCSITargetClient_PeripheralRequest` at `0x13e82e10` is exactly
+`jr ra; nop`. Its other methods only attach/detach, recognize the `SCTG`
+identifier and initialize class metadata. There is therefore no hidden
+Magic Cap SCTG payload dispatcher to recover; the Storeroom path remains the
+verified UART-A stream.
+
 The recovered SCTG buffer layout, complete command-selector audit and focused
 probe are documented in [`memory-map.md`](memory-map.md#sctg-monitorpclink-transport).
 

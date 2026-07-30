@@ -123,7 +123,7 @@ The full regression list and expected checkpoints are in
 
 ## Remaining work
 
-- **Complete deeper Magic Bus topology and peer semantics.** The driver now
+- **Model physical Magic Bus chaining and electrical timing.** The driver now
   enumerates independently addressed `ATKB` and `SCTG` descriptors on the
   shared bus, attaches both built-in ROM clients, and drives the IDT monitor's
   SCTG functions 18 and 19 through command-3 receive and command-7 transmit
@@ -133,9 +133,12 @@ The full regression list and expected checkpoints are in
   bidirectional. The Magic Internet
   Kit proves its similarly named external modem is a 38,400-baud
   `iSerialBServer` stream, not another packet-bus descriptor; that UART-B path
-  now passes a bidirectional host probe. The remaining evidence-backed gaps
-  are additional observed SCTG peer messages and physical daisy-chain
-  timing—not a presumed disk, backing store, or invented modem class
+  now passes a bidirectional host probe. The production ROM's
+  `MagicBusSCSITargetClient_PeripheralRequest` is an empty `jr ra; nop`, so
+  there is no deeper Magic Cap SCTG payload dispatcher to implement. The
+  remaining evidence-backed gap is physical daisy-chain/electrical timing,
+  not additional invented peer messages, a presumed disk, backing store, or
+  modem class
   ([`memory-map.md`](docs/memory-map.md#magic-bus)).
 
 - **Improve hardware fidelity beyond observed ROM needs.** TX39 Config now

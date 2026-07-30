@@ -755,9 +755,11 @@ the separate serial-terminal view.
 | Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
 
 The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
-still incomplete. The current gaps include additional observed SCTG peer
-messages and physical Magic Bus chaining, and hardware fidelity beyond the
-register behavior exercised by the ROM; see
+still incomplete. The current gaps include physical Magic Bus chaining and
+electrical timing, and hardware fidelity beyond the register behavior
+exercised by the ROM; see
 [`PLAN.md`](../PLAN.md#remaining-work). Magic Bus discovery, its multi-address
 topology, AT-keyboard traffic and both directions of the monitor's SCTG
-request/data path are covered by headless probes.
+request/data path are covered by headless probes. The production
+`MagicBusSCSITargetClient_PeripheralRequest` is an empty stub, so no deeper
+Magic Cap SCTG payload path is claimed missing.
