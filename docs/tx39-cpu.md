@@ -202,6 +202,16 @@ discard the pending result. Pending results, countdowns and dependencies are
 save-state data. Other MIPS-I devices retain MAME's previous blocking divide
 and multiply timing.
 
+Config Halt and Doze stop instruction issue after the `MTC0` that sets the
+mode, leaving the next instruction pending and preserving independent divider
+progress. Assertion of any physical interrupt input clears both mode bits
+even when Status masks that interrupt; an unmasked interrupt then takes its
+normal exception, while a masked one resumes the pending instruction. NMI and
+reset clear the modes as well. External DMA invalidation continues while Doze
+permits cache snooping and is suppressed in Halt. Apollo normally uses Dino's
+separate `StopCpu` power-control path, so a focused injected test drives these
+architectural Config modes directly with a masked periodic Dino interrupt.
+
 The R3900 decoder now distinguishes the Toshiba integer branch-likely
 extensions from the baseline MIPS-I REGIMM aliases and implements
 `BC0FL/TL` through `BC3FL/TL` against MAME's four coprocessor condition
@@ -259,6 +269,7 @@ python3 tools/tx39_regression.py
 python3 tools/tx39_refill_regression.py
 python3 tools/tx39_clock_regression.py
 python3 tools/tx39_timing_regression.py
+python3 tools/tx39_power_mode_regression.py
 python3 tools/tx39_branch_regression.py
 python3 tools/tx39_debug_regression.py
 ```

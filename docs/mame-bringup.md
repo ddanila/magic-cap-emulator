@@ -299,6 +299,7 @@ python3 tools/tx39_regression.py
 python3 tools/tx39_refill_regression.py
 python3 tools/tx39_clock_regression.py
 python3 tools/tx39_timing_regression.py
+python3 tools/tx39_power_mode_regression.py
 python3 tools/tx39_branch_regression.py
 python3 tools/tx39_debug_regression.py
 python3 tools/pccard_regression.py
@@ -534,6 +535,13 @@ full, half, quarter, and eighth processor rates within 3%, then sets RF=`10`
 with Config.Lock and proves a later full-rate write changes neither Config nor
 the measured quarter rate. Its artifacts remain under
 `$MAGIC_CAP_ASSETS/runtime/tx39-clock-regression/`.
+
+The power-mode companion injects Config Halt and Doze writes. It requires the
+instruction after each `MTC0` to remain pending, then uses a 62.5 ms Dino
+periodic interrupt that is physically asserted but masked in Status. The pin
+must clear the Config mode and resume that exact instruction without taking
+an interrupt exception. Its artifacts remain under
+`$MAGIC_CAP_ASSETS/runtime/tx39-power-mode-regression/`.
 
 The branch companion injects every integer likely form and every
 `BC0FL/TL` through `BC3FL/TL` form. It requires taken branches to execute
