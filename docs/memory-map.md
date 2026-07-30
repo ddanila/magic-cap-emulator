@@ -522,12 +522,14 @@ the low-level `MagicBusError` once; it does not enter the separately announced
 immediate recovery.
 
 `tools/magicbus_hotplug_regression.py` is the no-reset acceptance gate. It
-starts with one keyboard, appends SCTG, proves a Set-2 Caps Lock/LED exchange,
-removes SCTG, waits for the ROM detach path, reinserts it, and proves both
-second attachment callbacks plus another keyboard exchange. The accepted
-trace has four address assignments and descriptor reads, one low-level
-missing-device error, zero high-level failures and a final peripheral count
-of two. Configuration choices therefore work live; reset-applied selection
+starts with one keyboard, appends SCTG, saves and reloads while the new tail is
+still hidden during the ROM's attachment debounce, proves a Set-2 Caps
+Lock/LED exchange, removes SCTG, waits for the ROM detach path, reinserts it,
+and proves both second attachment callbacks plus another keyboard exchange.
+The accepted trace has four address assignments and descriptor reads, one
+low-level missing-device error, zero high-level failures and a final
+peripheral count of two. Configuration choices and their pending topology
+state therefore work live and across MAME save/load; reset-applied selection
 remains only the normal cold-start behavior.
 
 ### Address assignment and peripheral information

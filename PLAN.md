@@ -134,13 +134,14 @@ The full regression list and expected checkpoints are in
   `MagicBus_HandleDetachedPeripherals`, rebuilds its clients and accepts
   reinsertion without entering `MagicBus_HandleMagicBusFailure`.
   `tools/magicbus_hotplug_regression.py` proves keyboard → keyboard plus SCTG,
-  keyboard traffic after attachment, SCTG removal, both ROM detach callbacks,
+  a save/load while that tail is still hidden during ROM debounce, keyboard
+  traffic after attachment, SCTG removal, both ROM detach callbacks,
   reinsertion, both second attachment callbacks and another keyboard/LED
   round trip. It observes the one expected low-level missing-device
-  `MagicBusError`, four address/descriptor passes and zero high-level
-  failures. Exact Apollo nanosecond wire timing remains unknown, so the driver
-  still carries `MACHINE_IMPERFECT_TIMING`; the ROM-visible MBIC lifecycle is
-  covered ([`memory-map.md`](docs/memory-map.md#magic-bus)).
+  `MagicBusError`, four address/descriptor passes and zero high-level failures.
+  Exact Apollo nanosecond wire timing remains unknown, so the driver still
+  carries `MACHINE_IMPERFECT_TIMING`; the ROM-visible MBIC lifecycle is covered
+  ([`memory-map.md`](docs/memory-map.md#magic-bus)).
 
 ## Remaining work
 

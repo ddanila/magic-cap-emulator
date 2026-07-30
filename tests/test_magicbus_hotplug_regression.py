@@ -42,6 +42,15 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("caps_lock:set_value(caps_lock.mask)", script)
         self.assertIn("caps_lock:set_value(0)", script)
 
+    def test_saves_and_loads_the_pending_tail(self) -> None:
+        state = Path("/persistent/magicbus-pending.sta")
+        script = regression.automation_script(3000, state)
+
+        self.assertIn(f'machine:save("{state}")', script)
+        self.assertIn(f'machine:load("{state}")', script)
+        self.assertIn('phase = "wait_saved_add"', script)
+        self.assertIn("save_load = 1", script)
+
     def test_timeout_is_configurable(self) -> None:
         self.assertIn(
             "frames >= 1234", regression.automation_script(1234)
@@ -85,6 +94,7 @@ class ResultTests(unittest.TestCase):
             "keyboard_led": "2",
             "post_add_key": "1",
             "post_reinsert_key": "1",
+            "save_load": "1",
         }
 
         self.assertEqual(regression.acceptance_errors(result), [])
@@ -107,6 +117,7 @@ class ResultTests(unittest.TestCase):
             "keyboard_led": "2",
             "post_add_key": "1",
             "post_reinsert_key": "0",
+            "save_load": "0",
         }
 
         errors = regression.acceptance_errors(result)
@@ -116,6 +127,7 @@ class ResultTests(unittest.TestCase):
         self.assertIn("handle_detached=0 (need 1)", errors)
         self.assertIn("scsi_detached=0 (need 1)", errors)
         self.assertIn("post_reinsert_key=0 (need 1)", errors)
+        self.assertIn("save_load=0 (need 1)", errors)
 
     def test_missing_result_is_rejected(self) -> None:
         self.assertEqual(

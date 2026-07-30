@@ -2,10 +2,11 @@
 """Exercise live Magic Bus tail attachment, removal, and reinsertion.
 
 The release ROM starts with one AT keyboard.  This regression changes MAME's
-live accessory configuration to append an SCTG endpoint, exercises the
-unchanged keyboard, removes the SCTG tail, and reinserts it.  Breakpoints in
-the ROM prove that attachment and detachment take the recovered MBIC paths,
-that both clients return, and that keyboard traffic still crosses the bus.
+live accessory configuration to append an SCTG endpoint, saves and reloads
+while that topology transition is pending, exercises the unchanged keyboard,
+removes the SCTG tail, and reinserts it.  Breakpoints in the ROM prove that
+attachment and detachment take the recovered MBIC paths, that both clients
+return, and that keyboard traffic still crosses the bus.
 
 Physical removal is expected to produce one low-level ``MagicBusError`` when
 IRQ-Get receives no answer from the removed address.  The ROM classifies that
@@ -53,8 +54,13 @@ SCRATCH = 0x0030_0000
 RESULT = re.compile(rb"MAGICBUS HOTPLUG ([^\n]+)")
 
 
-def automation_script(max_frames: int) -> str:
+def automation_script(max_frames: int, state_path: Path | None = None) -> str:
     """Return the Lua lifecycle state machine used by the regression."""
+    if state_path is None:
+        state_path = Path("/tmp/magicbus-hotplug-test.sta")
+    quoted_state = (
+        str(state_path).replace("\\", "\\\\").replace('"', '\\"')
+    )
     slots = {
         name: SCRATCH + index * 4
         for index, (name, _address, _symbol) in enumerate(WATCHED)
@@ -81,6 +87,8 @@ local dispatch_before = 0
 local led_before = 0
 local post_add_key = 0
 local post_reinsert_key = 0
+local save_load = 0
+local save_deadline = nil
 
 local function watch(slot, address, name)
     program:write_u32(slot, 0)
@@ -109,9 +117,9 @@ local function report()
     print("MAGICBUS HOTPLUG "
         .. string.format(
             "phase=%s frames=%d peripherals=%d post_add_key=%d " ..
-            "post_reinsert_key=%d ",
+            "post_reinsert_key=%d save_load=%d ",
             phase, frames, peripheral_count(),
-            post_add_key, post_reinsert_key)
+            post_add_key, post_reinsert_key, save_load)
         .. {report})
 end
 
@@ -126,6 +134,20 @@ emu.register_frame_done(function()
         action_frame = frames + 30
     elseif phase == "wait_add" and frames >= action_frame then
         accessory.user_value = 2
+        phase = "adding"
+        action_frame = frames + 1
+    elseif phase == "adding"
+            and save_load == 0
+            and frames >= action_frame then
+        -- The input callback has latched ADD_TAIL, but the ROM is still in
+        -- its one-second attachment debounce. Rewind this exact pending MBIC
+        -- state before allowing command 27 to expose the new endpoint.
+        machine:save("{quoted_state}")
+        phase = "wait_saved_add"
+        save_deadline = frames + 30
+    elseif phase == "wait_saved_add" and frames >= save_deadline then
+        machine:load("{quoted_state}")
+        save_load = 1
         phase = "adding"
     elseif phase == "adding"
             and count(0x{slots["scsi_attached"]:08x}) >= 1
@@ -238,6 +260,7 @@ def acceptance_errors(result: dict[str, str]) -> list[str]:
         ("keyboard_led", 2),
         ("post_add_key", 1),
         ("post_reinsert_key", 1),
+        ("save_load", 1),
     ):
         if value(name) < minimum:
             errors.append(f"{name}={value(name)} (need {minimum})")
@@ -279,7 +302,10 @@ def main(argv: list[str] | None = None) -> int:
     (run_dir / "nvram").mkdir(parents=True)
     (run_dir / "cfg").mkdir()
     lua_path = run_dir / "magicbus-hotplug.lua"
-    lua_path.write_text(automation_script(args.frames), encoding="utf-8")
+    state_path = run_dir / "magicbus-pending.sta"
+    lua_path.write_text(
+        automation_script(args.frames, state_path), encoding="utf-8"
+    )
     (run_dir / "cfg" / f"{args.system}.cfg").write_text(
         machine_config(args.system), encoding="utf-8"
     )
@@ -332,11 +358,14 @@ def main(argv: list[str] | None = None) -> int:
         f"  {'peripherals':<{width}}  {result.get('peripherals', '0')}\n"
         f"  {'post_add_key':<{width}}  {result.get('post_add_key', '0')}\n"
         f"  {'post_reinsert_key':<{width}}  "
-        f"{result.get('post_reinsert_key', '0')}"
+        f"{result.get('post_reinsert_key', '0')}\n"
+        f"  {'save_load':<{width}}  {result.get('save_load', '0')}"
     )
     print(f"Artifacts: {run_dir}")
 
     errors = acceptance_errors(result)
+    if not state_path.is_file():
+        errors.append("save state missing")
     if errors:
         print(
             "FAIL: incomplete Magic Bus hot-plug lifecycle: "
@@ -346,7 +375,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(
         "PASS: SCTG tail attached, detached, and reattached; "
-        "keyboard traffic survived both live transitions"
+        "pending topology survived save/load and keyboard traffic survived "
+        "both live transitions"
     )
     return 0
 

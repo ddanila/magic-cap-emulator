@@ -586,14 +586,15 @@ word against the requested value using the ROM's own four-tick tolerance.
 Artifacts remain under `$MAGIC_CAP_ASSETS/runtime/rtc-set-regression/`.
 
 The Magic Bus hot-plug companion starts with one AT keyboard, appends the SCTG
-tail through the live machine configuration, removes it and reinserts it
-without resetting MAME. It requires the ROM's command-27/address-six attach
-path, addressed missing-device receive error, detach handler and both second
-client attachments. Caps Lock/LED round trips after the first attachment and
-after reinsertion prove that the unchanged keyboard path still carries
-traffic. The expected removal signature is exactly one low-level
-`MagicBusError` and zero entries into the separately announced
-`MagicBus_HandleMagicBusFailure`. Artifacts remain under
+tail through the live machine configuration, saves and reloads while the tail
+is still hidden during ROM debounce, then removes and reinserts it without
+resetting MAME. It requires the ROM's command-27/address-six attach path,
+addressed missing-device receive error, detach handler and both second client
+attachments. Caps Lock/LED round trips after the first attachment and after
+reinsertion prove that the unchanged keyboard path still carries traffic. The
+expected removal signature is exactly one low-level `MagicBusError` and zero
+entries into the separately announced `MagicBus_HandleMagicBusFailure`.
+Artifacts remain under
 `$MAGIC_CAP_ASSETS/runtime/magicbus-hotplug/`.
 
 The PC Card harness copies the verified 840F flasher into its persistent run
