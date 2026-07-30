@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify TX39 multiply throughput and nonblocking divide timing in MAME."""
+"""Verify TX39 GPR interlocks and nonblocking divide timing in MAME."""
 
 from __future__ import annotations
 
@@ -24,11 +24,17 @@ MODE_CYCLES = {
     "MULT": 4,
     "MADD": 4,
     "MULT_DEP": 6,
+    "LOAD": 4,
+    "LOAD_DEP": 6,
+    "LOAD_LWL": 5,
+    "LOAD_ZERO": 5,
     "DIV": 4,
     "DIV_MFLO": 39,
 }
 RESULT_PATTERN = re.compile(
-    rb"TIMING (BASE|MULT|MADD|MULT_DEP|DIV|DIV_MFLO) COUNT=([0-9A-F]{8})"
+    rb"TIMING "
+    rb"(BASE|MULT|MADD|MULT_DEP|LOAD|LOAD_DEP|LOAD_LWL|LOAD_ZERO|DIV|DIV_MFLO) "
+    rb"COUNT=([0-9A-F]{8})"
 )
 DIV_RESULT_PATTERN = re.compile(
     rb"TIMING DIV_MFLO COUNT=[0-9A-F]{8} RESULT=([0-9A-F]{8}).*"
@@ -82,6 +88,45 @@ local modes = {
         },
     },
     {
+        name = "LOAD",
+        body = {
+            0x26100001, -- addiu s0,s0,1
+            0x8d880000, -- lw t0,0(t4)
+            0x1000fffd, -- b loop
+            0x00000000, -- nop
+        },
+    },
+    {
+        name = "LOAD_DEP",
+        body = {
+            0x26100001, -- addiu s0,s0,1
+            0x8d880000, -- lw t0,0(t4)
+            0x01005821, -- addu t3,t0,zero
+            0x1000fffc, -- b loop
+            0x00000000, -- nop
+        },
+    },
+    {
+        name = "LOAD_LWL",
+        body = {
+            0x8d880000, -- lw t0,0(t4)
+            0x89880001, -- lwl t0,1(t4): target-register bypass
+            0x26100001, -- addiu s0,s0,1
+            0x1000fffc, -- b loop
+            0x00000000, -- nop
+        },
+    },
+    {
+        name = "LOAD_ZERO",
+        body = {
+            0x8d800000, -- lw zero,0(t4)
+            0x00005821, -- addu t3,zero,zero
+            0x26100001, -- addiu s0,s0,1
+            0x1000fffc, -- b loop
+            0x00000000, -- nop
+        },
+    },
+    {
         name = "DIV",
         body = {
             0x26100001, -- addiu s0,s0,1
@@ -116,6 +161,7 @@ local function run_mode(index)
     end
 
     cpu.state["SR"].value = 0
+    cpu.state["R12"].value = 0xa0002000
     cpu.state["PC"].value = 0xa0000000 | address
 end
 
@@ -157,15 +203,17 @@ end
 emu.register_frame_done(function()
     frames = frames + 1
     if frames == 10 then
+        program:write_u32(0x00002000, 0x12345678)
         run_mode(1)
-    elseif frames >= 11 and frames <= 15 then
+    elseif frames > 10 and frames <= 10 + #modes then
         local index = frames - 10
         report_mode(index)
-        run_mode(index + 1)
-    elseif frames == 16 then
-        report_mode(6)
-        run_cancel_case()
-    elseif frames == 17 then
+        if index < #modes then
+            run_mode(index + 1)
+        else
+            run_cancel_case()
+        end
+    elseif frames == 11 + #modes then
         print(string.format(
             "TIMING DIV_CANCEL RESULT=%08X",
             cpu.state["R13"].value))
@@ -298,9 +346,9 @@ def run_regression(args: argparse.Namespace) -> int:
         return 1
 
     print(
-        "PASS: TX39 MULT/MADD accept one instruction per cycle, dependent "
-        "GPR reads stall once, and DIV overlaps independent execution while "
-        "MFLO retains its 35-cycle interlock"
+        "PASS: TX39 MULT/MADD and loads accept independent instructions each "
+        "cycle, dependent GPR reads stall once, LWL bypasses its target, and "
+        "DIV overlaps execution while MFLO retains its 35-cycle interlock"
     )
     print(f"Artifacts: {run_dir}")
     return 0

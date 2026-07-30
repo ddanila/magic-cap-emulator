@@ -44,6 +44,13 @@ the integer pipeline: unrelated instructions continue, while `MFHI`, `MFLO`,
 through exceptions, pauses with the CPU in Halt/Doze, and is cancelled by
 `MTHI`, `MTLO`, or a new divide.
 
+Ordinary loads have a matching one-cycle dependency contract. The instruction
+immediately after a load proceeds without delay when independent and stalls
+for one cycle when it reads the loaded GPR. The manual explicitly exempts an
+`LWL` or `LWR` that uses the preceding load's destination as its own target;
+this is the byte-merge bypass needed by normal unaligned-load pairs. A
+destination of register zero never stalls.
+
 ## ROM audit
 
 The hosted SDK ELF's executable `.text` section contains 792 aligned
@@ -139,9 +146,9 @@ operation. Leaving the prefetched words resident makes
 `AssignMagicBusAddresses` reject a byte-for-byte correct record; invalidating
 the DMA range lets the monitor discover the SCTG endpoint while retaining the
 documented four-word data refill. DALc-locked lines remain private on-chip
-storage and are deliberately not invalidated. Multiply/divide timing is
-modelled as described below; external-bus wait states, cache-refill timing and
-the load-use interlock are not yet claimed.
+storage and are deliberately not invalidated. Multiply, divide and ordinary
+load-use timing are modelled as described below; external-bus wait states and
+cache-miss/refill timing are not yet claimed.
 
 ## Emulator behavior and regression
 
@@ -156,6 +163,11 @@ The R3900 arithmetic pipeline is also device-specific. Multiply and
 multiply/add accept one instruction per emulated processor cycle. A nonzero
 GPR destination records a one-cycle dependency, charged only if the next
 executed instruction actually reads it; exceptions flush that dependency.
+Successful byte, halfword, word, `LWL`, and `LWR` loads record the same
+dependency. Source decoding distinguishes address and value operands, so an
+independent instruction proceeds and the manual's `LWL`/`LWR`
+target-register bypass does not spuriously stall.
+
 Division retains a pending result and 35-cycle countdown while independent
 integer and exception-handler instructions execute. HI/LO consumers spend the
 remaining cycles at their interlock, while `MTHI`, `MTLO`, or another divide
@@ -232,7 +244,12 @@ The timing companion compares fixed-duration uncached loops. A reference run
 counted `204744` three-cycle baseline iterations; after normalization, the
 one-cycle-issue `MULT`, `MADD`, and unconsumed `DIV` loops differed by less
 than 0.01%. An immediate GPR consumer reduced `MULT` throughput by exactly one
-cycle per loop. `DIV` followed by `MFLO` completed `15749` 39-cycle loops,
+cycle per loop. Independent `LW` matched the four-cycle multiply loop, its
+immediate GPR consumer added exactly one cycle, and `LW` → `LWL` retained the
+five-instruction issue rate without a false target-register dependency. A
+load into register zero followed by an instruction reading zero retained the
+same five-instruction rate.
+`DIV` followed by `MFLO` completed `15749` 39-cycle loops,
 returned `100 / 7 = 14`, and a separate `MTHI` case retained `0x1234` after
 cancelling an active divide. This distinguishes real divider overlap from the
 old implementation, which charged all 35 cycles at `DIV` and prevented

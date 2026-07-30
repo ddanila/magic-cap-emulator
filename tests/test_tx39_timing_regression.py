@@ -19,6 +19,9 @@ class Tx39TimingRegressionTests(unittest.TestCase):
         self.assertIn("0x712a4000", script)
         self.assertIn("0x012a001a", script)
         self.assertIn("0x00004012", script)
+        self.assertIn("0x8d880000", script)
+        self.assertIn("0x89880001", script)
+        self.assertIn("0x8d800000", script)
         self.assertIn("0x01800011", script)
 
     def test_parse_results(self) -> None:
@@ -66,7 +69,8 @@ class Tx39TimingRegressionTests(unittest.TestCase):
         self.assertEqual(
             verify_results({"BASE": 1}),
             [
-                "missing timing modes: MULT, MADD, MULT_DEP, DIV, DIV_MFLO"
+                "missing timing modes: MULT, MADD, MULT_DEP, LOAD, LOAD_DEP, "
+                "LOAD_LWL, LOAD_ZERO, DIV, DIV_MFLO"
             ],
         )
 
