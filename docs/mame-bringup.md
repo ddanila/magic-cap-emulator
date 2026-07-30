@@ -689,7 +689,23 @@ done
 ```
 
 The serial and desk harnesses accept `--system`, so both checkpoints can be
-run against any of these sets; `datarover840d` passes both.
+run against any of these sets. All four pass both checkpoints. The Japan ROM
+uses the same three calibration targets, then presents a localized
+registration/help dialog; the desk harness dismisses its **begin** button and
+checks its distinct workbench signature.
+
+The 840F's four byte-wide flash chips receive the USA ROM's big-endian bus
+lanes on first use, then persist as independent NVRAM files. This focused
+regression boots a fresh set, interleaves all four saved lanes and requires
+the exact ROM prefix plus erased 8 MiB tail, then boots the same unchanged
+lane files in a second MAME process:
+
+```sh
+python3 tools/flash_variant_regression.py
+```
+
+Generated flash, serial logs and configuration remain under
+`$MAGIC_CAP_ASSETS/runtime/flash-variant-regression/`.
 
 `tools/devrom_tests.py` goes further with that set: it forces calls to the
 development ROM's own OS unit tests and judges them with the oracle the ROM
@@ -784,12 +800,12 @@ the separate serial-terminal view.
 | PCLink | The Storeroom computer installs archived `DvorakKeyboard.pkg`; the optional 452K TLS-browser package also transfers, disconnects cleanly, and records zero ROM Magic Bus failures |
 | IrDA / Beam | Two fresh peers exchange SIR discovery frames, select `bob Receiver`, and transfer either `alice Sender`'s name card or the displayed Notebook page into the receiver's Inbox |
 | PC Card modem | Magic Cap detects the card, completes its Hayes sequence, emits an async-HDLC PPP LCP frame, and preserves its 16550/RX/IREQ state without a false card edge across save/load |
-| Variants | Audited USA mask-ROM, USA 840F flash, and Japan ROM sets all build, verify, and enter execution |
+| Variants | Audited USA mask-ROM, USA 840F flash, Japan ROM and development ROM sets all build, verify, calibrate and reach their workbenches; fresh 840F flash also reconstructs the source ROM exactly and survives a second process |
 
-The machine remains marked `MACHINE_NOT_WORKING` while modeled hardware is
-still incomplete. The current gaps include physical Magic Bus chaining and
-electrical timing, and hardware fidelity beyond the register behavior
-exercised by the ROM; see
+The four systems no longer carry `MACHINE_NOT_WORKING`: the covered product
+workflows and every variant are usable as intended. They retain the narrower
+`MACHINE_IMPERFECT_TIMING` warning because exact Dino external-bus and
+physical Magic Bus timing is not known; see
 [`PLAN.md`](../PLAN.md#remaining-work). Magic Bus discovery, its multi-address
 topology, AT-keyboard traffic and both directions of the monitor's SCTG
 request/data path are covered by headless probes. The production

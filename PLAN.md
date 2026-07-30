@@ -27,7 +27,7 @@ The full regression list and expected checkpoints are in
 | PCLink | Recovered WinPCLink protocol installs archived packages into live Magic Cap, including the 452K Apollo browser from the Old VCR field report | [`pclink.md`](docs/pclink.md), [`oldvcr-tls.md`](docs/oldvcr-tls.md) |
 | IrDA / Beam | Two fresh communicators discover each other by name over SIR, the sender selects the receiver, and either a name card or a displayed Notebook page arrives in the receiver's Inbox | [`irda.md`](docs/irda.md) |
 | Modem → PPP | PC Card modem completes Hayes + live Slirp LCP/IPCP; Web Browser 4.0 fetches and renders deterministic local HTTP; its 16550 registers, partially consumed receive FIFO and IREQ state survive save/load without a false card-removal edge | [`modem.md`](docs/modem.md) |
-| Variants | `datarover840` / `840f` (writable flash) / `840j` / `840d` (1998-04-07 development ROM) all build and verify; `840d` also boots to the workbench | [`rom-layout.md`](docs/rom-layout.md), [`dev-rom.md`](docs/dev-rom.md) |
+| Variants | `datarover840` / `840f` (writable flash) / `840j` / `840d` (1998-04-07 development ROM) all build, verify, and pass fresh calibration through the workbench; 840F also reconstructs and reboots its four persistent flash lanes exactly | [`rom-layout.md`](docs/rom-layout.md), [`dev-rom.md`](docs/dev-rom.md) |
 | OS self-tests | The development ROM's real Command-T runs through the OS scheduler: all 16 basic suites complete and return with no complaint. Fourteen individually driven unit tests — including `CheckROMPristineTable`, the OS verifying its own ROM — remain useful focused checks | [`dev-rom.md`](docs/dev-rom.md) |
 
 ## Completed built-in modem line and Internet bridge
@@ -193,7 +193,9 @@ The full regression list and expected checkpoints are in
   model. Likely branches for absent external coprocessors are also not
   modelled; no such opcode occurs in a sized SDK ELF function.
 
-The machine stays `MACHINE_NOT_WORKING` while these hardware gaps remain.
+The four systems are usable as intended and no longer carry
+`MACHINE_NOT_WORKING`. They carry `MACHINE_IMPERFECT_TIMING` because exact
+Dino external-bus and Magic Bus electrical timing remains unknown.
 The product-level coverage matrix and smaller UI acceptance backlog derived
 from Icras's guide are in [`user-guide.md`](docs/user-guide.md). The
 independent real-device, SDK, PCLink, Ethernet and proxy-browser evidence from

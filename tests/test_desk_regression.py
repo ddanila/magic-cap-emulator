@@ -36,6 +36,16 @@ class DeskRegressionTests(unittest.TestCase):
         self.assertIn("DESK_CHECKPOINT", script)
         self.assertIn('snapshot("magic-cap-desk.png")', script)
 
+    def test_japan_script_dismisses_localized_welcome_after_calibration(self) -> None:
+        script = desk_regression.automation_script("datarover840j")
+
+        self.assertIn("press(315, 187)", script)
+        self.assertIn("frames == 2600", script)
+        self.assertEqual(
+            desk_regression.SYSTEM_CHECKPOINTS["datarover840j"],
+            (0x760DE369, 8_000),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

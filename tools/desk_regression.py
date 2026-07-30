@@ -22,6 +22,9 @@ DEFAULT_WORKDIR = ASSETS_ROOT / "runtime" / "desk-regression"
 EXPECTED_BASE = 0x003F6A00
 EXPECTED_WORKBENCH = 0x9DAB458B
 EXPECTED_MIN_NONZERO = 6_000
+SYSTEM_CHECKPOINTS = {
+    "datarover840j": (0x760DE369, 8_000),
+}
 CHECKPOINT_PATTERN = re.compile(
     rb"DESK_CHECKPOINT BASE=([0-9A-F]{8}) "
     rb"CHECKSUM=([0-9A-F]{8}) "
@@ -29,25 +32,10 @@ CHECKPOINT_PATTERN = re.compile(
 )
 
 
-def automation_script() -> str:
+def automation_script(system: str = "datarover840") -> str:
     """Return the deterministic MAME Lua input sequence."""
-    return r"""local machine = manager.machine
-local ports = machine.ioport.ports
-local touch_x = ports[":TOUCH_X"]:field(0xffff)
-local touch_y = ports[":TOUCH_Y"]:field(0xffff)
-local touch_button = ports[":TOUCH_BUTTON"]:field(0x01)
-local frames = 0
-
-local function press(x, y)
-    touch_x:set_value(math.floor((x * 0xffff) / 479))
-    touch_y:set_value(math.floor((y * 0xffff) / 319))
-    touch_button:set_value(1)
-end
-
-emu.register_frame_done(function()
-    frames = frames + 1
-
-    if frames == 1220 then
+    if system == "datarover840j":
+        input_sequence = r"""if frames == 1220 then
         press(240, 160)
     elseif frames == 1240 then
         touch_button:set_value(0)
@@ -64,6 +52,48 @@ emu.register_frame_done(function()
     elseif frames == 1840 then
         touch_button:set_value(0)
     elseif frames == 2200 then
+        press(315, 187)
+    elseif frames == 2220 then
+        touch_button:set_value(0)
+    elseif frames == 2600 then"""
+        exit_frame = 2620
+    else:
+        input_sequence = r"""if frames == 1220 then
+        press(240, 160)
+    elseif frames == 1240 then
+        touch_button:set_value(0)
+    elseif frames == 1420 then
+        press(23, 23)
+    elseif frames == 1440 then
+        touch_button:set_value(0)
+    elseif frames == 1620 then
+        press(456, 296)
+    elseif frames == 1640 then
+        touch_button:set_value(0)
+    elseif frames == 1820 then
+        press(240, 160)
+    elseif frames == 1840 then
+        touch_button:set_value(0)
+    elseif frames == 2200 then"""
+        exit_frame = 2220
+
+    script = r"""local machine = manager.machine
+local ports = machine.ioport.ports
+local touch_x = ports[":TOUCH_X"]:field(0xffff)
+local touch_y = ports[":TOUCH_Y"]:field(0xffff)
+local touch_button = ports[":TOUCH_BUTTON"]:field(0x01)
+local frames = 0
+
+local function press(x, y)
+    touch_x:set_value(math.floor((x * 0xffff) / 479))
+    touch_y:set_value(math.floor((y * 0xffff) / 319))
+    touch_button:set_value(1)
+end
+
+emu.register_frame_done(function()
+    frames = frames + 1
+
+    INPUT_SEQUENCE
         local program = machine.devices[":maincpu"].spaces["program"]
         local framebuffer = program:read_u32(0x10c00030) & 0xfffffff0
         local checksum = 0
@@ -85,11 +115,15 @@ emu.register_frame_done(function()
             "DESK_CHECKPOINT BASE=%08X CHECKSUM=%08X WORKBENCH=%08X NONZERO=%d",
             framebuffer, checksum, workbench, nonzero))
         machine.screens[":screen"]:snapshot("magic-cap-desk.png")
-    elseif frames == 2220 then
+    elseif frames == EXIT_FRAME then
         machine:exit()
     end
 end)
 """
+    return (
+        script.replace("INPUT_SEQUENCE", input_sequence)
+        .replace("EXIT_FRAME", str(exit_frame))
+    )
 
 
 def parse_checkpoint(output: bytes) -> tuple[int, int, int, int] | None:
@@ -169,7 +203,7 @@ def run_regression(args: argparse.Namespace) -> int:
     nvram_dir.mkdir(parents=True)
     snapshot_dir.mkdir()
     lua_path = run_dir / "desk-regression.lua"
-    lua_path.write_text(automation_script(), encoding="utf-8")
+    lua_path.write_text(automation_script(args.system), encoding="utf-8")
 
     command = [
         str(mame),
@@ -226,17 +260,21 @@ def run_regression(args: argparse.Namespace) -> int:
         return 2
 
     actual = parse_checkpoint(completed.stdout)
+    expected_workbench, expected_min_nonzero = SYSTEM_CHECKPOINTS.get(
+        args.system,
+        (EXPECTED_WORKBENCH, EXPECTED_MIN_NONZERO),
+    )
     if (
         actual is None
         or actual[0] != EXPECTED_BASE
-        or actual[2] != EXPECTED_WORKBENCH
-        or actual[3] < EXPECTED_MIN_NONZERO
+        or actual[2] != expected_workbench
+        or actual[3] < expected_min_nonzero
     ):
         print(
             f"FAIL: desk checkpoint {actual!r}, expected base "
             f"{EXPECTED_BASE:#010x}, workbench signature "
-            f"{EXPECTED_WORKBENCH:#010x}, and at least "
-            f"{EXPECTED_MIN_NONZERO} nonzero words; "
+            f"{expected_workbench:#010x}, and at least "
+            f"{expected_min_nonzero} nonzero words; "
             f"see {log_path}",
             file=sys.stderr,
         )
@@ -249,7 +287,7 @@ def run_regression(args: argparse.Namespace) -> int:
 
     print(
         "PASS: calibrated Magic Cap desk framebuffer "
-        f"matches workbench signature {EXPECTED_WORKBENCH:#010x}"
+        f"matches workbench signature {expected_workbench:#010x}"
     )
     print(f"Snapshot: {snapshot_path}")
     print(f"Artifacts: {run_dir}")

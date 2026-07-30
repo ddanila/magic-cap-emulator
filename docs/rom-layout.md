@@ -171,6 +171,16 @@ The exact production flash part marking has not surfaced in a board photo,
 so the compatible Fujitsu part choice is documented rather than presented as
 a confirmed physical chip identification.
 
+The first-run seed must respect the 32-bit big-endian ROM region rather than
+copying its host-endian backing bytes directly. The focused acceptance boots
+fresh flash to the IDT prompt, reconstructs the complete 8 MiB bus image from
+the four saved lanes, requires an exact ROM prefix and erased tail, then
+relaunches the unchanged flash:
+
+```sh
+python3 tools/flash_variant_regression.py
+```
+
 `WinDownload.exe` is not needed by the emulator, but the archived tool can be
 obtained separately when its serial protocol needs investigation:
 
