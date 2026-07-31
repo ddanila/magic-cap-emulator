@@ -34,6 +34,14 @@ DEFAULT_ROMPATH = ASSETS_ROOT / "roms"
 DEFAULT_WORKDIR = ASSETS_ROOT / "runtime" / "paired-demo"
 DEFAULT_OUTPUT = REPO_ROOT / "docs" / "media" / "datarover-beam-fax-demo.gif"
 SIGNATURE = REPO_ROOT / "docs" / "media" / "sam-altman-signature.svg"
+INVITATION_TEXT = """PARODY DEMO - NOT A REAL OFFER
+To: Danila Sukharev
+Dear Danila,
+Please join OpenAI as a
+Senior Magic Cap Emulator Engineer.
+This is a joke for a 1998 DataRover.
+Sincerely,
+Sam Altman"""
 
 
 def command(args: list[str], cwd: Path = REPO_ROOT) -> None:
@@ -61,8 +69,9 @@ def font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.Im
     return ImageFont.load_default()
 
 
-def make_invitation(run_dir: Path) -> tuple[Path, Path]:
-    signature_png = run_dir / "signature.png"
+def signature_strokes(run_dir: Path) -> list[tuple[int, int, int]]:
+    """Rasterize the reference signature into horizontal Notebook pen runs."""
+    signature = run_dir / "notebook-signature.png"
     magick = shutil.which("magick") or shutil.which("convert")
     if magick is None:
         raise RuntimeError("ImageMagick is required to rasterize the signature")
@@ -73,61 +82,148 @@ def make_invitation(run_dir: Path) -> tuple[Path, Path]:
             "white",
             str(SIGNATURE),
             "-resize",
-            "145x58",
+            "120x45",
             "-flatten",
-            str(signature_png),
+            "-threshold",
+            "55%",
+            str(signature),
         ]
     )
+    strokes: list[tuple[int, int, int]] = []
+    with Image.open(signature) as image:
+        pixels = image.convert("L")
+        for y in range(pixels.height):
+            start: int | None = None
+            for x in range(pixels.width + 1):
+                black = x < pixels.width and pixels.getpixel((x, y)) < 128
+                if black and start is None:
+                    start = x
+                elif not black and start is not None:
+                    strokes.append((270 + start, 215 + y, 270 + x - 1))
+                    start = None
+    return strokes
 
-    page = Image.new("L", (480, 320), 255)
-    draw = ImageDraw.Draw(page)
-    draw.rectangle((5, 5, 474, 314), outline=0, width=2)
-    draw.text((18, 14), "OPENAI", fill=0, font=font(25, bold=True))
-    draw.text(
-        (156, 18),
-        "PARODY DEMO — NOT A REAL OFFER",
-        fill=0,
-        font=font(12, bold=True),
-    )
-    draw.line((18, 50, 461, 50), fill=0, width=1)
-    lines = (
-        ("To: Danila Sukharev", 64, True),
-        ("Dear Danila,", 96, False),
-        ("We would be delighted if you joined OpenAI as a", 121, False),
-        ("Senior Magic Cap Emulator Engineer.", 142, True),
-        ("Please report to the Internet Center in 1998.", 167, False),
-        ("Sincerely,", 197, False),
-    )
-    for text, y, bold in lines:
-        draw.text((22, y), text, fill=0, font=font(15, bold=bold))
-    with Image.open(signature_png) as signature:
-        signature = signature.convert("L")
-        page.paste(signature, (260, 201))
-    draw.text((300, 260), "Sam Altman", fill=0, font=font(14))
-    draw.text(
-        (22, 291),
-        "A joke recorded on an emulated 1998 DataRover.",
-        fill=0,
-        font=font(11),
-    )
-    page = page.quantize(colors=4).convert("L")
-    png = run_dir / "parody-job-invitation.png"
-    page.save(png)
 
-    raw = bytearray()
-    pixels = page.load()
-    for y in range(320):
-        for x in range(0, 480, 4):
-            values = [
-                round((255 - pixels[x + offset, y]) / 255 * 3)
-                for offset in range(4)
-            ]
-            raw.append(
-                (values[0] << 6) | (values[1] << 4) | (values[2] << 2) | values[3]
-            )
-    raw_path = run_dir / "parody-job-invitation.2bpp"
-    raw_path.write_bytes(raw)
-    return png, raw_path
+def notebook_invitation_script(strokes: list[tuple[int, int, int]]) -> str:
+    """Create, commit, and reopen a real Magic Cap Notebook invitation."""
+    text_start = 3700
+    lines = INVITATION_TEXT.splitlines()
+    text_steps = "\n".join(
+        f'  elseif frames == {text_start + index * 240} then '
+        f'emu.keypost("{line.replace(chr(34), chr(92) + chr(34))}\\n")'
+        for index, line in enumerate(lines)
+    )
+    keyboard_done = text_start + len(lines) * 240
+    stroke_start = keyboard_done + 500
+    stroke_interval = 30
+    stroke_steps = "\n".join(
+        f"  elseif frames == {stroke_start + index * stroke_interval} "
+        f"then press({x1}, {y})\n"
+        f"  elseif frames == {stroke_start + index * stroke_interval + 10} "
+        f"then move({x2}, {y})\n"
+        f"  elseif frames == {stroke_start + index * stroke_interval + 20} "
+        "then release()"
+        for index, (x1, y, x2) in enumerate(strokes)
+    )
+    ink_done = stroke_start + len(strokes) * stroke_interval
+    return f"""local machine = manager.machine
+local ports = machine.ioport.ports
+local screen = machine.screens[":screen"]
+local touch_x = ports[":TOUCH_X"]:field(0xffff)
+local touch_y = ports[":TOUCH_Y"]:field(0xffff)
+local touch_button = ports[":TOUCH_BUTTON"]:field(0x01)
+local frames = 0
+
+local function move(x, y)
+  touch_x:set_value(math.floor(x * 0xffff / 479))
+  touch_y:set_value(math.floor(y * 0xffff / 319))
+end
+local function press(x, y)
+  move(x, y)
+  touch_button:set_value(1)
+end
+local function release()
+  touch_button:set_value(0)
+end
+
+emu.register_frame_done(function()
+  frames = frames + 1
+  if frames == 1000 then press(440, 10)
+  elseif frames == 1020 then release()
+  elseif frames == 1300 then press(335, 170)
+  elseif frames == 1320 then release()
+  elseif frames == 1800 then press(451, 100)
+  elseif frames == 1820 then release()
+  elseif frames == 2200 then press(145, 92)
+  elseif frames == 2220 then release()
+  elseif frames == 3000 then press(31, 80)
+  elseif frames == 3020 then release()
+  elseif frames == 3200 then press(376, 301)
+  elseif frames == 3220 then release()
+{text_steps}
+  elseif frames == {keyboard_done + 200} then press(455, 302)
+  elseif frames == {keyboard_done + 220} then release()
+{stroke_steps}
+  elseif frames == {ink_done + 200} then
+    screen:snapshot("notebook-invitation-created.png")
+  elseif frames == {ink_done + 400} then press(440, 10)
+  elseif frames == {ink_done + 420} then release()
+  elseif frames == {ink_done + 700} then press(335, 170)
+  elseif frames == {ink_done + 720} then release()
+  elseif frames == {ink_done + 1000} then
+    screen:snapshot("notebook-invitation-reopened.png")
+  elseif frames == {ink_done + 1200} then machine:exit()
+  end
+end)
+"""
+
+
+def prepare_notebook_invitation(
+    mame: Path, rompath: Path, source_nvram: Path, run_dir: Path
+) -> Path:
+    """Prepare a retained Sam-owned NVRAM with the real invitation page open."""
+    cfg = run_dir / "cfg"
+    nvram = run_dir / "nvram"
+    snapshots = run_dir / "snapshots"
+    cfg.mkdir(parents=True)
+    snapshots.mkdir()
+    shutil.copytree(source_nvram, nvram)
+    script = run_dir / "notebook-invitation.lua"
+    script.write_text(
+        notebook_invitation_script(signature_strokes(run_dir)), encoding="utf-8"
+    )
+    command(
+        [
+            str(mame),
+            "datarover840",
+            "-rompath",
+            str(rompath),
+            "-cfg_directory",
+            str(cfg),
+            "-nvram_directory",
+            str(nvram),
+            "-snapshot_directory",
+            str(snapshots),
+            "-snapview",
+            "native",
+            "-autoboot_script",
+            str(script),
+            "-autoboot_delay",
+            "0",
+            "-video",
+            "none",
+            "-sound",
+            "none",
+            "-videodriver",
+            "dummy",
+            "-audiodriver",
+            "dummy",
+            "-nothrottle",
+            "-skip_gameinfo",
+        ],
+        cwd=mame.parent,
+    )
+    return nvram
 
 
 def find_mngs(directory: Path) -> list[Path]:
@@ -137,8 +233,9 @@ def find_mngs(directory: Path) -> list[Path]:
     return matches
 
 
-def native_lcd_mng(mngs: list[Path]) -> Path:
-    """Select MAME's 480x320 LCD recording, ignoring the modem bitmap."""
+def native_lcd_mngs(mngs: list[Path]) -> list[Path]:
+    """Select every 480x320 LCD rollover, ignoring modem recordings."""
+    matches: list[Path] = []
     for mng in mngs:
         with mng.open("rb") as stream:
             stream.read(8)
@@ -151,39 +248,41 @@ def native_lcd_mng(mngs: list[Path]) -> Path:
                 if chunk_type == b"IHDR":
                     width, height = struct.unpack(">II", payload[:8])
                     if (width, height) == (480, 320):
-                        return mng
+                        matches.append(mng)
                     break
-    raise RuntimeError(f"no 480x320 LCD recording found in {mngs}")
+    if not matches:
+        raise RuntimeError(f"no 480x320 LCD recording found in {mngs}")
+    return matches
 
 
 def extract(mngs: list[Path], destination: Path, start: int = 0) -> list[Path]:
     """Stream independent PNG frames out of MAME's MNG without a giant cache."""
     destination.mkdir(exist_ok=True)
-    mng = native_lcd_mng(mngs)
     png_signature = b"\x89PNG\r\n\x1a\n"
     frame = -1
-    chunks: list[bytes] = []
-    with mng.open("rb") as stream:
-        if stream.read(8) != b"\x8aMNG\r\n\x1a\n":
-            raise RuntimeError(f"invalid MNG signature: {mng}")
-        while header := stream.read(8):
-            if len(header) != 8:
-                raise RuntimeError(f"truncated MNG chunk header: {mng}")
-            length, chunk_type = struct.unpack(">I4s", header)
-            body = stream.read(length + 4)
-            if len(body) != length + 4:
-                raise RuntimeError(f"truncated MNG chunk: {mng}")
-            chunk = header + body
-            if chunk_type == b"IHDR":
-                frame += 1
-                chunks = [chunk] if frame >= start else []
-            elif chunks:
-                chunks.append(chunk)
-                if chunk_type == b"IEND":
-                    (destination / f"f{frame - start:05d}.png").write_bytes(
-                        png_signature + b"".join(chunks)
-                    )
-                    chunks = []
+    for mng in native_lcd_mngs(mngs):
+        chunks: list[bytes] = []
+        with mng.open("rb") as stream:
+            if stream.read(8) != b"\x8aMNG\r\n\x1a\n":
+                raise RuntimeError(f"invalid MNG signature: {mng}")
+            while header := stream.read(8):
+                if len(header) != 8:
+                    raise RuntimeError(f"truncated MNG chunk header: {mng}")
+                length, chunk_type = struct.unpack(">I4s", header)
+                body = stream.read(length + 4)
+                if len(body) != length + 4:
+                    raise RuntimeError(f"truncated MNG chunk: {mng}")
+                chunk = header + body
+                if chunk_type == b"IHDR":
+                    frame += 1
+                    chunks = [chunk] if frame >= start else []
+                elif chunks:
+                    chunks.append(chunk)
+                    if chunk_type == b"IEND":
+                        (destination / f"f{frame - start:05d}.png").write_bytes(
+                            png_signature + b"".join(chunks)
+                        )
+                        chunks = []
     frames = sorted(destination.glob("*.png"))
     if not frames:
         raise RuntimeError(f"no frames decoded from {mngs}")
@@ -197,7 +296,6 @@ def paired_frames(
     destination: Path,
     sequence: int,
     title: str,
-    freeze_left_tail: int = 0,
 ) -> int:
     destination.mkdir(exist_ok=True)
     count = max(len(left), len(right))
@@ -205,10 +303,7 @@ def paired_frames(
     label_font = font(15, bold=True)
     title_font = font(13, bold=True)
     for index in range(start, count):
-        left_index = min(index, len(left) - 1)
-        if freeze_left_tail and index >= count - freeze_left_tail:
-            left_index = 0
-        with Image.open(left[left_index]) as left_image:
+        with Image.open(left[min(index, len(left) - 1)]) as left_image:
             with Image.open(right[min(index, len(right) - 1)]) as right_image:
                 canvas = Image.new("L", (960, 348), 255)
                 canvas.paste(left_image.convert("L"), (0, 28))
@@ -247,18 +342,19 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.skip_runs:
         run_dir = args.skip_runs.expanduser().resolve()
-        beam_dir = next((run_dir / "beam").iterdir())
-        fax_dir = next((run_dir / "fax").iterdir())
+        beam_dir = max((run_dir / "beam").iterdir(), key=lambda path: path.name)
+        fax_dir = max((run_dir / "fax").iterdir(), key=lambda path: path.name)
     else:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
         run_dir = args.workdir.expanduser().resolve() / f"{stamp}-{os.getpid()}"
         beam_work = run_dir / "beam"
         owner_work = run_dir / "fax-answer-owner"
+        document_work = run_dir / "fax-origin-document"
         fax_work = run_dir / "fax"
         beam_work.mkdir(parents=True)
         owner_work.mkdir()
+        document_work.mkdir()
         fax_work.mkdir()
-        _invitation_png, invitation_raw = make_invitation(run_dir)
 
         before = set(beam_work.iterdir())
         command(
@@ -312,6 +408,12 @@ def main(argv: list[str] | None = None) -> int:
             ]
         )
         owner_dir = latest_child(owner_work, before)
+        document_nvram = prepare_notebook_invitation(
+            args.mame,
+            args.rompath,
+            beam_dir / "sender" / "nvram",
+            document_work,
+        )
 
         before = set(fax_work.iterdir())
         command(
@@ -327,13 +429,12 @@ def main(argv: list[str] | None = None) -> int:
                 "--nvram-source",
                 str(owner_dir / "sender" / "nvram"),
                 "--origin-nvram-source",
-                str(beam_dir / "sender" / "nvram"),
+                str(document_nvram),
                 "--recipient-first",
                 "Danila",
                 "--recipient-last",
                 "Sukharev",
-                "--origin-screen-raw",
-                str(invitation_raw),
+                "--origin-document",
                 "--open-received-fax",
                 "--record",
             ]
@@ -371,7 +472,6 @@ def main(argv: list[str] | None = None) -> int:
         combined,
         sequence,
         "Built-in modem fax",
-        freeze_left_tail=300,
     )
     paths = sorted(combined.glob("*.png"))
     runs = frame_runs(paths)

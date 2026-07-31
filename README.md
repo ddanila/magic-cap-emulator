@@ -22,7 +22,7 @@ deterministic touchscreen script; see
 Two real emulator instances discover each other over IrDA, transfer Sam's
 name card, then connect their built-in software modems and send a two-page
 fax. The invitation is explicitly marked as a parody for this historical
-device. The complete scenario—including the native 2 bpp page, modem link,
+device. The complete scenario—including the real Notebook page, modem link,
 checks, and GIF recording—is reproducible with
 [`tools/paired_demo.py`](tools/paired_demo.py); see the
 [recording notes](docs/demo.md#paired-beam-and-fax-demo).

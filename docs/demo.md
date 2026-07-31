@@ -116,14 +116,11 @@ two-DataRover scenario:
 4. Danila receives the page through the normal Phone Status **receive fax**
    action and retained In-box storage.
 
-The DataRover ROM stores and identifies the received second page, but its Fax
-viewer currently exposes that transferred screen as a blank gray viewport.
-After Danila opens page two, the demo redisplays the same native 2 bpp source
-buffer for the final five-second reading beat. The modem negotiation, image
-transfer, two-page stationery, and In-box storage before that display step are
-all the real paired-emulator workflow. During that final reading beat, Sam's
-half is held on the last clean Desk view so the ROM's late post-call status
-alert does not obscure the completed demo.
+The invitation is a real Magic Cap Notebook page. The automation creates a
+plain-paper page, types the text with the normal keyboard, draws the signature
+with ordinary stylus strokes, leaves Notebook to commit the object, and
+reopens it before applying Fax. It does not write the LCD framebuffer or
+replace either recorded screen during post-processing.
 
 The invitation says **PARODY DEMO — NOT A REAL OFFER**. Its signature comes
 from Wikimedia Commons'
@@ -138,16 +135,15 @@ Run the complete workflow and produce the committed side-by-side GIF with:
 python3 tools/paired_demo.py
 ```
 
-The tool builds the invitation at native 480×320 resolution, converts it to
-the DataRover's real 2 bpp framebuffer layout, runs the existing Beam and
-paired-fax acceptances with recording enabled, decodes the four MAME MNG
-streams, and combines them into
+The tool creates and commits the invitation through the real Notebook UI,
+runs the existing Beam and paired-fax acceptances with recording enabled,
+decodes the four MAME MNG streams, and combines them into
 [`docs/media/datarover-beam-fax-demo.gif`](media/datarover-beam-fax-demo.gif).
 The recording starts after owner setup, at the two desktops, rather than
 replaying first-boot calibration.
 
-Reference numbers for the committed paired demo: 17,844 captured LCD frames,
-264 kept, 960×348, 110.1 s, 235 KB.
+Reference numbers for the committed paired demo: 21,121 captured LCD frames,
+304 kept, 960×348, 111.7 s, 292 KB.
 
 Large MNG, PNG, NVRAM, line-audio, and protocol artifacts stay under
 `$MAGIC_CAP_ASSETS/runtime/paired-demo/`. A completed run can be re-rendered

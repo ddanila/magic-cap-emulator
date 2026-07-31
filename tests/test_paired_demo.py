@@ -2,27 +2,27 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from PIL import Image
-
 from tools import paired_demo
 
 
 class InvitationTests(unittest.TestCase):
-    def test_builds_native_page_and_exact_framebuffer(self) -> None:
+    def test_builds_stylus_strokes_from_signature(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            png, raw = paired_demo.make_invitation(Path(temporary))
+            strokes = paired_demo.signature_strokes(Path(temporary))
 
-            with Image.open(png) as image:
-                self.assertEqual(image.size, (480, 320))
-            self.assertEqual(raw.stat().st_size, 480 * 320 // 4)
+            self.assertGreater(len(strokes), 100)
+            self.assertTrue(all(270 <= x1 <= x2 < 390 for x1, _y, x2 in strokes))
+            self.assertTrue(all(215 <= y < 260 for _x1, y, _x2 in strokes))
 
-    def test_framebuffer_uses_data_rover_white_level(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            _png, raw = paired_demo.make_invitation(Path(temporary))
-            data = raw.read_bytes()
+    def test_document_script_uses_only_visible_notebook_input(self) -> None:
+        script = paired_demo.notebook_invitation_script([(270, 205, 280)])
 
-            self.assertEqual(data[3 * 120 + 3], 0x00)
-            self.assertIn(0xFF, data)
+        self.assertIn('emu.keypost("PARODY DEMO', script)
+        self.assertIn('emu.keypost("Senior Magic Cap Emulator Engineer.', script)
+        self.assertIn("press(451, 100)", script)
+        self.assertIn("press(270, 205)", script)
+        self.assertIn("move(280, 205)", script)
+        self.assertNotIn("program:write", script)
 
 
 class RecordingTests(unittest.TestCase):

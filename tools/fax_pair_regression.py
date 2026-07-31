@@ -287,6 +287,7 @@ def automation_script(
     recipient_last: str = "Peer",
     origin_screen_raw: Path | None = None,
     open_received_fax: bool = False,
+    origin_document: bool = False,
 ) -> str:
     """Drive the visible origin or answer workflow and trace its fax path."""
     if role not in ("origin", "answer"):
@@ -313,6 +314,18 @@ def automation_script(
         if origin_screen_raw is not None
         else ""
     )
+    load_screen_function = """
+local function load_screen()
+  local source = assert(io.open(origin_screen_path, "rb"))
+  local pixels = source:read("*a")
+  source:close()
+  assert(#pixels == 38400, "fax source must be a 480x320 2bpp buffer")
+  local framebuffer = program:read_u32(0x10c00030) & 0xfffffff0
+  for index = 1, #pixels do
+    program:write_u8(framebuffer + index - 1, string.byte(pixels, index))
+  end
+end
+""" if origin_screen_raw is not None else ""
     load_screen_step = (
         """    elseif frames == 1400 then
       load_screen()
@@ -321,6 +334,12 @@ def automation_script(
         if origin_screen_raw is not None
         else ""
     )
+    start_step = (
+        'if frames == 1200 then snapshot("fax-source-page.png")'
+        if origin_document
+        else """if frames == 1200 then press(34, 302)
+    elseif frames == 1220 then release()"""
+    )
     reload_screen_step = (
         """    elseif frames == 8200 then
       load_screen()
@@ -328,10 +347,13 @@ def automation_script(
         if origin_screen_raw is not None
         else ""
     )
+    if origin_document:
+        reload_screen_step = """    elseif frames == 8200 then press(335, 170)
+    elseif frames == 8260 then release()
+"""
     origin_steps = """
     -- Desk, Magic lamp, Fax, and the recipient chooser.
-    if frames == 1200 then press(34, 302)
-    elseif frames == 1220 then release()
+    __START_STEP__
 __LOAD_SCREEN_STEP__
     elseif frames == 1500 then press(181, 301)
     elseif frames == 1520 then release()
@@ -412,10 +434,21 @@ __RELOAD_SCREEN_STEP__
     elseif frames == 17520 then release()
     elseif frames == 18000 then press(414, 84)
     elseif frames == 18020 then release()
+    elseif frames == 20000 then press(414, 84)
+    elseif frames == 20020 then release()
+    elseif frames == 21000 then press(414, 84)
+    elseif frames == 21020 then release()
+    elseif frames == 22000 then press(414, 84)
+    elseif frames == 22020 then release()
+    elseif frames == 23000 then press(414, 84)
+    elseif frames == 23020 then release()
+    elseif frames == 24000 then press(414, 84)
+    elseif frames == 24020 then release()
     end
 """
     origin_steps = (
-        origin_steps.replace("__LOAD_SCREEN_STEP__", load_screen_step.rstrip())
+        origin_steps.replace("__START_STEP__", start_step)
+        .replace("__LOAD_SCREEN_STEP__", load_screen_step.rstrip())
         .replace("__RELOAD_SCREEN_STEP__", reload_screen_step.rstrip())
         .replace("__RECIPIENT_FIRST__", recipient_first)
         .replace("__RECIPIENT_LAST__", recipient_last)
@@ -429,29 +462,31 @@ __RELOAD_SCREEN_STEP__
     end
 """
     answer_open_steps = """
-    elseif ring_start > 0 and frames == ring_start + 4900 then
+    elseif ring_start > 0 and frames == ring_start + 10000 then
+      press(440, 10)
+    elseif ring_start > 0 and frames == ring_start + 10020 then
+      release()
+    elseif ring_start > 0 and frames == ring_start + 10200 then
       press(205, 91)
-    elseif ring_start > 0 and frames == ring_start + 4920 then
+    elseif ring_start > 0 and frames == ring_start + 10220 then
       release()
-    elseif ring_start > 0 and frames == ring_start + 5050 then
+    elseif ring_start > 0 and frames == ring_start + 10400 then
       press(155, 57)
-    elseif ring_start > 0 and frames == ring_start + 5070 then
+    elseif ring_start > 0 and frames == ring_start + 10420 then
       release()
-    elseif ring_start > 0 and frames == ring_start + 5250 then
+    elseif ring_start > 0 and frames == ring_start + 10600 then
       snapshot("fax-received-stationery.png")
-    elseif ring_start > 0 and frames == ring_start + 5350 then
+    elseif ring_start > 0 and frames == ring_start + 10700 then
       press(92, 230)
-    elseif ring_start > 0 and frames == ring_start + 5370 then
+    elseif ring_start > 0 and frames == ring_start + 10720 then
       release()
-    elseif ring_start > 0 and frames == ring_start + 5550 then
+    elseif ring_start > 0 and frames == ring_start + 10900 then
       snapshot("fax-received-cover-page.png")
-    elseif ring_start > 0 and frames == ring_start + 5650 then
+    elseif ring_start > 0 and frames == ring_start + 11000 then
       press(248, 11)
-    elseif ring_start > 0 and frames == ring_start + 5670 then
+    elseif ring_start > 0 and frames == ring_start + 11020 then
       release()
-    elseif ring_start > 0 and frames == ring_start + 5900 then
-      load_screen()
-    elseif ring_start > 0 and frames == ring_start + 6100 then
+    elseif ring_start > 0 and frames == ring_start + 11400 then
       snapshot("fax-received-invitation.png")
 """ if open_received_fax else ""
     answer_steps = f"""
@@ -523,16 +558,7 @@ local function snapshot(name)
   screen:snapshot(name)
 end
 
-local function load_screen()
-  local source = assert(io.open(origin_screen_path, "rb"))
-  local pixels = source:read("*a")
-  source:close()
-  assert(#pixels == 38400, "fax source must be a 480x320 2bpp buffer")
-  local framebuffer = program:read_u32(0x10c00030) & 0xfffffff0
-  for index = 1, #pixels do
-    program:write_u8(framebuffer + index - 1, string.byte(pixels, index))
-  end
-end
+{load_screen_function.rstrip()}
 
 for index, address in ipairs(addresses) do
   local counter = COUNTERS + (index - 1) * 4
@@ -856,6 +882,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="480x320 2bpp framebuffer injected before opening Fax",
     )
     parser.add_argument(
+        "--origin-document",
+        action="store_true",
+        help="fax the real document already displayed by the origin NVRAM",
+    )
+    parser.add_argument(
         "--record",
         action="store_true",
         help="record each native LCD stream as a MAME MNG",
@@ -998,7 +1029,7 @@ def run_regression(args: argparse.Namespace) -> int:
                     ring_trigger,
                     origin_result_frame=5000 if args.origin_ready else 16500,
                     answer_result_offset=(
-                        6400
+                        11700
                         if args.open_received_fax
                         else (4800 if args.verify_stored_page else 3600)
                     ),
@@ -1007,6 +1038,7 @@ def run_regression(args: argparse.Namespace) -> int:
                     recipient_last=args.recipient_last,
                     origin_screen_raw=args.origin_screen_raw,
                     open_received_fax=args.open_received_fax,
+                    origin_document=args.origin_document,
                 ),
                 encoding="utf-8",
             )
@@ -1082,7 +1114,7 @@ def run_regression(args: argparse.Namespace) -> int:
         for role, process in processes.items():
             try:
                 output, _ = process.communicate(
-                    timeout=900 if args.open_received_fax else 600
+                    timeout=1200 if args.open_received_fax else 600
                 )
             except subprocess.TimeoutExpired:
                 trigger_error.append(f"{role} timed out after 600 seconds")

@@ -58,13 +58,13 @@ class ScriptTests(unittest.TestCase):
             "answer", Path("/tmp/ring.trigger"), open_received_fax=True
         )
 
-        self.assertIn("ring_start + 4900 then", script)
+        self.assertIn("ring_start + 10000 then", script)
+        self.assertIn("press(440, 10)", script)
         self.assertIn("press(205, 91)", script)
         self.assertIn("press(155, 57)", script)
         self.assertIn("press(92, 230)", script)
         self.assertIn("press(248, 11)", script)
-        self.assertIn("ring_start + 5900 then", script)
-        self.assertIn("load_screen()", script)
+        self.assertNotIn("ring_start + 5900 then", script)
         self.assertIn('snapshot("fax-received-invitation.png")', script)
 
     def test_origin_ready_shortcut_still_presses_visible_send(self) -> None:
@@ -90,6 +90,15 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('local origin_screen_path = "/tmp/invitation.2bpp"', script)
         self.assertIn("assert(#pixels == 38400", script)
         self.assertIn('snapshot("fax-source-page.png")', script)
+
+    def test_document_origin_uses_displayed_page_without_framebuffer_write(self) -> None:
+        script = fax_pair.automation_script(
+            "origin", Path("/tmp/ring.trigger"), origin_document=True
+        )
+
+        self.assertIn('frames == 1200 then snapshot("fax-source-page.png")', script)
+        self.assertIn("frames == 8200 then press(335, 170)", script)
+        self.assertNotIn("load_screen()", script)
 
     def test_both_roles_trace_image_and_fax_paths(self) -> None:
         for role in ("origin", "answer"):
