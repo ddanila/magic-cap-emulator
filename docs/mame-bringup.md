@@ -17,55 +17,82 @@ export MAGIC_CAP_ASSETS="${MAGIC_CAP_ASSETS:-$PWD/../magic-cap-assets}"
 
 ## Host prerequisites
 
-The build and every headless regression except the live Slirp PPP bridge run
-on both Linux and macOS. The host-UI touch regression is Linux/X11-only
-because it drives a real MAME Tab menu under Xvfb. The bridge's dependencies
-(classic `slirp` and `bubblewrap`, see [`modem.md`](modem.md)) are Linux-only;
-`tools/modem_bridge.py --probe` still works everywhere.
+Choose one of the two tiers below. The first is enough to follow the README
+from clone through interactive use. The second adds everything used by this
+repository's automated verification and reverse-engineering workflows.
 
-### macOS
+### 1. Build and run
+
+This is the short list for people who only want to build the DataRover driver,
+fetch its assets, and start the emulator.
+
+#### macOS
 
 Install the Xcode Command Line Tools, then:
 
 ```sh
-brew install sdl2 sdl2_ttf coreutils unar tesseract
+xcode-select --install
+brew install sdl2 sdl2_ttf coreutils unar unshield
 ```
 
-`coreutils` supplies the `sha256sum` and `nproc` used by these docs
-(equivalently, use `shasum -a 256` and `sysctl -n hw.ncpu`). Current macOS
-also ships its own `/sbin/sha256sum`, which has no `--check` option and can
-shadow the Homebrew one; where a doc pipes into `sha256sum --check`, use
-`shasum -a 256 -c` instead, or just run `tools/fetch_assets.sh`, which picks
-a working implementation itself. Add `unshield` to the `brew install` line
-when extracting the SDK cabinets. The
-`mips-linux-gnu-*` static-analysis commands in
-[`memory-map.md`](memory-map.md) assume the Debian cross-binutils package;
-on macOS, Ghidra covers the same disassembly needs.
+macOS already supplies Git, Python 3, `curl`, `unzip`, and `gzip`.
+`coreutils` supplies `sha256sum` and `nproc`; the repository tools also accept
+the native `shasum` where appropriate. `unar` and `unshield` extract the
+archived research inputs fetched by `tools/fetch_assets.sh all`.
 
-### Debian / Ubuntu
-
-Install MAME's documented build dependencies plus the
-analysis and test utilities used here:
+#### Debian / Ubuntu
 
 ```sh
 sudo apt-get update
 sudo apt-get install \
-  git build-essential python3 python3-pil \
+  git build-essential python3 \
   libsdl2-dev libsdl2-ttf-dev libfontconfig-dev libpulse-dev \
-  pkg-config libslirp-dev \
   qt6-base-dev qt6-base-dev-tools qtchooser \
-  ccache binutils-mips-linux-gnu gdb-multiarch unshield unar xvfb xdotool \
-  curl unzip gzip openssl slirp bubblewrap \
+  ccache curl unzip gzip unar unshield
+```
+
+### 2. Full development and verification
+
+Install the build-and-run tier above first. These additional packages support
+the regression harnesses, local networking, protocol inspection, OCR and demo
+generation, MIPS disassembly, and debugging.
+
+#### macOS additions
+
+```sh
+brew install \
+  python pillow pkg-config libslirp \
+  openssl imagemagick ffmpeg gifsicle tesseract \
+  llvm gdb openjdk@21
+```
+
+The Linux/X11 touch-menu regression and the rootless built-in-modem bridge
+require Linux-specific tools (`Xvfb`, `xdotool`, classic `slirp`, and
+`bubblewrap`) and cannot run fully on macOS. The remaining headless
+regressions run on both platforms.
+
+#### Debian / Ubuntu additions
+
+```sh
+sudo apt-get install \
+  python3-pil pkg-config libslirp-dev \
+  binutils-mips-linux-gnu gdb-multiarch openjdk-21-jdk \
+  xvfb xdotool openssl slirp bubblewrap \
   imagemagick ffmpeg gifsicle tesseract-ocr
 ```
 
-The cross-GCC packages are not required. In particular,
-`gcc-mips-linux-gnu` and `g++-mips-linux-gnu` are absent from some current
-Debian/Ubuntu repositories; `binutils-mips-linux-gnu` supplies the `readelf`,
-`nm`, and `objdump` tools used for static analysis. `unar` is only needed to
-inspect the public StuffIt/BinHex developer archives documented in
-[`developer-archives.md`](developer-archives.md); it is not a MAME build
-dependency.
+The cross-GCC packages are not required. `binutils-mips-linux-gnu` supplies
+the `readelf`, `nm`, and `objdump` tools used for static analysis.
+
+#### Ghidra and optional analysis tools
+
+The development commands above install a 64-bit JDK 21. Download and unpack
+the official [Ghidra release](https://github.com/NationalSecurityAgency/ghidra/releases),
+then make the GUI launcher and headless analyzer available on `PATH` as
+`ghidra` and `ghidra-analyze-headless`. The
+[local analysis tooling guide](local-tooling-handoff.md) documents the
+verified Ghidra setup, the optional Python analysis environment, and a broader
+toolbox for C++, MIPS, binary, filesystem, network, serial, and media work.
 
 Mirror the checksum-managed core inputs (ROMs, selected packages, Windows
 reference tools, manuals, and both SDK archives) with one command. See

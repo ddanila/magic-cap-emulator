@@ -32,9 +32,16 @@ verification approach, see [`docs/background.md`](docs/background.md).
 
 ## Quick start
 
-Full host prerequisites (macOS and Debian/Ubuntu package lists) and every
-regression command are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
-The short version:
+The setup guide has two explicit dependency tiers for macOS and
+Debian/Ubuntu:
+
+- [Build and run](docs/mame-bringup.md#1-build-and-run) — the short list for
+  using the emulator.
+- [Full development and verification](docs/mame-bringup.md#2-full-development-and-verification)
+  — regression, networking, media, debugging, cross-binutils, Ghidra, and
+  other analysis tools.
+
+The short setup sequence is:
 
 ```sh
 # 1. From any directory, clone this repo and the MAME fork side by side
