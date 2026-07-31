@@ -1,7 +1,7 @@
 # DataRover 840 memory map
 
-This is the initial emulator-facing map for the Apollo build of Magic Cap
-3.1.2j. It comes from the archived Icras SDK headers and the matching
+This is the emulator-facing map for the Apollo build of Magic Cap 3.1.2j. It
+comes from the archived Icras SDK headers and the matching
 unstripped `MagicCAP-USA` ELF, not from guesses based on ROM strings. See
 [`rom-layout.md`](rom-layout.md) for exact download, extraction, and checksum
 instructions. No SDK or ROM binaries are stored in this repository.
@@ -15,6 +15,8 @@ MIPS kseg1 (uncached) aliases; for these addresses the bus/physical address is
 | CPU address | Bus/physical address | Size | Function | Confidence |
 |---|---:|---:|---|---|
 | `0x00000000` | `0x00000000` | 4 MiB | DRAM | Confirmed by `MemorySize` and the Apollo build |
+| `0x08000000` | `0x08000000` | 64 MiB max | PC Card slot 1 attribute/I/O window | Driver map and live card regressions |
+| `0x0c000000` | `0x0c000000` | 64 MiB max | PC Card slot 2 attribute/I/O window | Driver map and live card regressions |
 | `0xb0000000` | `0x10000000` | unknown | Dino chip-select 1 window | SDK constant |
 | `0xb0400000` | `0x10400000` | at least `0x22` | Glacier 1 GPIO/interrupt ASIC | Confirmed by monitor and OS code |
 | `0xb0800000` | `0x10800000` | at least `0x22` | Glacier 2 GPIO/interrupt ASIC | Confirmed by monitor and OS code |
@@ -23,14 +25,16 @@ MIPS kseg1 (uncached) aliases; for these addresses the bus/physical address is
 | `0xb0f00000` | `0x10f00000` | word access | SDRAM bank 1 mode register | SDK constant |
 | `0x13c00000` | `0x13c00000` | 8 MiB window | Mask ROM / cached KUser mapping | SDK linker map |
 | `0xb3c00000` | `0x13c00000` | 8 MiB window | Mask ROM / uncached kseg1 mapping | SDK and flasher header |
-| `0xbfc00000` | `0x1fc00000` | reset entry | Reset-time alias of ROM offset zero | CPU reset behavior and first instruction |
+| `0xbfc00000` | `0x1fc00000` | `0x400` | Reset and BEV exception-vector alias of ROM offset zero | CPU reset and exception behavior |
 | `0x24000000` | platform KUser window | 64 MiB max | PC Card slot 1 | SDK memory map |
 | `0x28000000` | platform KUser window | 64 MiB max | PC Card slot 2 | SDK memory map |
 | `0xff000010` | implementation-specific | `0x90` | Dino hardware breakpoints | SDK constant; not needed for bring-up |
 
-The current driver maps RAM at zero, an 8 MiB ROM region at `0x13c00000`, its
-kseg1 alias, and the reset alias. Unpopulated bytes in the ROM region read as
-`0xff`; the published image occupies only its first `0x451817` bytes.
+For boot storage, the current driver maps RAM at zero, an 8 MiB ROM region at
+`0x13c00000`, its kseg1 alias, and the reset alias. Unpopulated bytes in the
+ROM region read as `0xff`; the published image occupies only its first
+`0x451817` bytes. The peripheral and PC Card ranges in the table are mapped
+separately by the devices described below.
 
 ### Vector-page remapping
 
@@ -471,9 +475,9 @@ Every peripheral contains a Magic Bus Interface Circuit (MBIC) between its
 upstream connector, downstream connector and local microcontroller. A
 mid-peripheral passes traffic through; the last peripheral terminates its
 downstream clock/data path. SOT/EOT transitions temporarily reverse the
-necessary MBIC buffers for peripheral-to-host traffic. Consequently, the
-current driver's collection of synchronous logical endpoints is enough to
-test ROM payload behavior but is not yet a physical chain.
+necessary MBIC buffers for peripheral-to-host traffic. The driver models that
+ordered chain and its ROM-visible MBIC transitions synchronously. It does not
+model the electrical waveform or claim Apollo's unknown nanosecond timing.
 
 The distinction is also fundamental to hot-plug. A mid-peripheral passes a
 downstream interrupt upstream, while the last peripheral inverts the
@@ -736,16 +740,12 @@ layout for each:
 | `0x1c`, `0x1e` | IO/MFIO negative-edge status/clear |
 | `0x20` | control |
 
-Glacier 1 and 2 have different platform wiring. Modeling their register
-semantics can wait until boot code reaches the corresponding interrupt or
-GPIO paths, but both address windows should be logged from the start.
-
-The current driver goes further than this original bring-up note: both blocks
-route PC Card detect, READY/IREQ, BVD and write-protect inputs, latch insertion
-edges, and expose slot common/attribute/I/O cycles. The linear-card option
-persists an 8 MiB common-memory image. Unrelated raw images return a generic
-SRAM CIS; erased and formatted Magic Cap storage images instead expose the
-vendor tuple below.
+Glacier 1 and 2 have different platform wiring. The driver models both blocks:
+they route PC Card detect, READY/IREQ, BVD and write-protect inputs, latch
+insertion edges, and expose slot common/attribute/I/O cycles. The linear-card
+option persists an 8 MiB common-memory image. Unrelated raw images return a
+generic SRAM CIS; erased and formatted Magic Cap storage images instead
+expose the vendor tuple below.
 
 The recovered General Magic FAQ now defines the OS-visible piece that generic
 CIS lacks. Magic Cap expects vendor tuple `0xA0` with magic `GMMC`, version
@@ -758,7 +758,8 @@ concrete lifecycle acceptance sequence are in
 The implemented sequence is automated by `tools/storage_card_regression.py`;
 it proves `BLNK` setup, the ROM-written `MCAP` header, a derived `RAMC` tuple,
 fresh-process persistence and live Option-insert reformat. Each slot also has
-a **PC Card slot battery** machine setting. Good drives BVD2/BVD1=`11`, Low
+a **PC Card slot 1 battery** or **PC Card slot 2 battery** machine setting.
+Good drives BVD2/BVD1=`11`, Low
 drives `01`, and Dead drives `00`; slot 1 BVD1 appears at Dino IO bit 1
 (`0x10c00180`) and BVD2 at Glacier 1 IO-input bit 1 (`0x1040000c`). The ROM
 maps those three codes to `kCardBatteryGood`, `kCardBatteryLow` and

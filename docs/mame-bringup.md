@@ -67,9 +67,10 @@ inspect the public StuffIt/BinHex developer archives documented in
 [`developer-archives.md`](developer-archives.md); it is not a MAME build
 dependency.
 
-Mirror every research input (ROMs, packages, Windows reference tools, CPU
-manual) with one checksum-verified command; add `all` to include the 176 MiB
-SDK bundle, and see [`rom-layout.md`](rom-layout.md) for what each file is:
+Mirror the checksum-managed core inputs (ROMs, selected packages, Windows
+reference tools, manuals, and both SDK archives) with one command. See
+[`rom-layout.md`](rom-layout.md) for what each file is; feature-specific
+documents give acquisition steps for additional packages and fixtures:
 
 ```sh
 tools/fetch_assets.sh all
@@ -669,8 +670,7 @@ modifying either classic-Macintosh input:
 
 ```sh
 python3 tools/legacy_card_image.py \
-  --wrapper "$MAGIC_CAP_ASSETS/research/magic-cap-1-simulator/card.raw" \
-  --changes "$MAGIC_CAP_ASSETS/research/magic-cap-1-simulator/card-changes.raw" \
+  --wrapper "$MAGIC_CAP_ASSETS/research/magic-cap-1-simulator/legacy-card-current.raw" \
   --output "$MAGIC_CAP_ASSETS/runtime/legacy-1x.card"
 ```
 
@@ -681,8 +681,7 @@ has already been installed through PCLink:
 
 ```sh
 python3 tools/storage_translation_regression.py \
-  --wrapper "$MAGIC_CAP_ASSETS/research/magic-cap-1-simulator/card.raw" \
-  --changes "$MAGIC_CAP_ASSETS/research/magic-cap-1-simulator/card-changes.raw" \
+  --wrapper "$MAGIC_CAP_ASSETS/research/magic-cap-1-simulator/legacy-card-current.raw" \
   --nvram "$TRANSLATION_NVRAM"
 ```
 
@@ -690,9 +689,11 @@ It requires the real CompatibilityCardServer to accept the card with no
 generic-card failure or software reset, checks the 1.x `GMMC`/`RAMC` tuple and
 metacluster, selects the card's genuine `new items` package, translates it to
 Built-in storage, and opens the resulting second Notebook page. It re-hashes
-all source representations afterward. Create the fixture with **Don't Save
-Changes** clear, then power off and eject the simulated card; a live-memory
-capture can contain unfinished object references and is not a valid input.
+all source representations afterward. `--changes` may name a separate,
+headerless Simulator changes file when the fixture has one. Create the fixture
+with **Don't Save Changes** clear, then power off and eject the simulated card;
+a live-memory capture can contain unfinished object references and is not a
+valid input.
 The copyrighted Simulator/card inputs remain outside Git; the public
 Simulator behavior and menu contract are documented at
 [*Magic Cap Simulator*](https://www.datarover.com/Develop/MagicCap/Docs/Tools/CWMagic/Simulator.html).

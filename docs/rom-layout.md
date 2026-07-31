@@ -276,10 +276,10 @@ The uncompressed 840F card proves how the non-power-of-two file is used:
 | `0x400` | `0x451817` | `.image` file, byte-for-byte |
 | `0x451c17` | `0x3ae3e9` | Erased flash (`0xff`) to 8 MiB |
 
-Therefore the initial emulator ROM region should be 8 MiB, pre-filled with
-`0xff`, with the `.image` loaded at region offset zero. Splitting even/odd bytes
-for the two physical mask-ROM chips is not necessary unless physical chip dumps
-surface later.
+The emulator ROM region is therefore 8 MiB, pre-filled with `0xff`, with the
+`.image` loaded at region offset zero. Splitting even/odd bytes for the two
+physical mask-ROM chips is not necessary unless physical chip dumps surface
+later.
 
 ## CPU address
 
@@ -316,12 +316,12 @@ in [`memory-map.md`](memory-map.md) and
 [`betty-registers.md`](betty-registers.md).
 
 MIPS maps virtual `0xb3c00000` through kseg1 to physical `0x13c00000`. The CPU
-still begins at the architectural reset vector `0xbfc00000`, so the skeleton
-driver also needs a reset-time alias of the start of ROM at physical
-`0x1fc00000`. The first word's pseudo-direct `j` lands at `0xb3c0001c`, so
-software needs the reset alias only for that instruction and its delay slot.
-Whether the hardware continues decoding the alias is immaterial to the
-observed boot path.
+still begins at the architectural reset vector `0xbfc00000`, so the driver
+maps the first KiB of ROM at physical `0x1fc00000`. The first word's
+pseudo-direct `j` lands at `0xb3c0001c`; normal boot uses only that instruction
+and its delay slot, while the remainder keeps the fixed BEV general and R3900
+debug exception vectors at `0xbfc00180` and `0xbfc00200` readable. Whether the
+hardware decodes more of the alias is not established.
 
 [archive]: https://archive.org/details/DataRover840
 [packages]: https://joshcarter.com/magic_cap/packages/

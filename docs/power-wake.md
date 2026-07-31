@@ -163,7 +163,7 @@ cell to drain. Each setting is positioned inside a regime the record defines:
 | Setting | Reading | Observed behavior |
 |---|---:|---|
 | Main Full | 800 | boots normally; 100% |
-| Main Low | 200 | between empty and the warning point — in testing the machine stayed on the welcome scene rather than reaching the desk, which is not yet explained |
+| Main Low | 200 | between empty and the warning point; the observed OS policy keeps this state on the welcome scene, so it is not used as a desk-level acceptance fixture |
 | Main Empty | 60 | below empty |
 | Backup Good | 1000 | no warning |
 | Backup Low | 700 | between empty and the warning point; no visible change on the desk |

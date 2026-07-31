@@ -5,7 +5,7 @@ touch, ADC, sound, and telecom functions. It is **not memory mapped at
 `0xb0c00000`**. That address belongs to the TX39 “Dino” integrated peripheral
 module. Dino talks to Betty through its Serial Interface Bus (SIB).
 
-This initial map is derived from the matching unstripped SDK ELF's
+This map is derived from the matching unstripped SDK ELF's
 `touch_init`, `dump_betty_regs`, `write_betty_regs`, `BettyTest`, and
 production `SibCmd*` routines. Exact binary acquisition instructions are in
 [`rom-layout.md`](rom-layout.md); the copyrighted inputs are not committed.
@@ -37,16 +37,16 @@ Examples observed in both the monitor diagnostics and production driver:
 | Read register 12 (Betty ID) | `0x60000000` |
 
 The monitor waits on Dino interrupt-bank-1 SIB flags between command and
-response. A first-pass Betty model can therefore start as a 16-word shadow
-array behind this command protocol, then add read-only/status and side-effect
-behavior as diagnostics demand it.
+response. The implemented Betty register file uses a 16-word shadow array
+behind this command protocol, with read-only/status and side-effect behavior
+for the fields exercised by the ROM.
 
 ## Register numbers
 
 The monitor prints a name immediately after probing each of the following
 registers, which makes these number/name pairs high confidence:
 
-| Number | Name in monitor | Initial emulator behavior |
+| Number | Name in monitor | Emulator behavior |
 |---:|---|---|
 | 0 | `IOData` | 16-bit GPIO data/shadow |
 | 1 | `IODir` | 16-bit GPIO direction |
@@ -59,11 +59,11 @@ registers, which makes these number/name pairs high confidence:
 | 8 | `SoundCfgB` | sound configuration B |
 | 9 | `TouchCfg` | touchscreen configuration |
 | 10 | `AdcCfg` | ADC configuration and conversion control |
-| 11 | unknown | retain a 16-bit shadow initially |
+| 11 | unknown | retains a 16-bit shadow |
 | 12 | Betty ID/revision | read-only device identity |
-| 13 | unknown | retain a 16-bit shadow initially |
-| 14 | unknown | retain a 16-bit shadow initially |
-| 15 | unknown | retain a 16-bit shadow initially |
+| 13 | unknown | retains a 16-bit shadow |
+| 14 | unknown | retains a 16-bit shadow |
+| 15 | unknown | retains a 16-bit shadow |
 
 The production `SibExtInterruptHandler` proves register 4's role. It reads
 the register after a Betty IRQ, writes the returned set bits back to

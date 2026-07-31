@@ -179,10 +179,12 @@ source card afterward.
 The positive fixture must be cleanly serialized by the classic Simulator:
 clear **Don't Save Changes**, create the new item after selecting the card as
 the new-items destination, power the simulated communicator off, and eject
-the card. A live process-memory capture is not equivalent. In one rejected
-capture an unfinished object reference ended in `0x...a7`; the official
-Translator followed it as an odd address and requested a reset. The
-cleanly ejected file contained the aligned `0x...ae` reference.
+the card. Manually filing an existing item into an arbitrarily named package
+is not equivalent to the system-created `new items` package. A live
+process-memory capture is not equivalent either. In one rejected capture an
+unfinished object reference ended in `0x...a7`; the official Translator
+followed it as an odd address and requested a reset. The cleanly ejected file
+contained the aligned `0x...ae` reference.
 
 `tools/storage_backup_regression.py` covers the other documented workflow. It
 sets up an erased card, drives Storeroom's built-in-storage backup, then starts
@@ -428,7 +430,7 @@ The public-source findings have been reconciled with the implementation:
    hardware model and deterministic host transport. Their existence is not a
    missing DataRover platform function.
 5. **The evidence-backed Magic Bus topology is complete.** The driver models
-   the six-address MBIC chain behavior used by Apollo, including
+   the six-address MBIC protocol used by Apollo, including
    command-27/address-six discovery, ordered attachment, addressed removal,
    debounce, recovery and reinsertion. An MCU-level accessory remains separate
    scope unless a concrete peripheral requires it.
