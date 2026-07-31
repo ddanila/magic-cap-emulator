@@ -33,12 +33,23 @@ class NameAutomationTests(unittest.TestCase):
     def test_script_drives_real_beam_ui_and_instruments_link(self) -> None:
         script = beam.automation_script("sender", "alice", "sender", True, 10_000, True)
         self.assertIn("frames == 4400 then press(376, 301)", script)
-        self.assertIn("frames == 7300 then press(135, 170)", script)
-        self.assertIn("frames == 7500 then press(181, 301)", script)
-        self.assertIn("frames == 7800 then press(265, 146)", script)
-        self.assertIn("frames == 8420 then press(170, 90)", script)
-        self.assertIn("frames == 8520 then press(300, 217)", script)
-        self.assertIn("frames == 8700 then press(369, 190)", script)
+        self.assertIn("frames == 6100 then press(428, 144)", script)
+        self.assertIn("frames == 6500 then press(237, 100)", script)
+        self.assertIn("frames == 6800 then press(237, 100)", script)
+        self.assertIn("frames == 7700 then press(237, 100)", script)
+        self.assertNotIn("press(237, 89)", script)
+        self.assertIn("frames == 8100 then press(371, 194)", script)
+        self.assertIn(
+            'frames == 8300 then\n        screen:snapshot("owner-setup-complete.png")',
+            script,
+        )
+        self.assertIn("frames == 9000 then press(135, 170)", script)
+        self.assertIn("frames == 9200 then press(181, 301)", script)
+        self.assertIn("frames == 9500 then press(265, 146)", script)
+        self.assertIn("frames == 10120 then press(170, 90)", script)
+        self.assertIn("frames == 10220 then press(300, 217)", script)
+        self.assertIn("frames == 10500 then press(369, 190)", script)
+        self.assertIn("frames == 10700 then press(369, 190)", script)
         self.assertIn("BEAM_REPORT role=sender", script)
         for _name, address in beam.WATCHED:
             self.assertIn(f"0x{address:08x}", script)
@@ -52,8 +63,16 @@ class NameAutomationTests(unittest.TestCase):
             10_000,
             item="notebook",
         )
-        self.assertIn("frames == 7300 then press(335, 170)", script)
-        self.assertNotIn("frames == 7300 then press(135, 170)", script)
+        self.assertIn("frames == 9000 then press(335, 170)", script)
+        self.assertNotIn("frames == 9000 then press(135, 170)", script)
+
+    def test_receiver_completes_self_card_personalization(self) -> None:
+        script = beam.automation_script(
+            "receiver", "danila", "sukharev", False, 10_400
+        )
+        self.assertIn("frames == 6800 then press(237, 100)", script)
+        self.assertIn("frames == 8000 then press(237, 100)", script)
+        self.assertIn("frames == 8400 then press(371, 194)", script)
 
 
 class ReportTests(unittest.TestCase):
@@ -100,8 +119,14 @@ class SirFrameTests(unittest.TestCase):
 
     def test_item_payloads_are_type_specific(self) -> None:
         name_card = b"alice Sender" * 3
+        mixed_case_name_card = b"alice Sender" * 3
         notebook = b"alice Sender" * 2 + b"Note Card"
         self.assertTrue(beam.item_payload_present("name-card", name_card))
+        self.assertTrue(
+            beam.item_payload_present(
+                "name-card", mixed_case_name_card, "alice sender"
+            )
+        )
         self.assertFalse(beam.item_payload_present("notebook", name_card))
         self.assertTrue(beam.item_payload_present("notebook", notebook))
         self.assertFalse(beam.item_payload_present("name-card", notebook))

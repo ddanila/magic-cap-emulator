@@ -280,9 +280,12 @@ class CallPcmExchange:
 def automation_script(
     role: str,
     ring_trigger_path: Path,
-    origin_result_frame: int = 9000,
+    origin_result_frame: int = 16500,
     answer_result_offset: int = 3600,
     origin_ready: bool = False,
+    recipient_first: str = "Fax",
+    recipient_last: str = "Peer",
+    origin_screen_raw: Path | None = None,
 ) -> str:
     """Drive the visible origin or answer workflow and trace its fax path."""
     if role not in ("origin", "answer"):
@@ -304,10 +307,31 @@ def automation_script(
         .replace("\\", "\\\\")
         .replace('"', '\\"')
     )
+    screen_path = (
+        str(origin_screen_raw).replace("\\", "\\\\").replace('"', '\\"')
+        if origin_screen_raw is not None
+        else ""
+    )
+    load_screen_step = (
+        """    elseif frames == 1400 then
+      load_screen()
+      snapshot("fax-source-page.png")
+"""
+        if origin_screen_raw is not None
+        else ""
+    )
+    reload_screen_step = (
+        """    elseif frames == 8200 then
+      load_screen()
+"""
+        if origin_screen_raw is not None
+        else ""
+    )
     origin_steps = """
     -- Desk, Magic lamp, Fax, and the recipient chooser.
     if frames == 1200 then press(34, 302)
     elseif frames == 1220 then release()
+__LOAD_SCREEN_STEP__
     elseif frames == 1500 then press(181, 301)
     elseif frames == 1520 then release()
     elseif frames == 1800 then press(205, 146)
@@ -317,26 +341,78 @@ def automation_script(
     elseif frames == 2500 then press(345, 177)
     elseif frames == 2520 then release()
 
-    -- Create Fax Peer with the default (650) prefix and 555-1212.
-    elseif frames == 2850 then emu.keypost("5551212")
+    -- Create Fax Peer with the complete 650-555-1212 number.
+    elseif frames == 2850 then emu.keypost("6505551212")
     elseif frames == 3150 then press(421, 143)
-    elseif frames == 3170 then release()
+    elseif frames == 3210 then release()
+    elseif frames == 3300 then snapshot("fax-recipient-first-name.png")
     elseif frames == 3450 then emu.keypost("Fax")
     elseif frames == 3700 then press(370, 102)
-    elseif frames == 3720 then release()
+    elseif frames == 3760 then release()
+    elseif frames == 3780 then snapshot("fax-recipient-last-name.png")
     elseif frames == 3800 then emu.keypost("Peer")
     elseif frames == 4150 then press(428, 143)
-    elseif frames == 4170 then release()
-    elseif frames == 4500 then press(115, 130)
-    elseif frames == 4520 then release()
+    elseif frames == 4210 then release()
+    elseif frames == 4300 then snapshot("fax-recipient-created.png")
+    elseif frames == 4500 then press(347, 111)
+    elseif frames == 4560 then release()
     elseif frames == 4800 then press(347, 242)
-    elseif frames == 4820 then release()
+    elseif frames == 4860 then release()
     elseif frames == 5100 then snapshot("fax-addressed.png")
     elseif frames == 5150 then press(326, 210)
-    elseif frames == 5170 then release()
-    elseif frames == 6000 then snapshot("fax-origin-active.png")
+    elseif frames == 5210 then release()
+    elseif frames == 5400 then press(307, 135)
+    elseif frames == 5460 then release()
+    elseif frames == 5700 then press(451, 264)
+    elseif frames == 5760 then release()
+    elseif frames == 6000 then snapshot("fax-dialing-setup.png")
+    elseif frames == 6200 then press(102, 300)
+    elseif frames == 6260 then release()
+    elseif frames == 6500 then snapshot("fax-location-stamps.png")
+    elseif frames == 6800 then press(50, 104)
+    elseif frames == 6860 then release()
+    elseif frames == 7200 then snapshot("fax-home-location-setup.png")
+    elseif frames == 7400 then press(137, 183)
+    elseif frames == 7460 then release()
+    elseif frames == 7700 then press(235, 110)
+    elseif frames == 7760 then release()
+    elseif frames == 8100 then snapshot("fax-home-location-created.png")
+__RELOAD_SCREEN_STEP__
+
+    -- With Home now available, recreate the Fax and dial without the tutorial.
+    elseif frames == 8500 then press(181, 301)
+    elseif frames == 8560 then release()
+    elseif frames == 8800 then press(205, 146)
+    elseif frames == 8860 then release()
+    elseif frames == 9200 then press(157, 157)
+    elseif frames == 9260 then release()
+    elseif frames == 9500 then press(345, 177)
+    elseif frames == 9560 then release()
+    elseif frames == 9850 then emu.keypost("5551212")
+    elseif frames == 10150 then press(421, 143)
+    elseif frames == 10210 then release()
+    elseif frames == 10450 then emu.keypost("Fax")
+    elseif frames == 10700 then press(370, 102)
+    elseif frames == 10760 then release()
+    elseif frames == 10800 then emu.keypost("Peer")
+    elseif frames == 11150 then press(428, 143)
+    elseif frames == 11210 then release()
+    elseif frames == 11500 then press(347, 111)
+    elseif frames == 11560 then release()
+    elseif frames == 11800 then press(347, 242)
+    elseif frames == 11860 then release()
+    elseif frames == 12100 then snapshot("fax-addressed-retry.png")
+    elseif frames == 12200 then press(326, 210)
+    elseif frames == 12260 then release()
+    elseif frames == 13000 then snapshot("fax-origin-active.png")
     end
 """
+    origin_steps = (
+        origin_steps.replace("__LOAD_SCREEN_STEP__", load_screen_step.rstrip())
+        .replace("__RELOAD_SCREEN_STEP__", reload_screen_step.rstrip())
+        .replace('emu.keypost("Fax")', f'emu.keypost("{recipient_first}")')
+        .replace('emu.keypost("Peer")', f'emu.keypost("{recipient_last}")')
+    )
     origin_ready_steps = """
     -- Diagnostic shortcut for retained state already at the addressed Fax.
     if frames == 1200 then snapshot("fax-addressed.png")
@@ -390,6 +466,7 @@ local frames = 0
 local ring_start = 0
 local result_written = false
 local ring_trigger_path = "{trigger}"
+local origin_screen_path = "{screen_path}"
 local result_path = "{result_path}"
 local peer_result_path = "{peer_result_path}"
 local COUNTERS = 0x{COUNTERS:08x}
@@ -410,6 +487,17 @@ end
 
 local function snapshot(name)
   screen:snapshot(name)
+end
+
+local function load_screen()
+  local source = assert(io.open(origin_screen_path, "rb"))
+  local pixels = source:read("*a")
+  source:close()
+  assert(#pixels == 38400, "fax source must be a 480x320 2bpp buffer")
+  local framebuffer = program:read_u32(0x10c00030) & 0xfffffff0
+  for index = 1, #pixels do
+    program:write_u8(framebuffer + index - 1, string.byte(pixels, index))
+  end
 end
 
 for index, address in ipairs(addresses) do
@@ -525,7 +613,7 @@ def parse_result(output: bytes, role: str) -> dict[str, int] | None:
     return None
 
 
-def stored_fax_script(result_frame: int = 3800) -> str:
+def stored_fax_script(result_frame: int = 5700) -> str:
     """Reopen the newest In-box fax and its first rendered page."""
     return f"""local machine = manager.machine
 local ports = machine.ioport.ports
@@ -553,15 +641,26 @@ emu.register_frame_done(function()
   elseif frames == 1100 then press(34, 302)
   elseif frames == 1120 then release()
   elseif frames == 1500 then screen:snapshot("02-desk.png")
-  elseif frames == 1700 then press(205, 91)
+  elseif frames == 1700 then press(395, 23)
   elseif frames == 1720 then release()
-  elseif frames == 2200 then screen:snapshot("03-inbox.png")
-  elseif frames == 2400 then press(155, 57)
-  elseif frames == 2420 then release()
-  elseif frames == 2900 then screen:snapshot("04-fax-stationery.png")
-  elseif frames == 3100 then press(92, 230)
-  elseif frames == 3120 then release()
-  elseif frames == 3600 then screen:snapshot("05-fax-page.png")
+  elseif frames == 1900 then press(54, 99)
+  elseif frames == 1920 then release()
+  elseif frames == 2300 then screen:snapshot("03-desk.png")
+  elseif frames == 2500 then press(205, 91)
+  elseif frames == 2520 then release()
+  elseif frames == 3000 then screen:snapshot("04-inbox.png")
+  elseif frames == 3200 then press(155, 57)
+  elseif frames == 3220 then release()
+  elseif frames == 3700 then screen:snapshot("05-fax-stationery.png")
+  elseif frames == 3900 then press(92, 230)
+  elseif frames == 3920 then release()
+  elseif frames == 4400 then screen:snapshot("06-fax-cover-page.png")
+  elseif frames == 4600 then press(248, 11)
+  elseif frames == 4620 then release()
+  elseif frames == 5000 then screen:snapshot("07-duplicate-name-card.png")
+  elseif frames == 5200 then press(238, 263)
+  elseif frames == 5220 then release()
+  elseif frames == 5500 then screen:snapshot("08-fax-page.png")
   elseif frames == {result_frame} then
     print("FAX_STORED_RESULT completed=1")
     machine:exit()
@@ -631,9 +730,9 @@ def verify_stored_fax(args: argparse.Namespace, run_dir: Path) -> tuple[bool, st
     (verify_dir / "mame-output.txt").write_bytes(completed.stdout)
 
     images = {
-        "inbox": snapshot_dir / "03-inbox.png",
-        "stationery": snapshot_dir / "04-fax-stationery.png",
-        "page": snapshot_dir / "05-fax-page.png",
+        "inbox": snapshot_dir / "04-inbox.png",
+        "stationery": snapshot_dir / "05-fax-stationery.png",
+        "page": snapshot_dir / "08-fax-page.png",
     }
     if completed.returncode or any(not path.is_file() for path in images.values()):
         return (
@@ -658,16 +757,26 @@ def verify_stored_fax(args: argparse.Namespace, run_dir: Path) -> tuple[bool, st
         texts[name] = text
         (verify_dir / f"{name}-ocr.txt").write_text(ocr.stdout, encoding="utf-8")
 
+    rendered_invitation = all(
+        token in texts["page"] for token in ("openai", "danila", "parody")
+    )
+    duplicate_sender_prompt = all(
+        token in texts["page"]
+        for token in ("fax page 2", "name card", "already have")
+    )
     checks = (
         "a fax" in texts["inbox"],
-        "one page fax was received" in texts["stationery"],
+        "two page fax was received" in texts["stationery"],
         "danila sukharev" in texts["stationery"],
-        "fax page 1" in texts["page"],
-        "555-1212" in texts["page"],
+        rendered_invitation or duplicate_sender_prompt,
     )
     if not all(checks):
         return False, f"stored-page OCR mismatch: {texts!r}"
-    return True, "In-box row, one-page stationery, and rendered page verified"
+    if rendered_invitation:
+        page_result = "rendered invitation"
+    else:
+        page_result = "page 2 with the expected duplicate-sender prompt"
+    return True, f"In-box row, two-page stationery, and {page_result} verified"
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -705,6 +814,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "Tesseract to verify its In-box stationery and rendered page"
         ),
     )
+    parser.add_argument("--recipient-first", default="Fax")
+    parser.add_argument("--recipient-last", default="Peer")
+    parser.add_argument(
+        "--origin-screen-raw",
+        type=Path,
+        help="480x320 2bpp framebuffer injected before opening Fax",
+    )
+    parser.add_argument(
+        "--record",
+        action="store_true",
+        help="record each native LCD stream as a MAME MNG",
+    )
     parser.add_argument("--system", default="datarover840")
     parser.add_argument(
         "--ring-trigger-bytes",
@@ -721,7 +842,7 @@ def _machine_command(
     script: Path,
     port: int,
 ) -> list[str]:
-    return [
+    command = [
         str(args.mame),
         args.system,
         "-rompath",
@@ -755,11 +876,16 @@ def _machine_command(
         "-sleep",
         "-skip_gameinfo",
     ]
+    if args.record:
+        command.extend(["-mngwrite", str(role_dir / "recording.mng")])
+    return command
 
 
 def run_regression(args: argparse.Namespace) -> int:
     args.mame = args.mame.expanduser().resolve()
     args.rompath = args.rompath.expanduser().resolve()
+    if args.origin_screen_raw is not None:
+        args.origin_screen_raw = args.origin_screen_raw.expanduser().resolve()
     source = args.nvram_source.expanduser().resolve()
     origin_source = (
         args.origin_nvram_source.expanduser().resolve()
@@ -793,6 +919,15 @@ def run_regression(args: argparse.Namespace) -> int:
     if args.ring_trigger_bytes <= 0:
         print("error: --ring-trigger-bytes must be positive", file=sys.stderr)
         return 2
+    if args.origin_screen_raw is not None and (
+        not args.origin_screen_raw.is_file()
+        or args.origin_screen_raw.stat().st_size != 38_400
+    ):
+        print(
+            "error: --origin-screen-raw must be exactly 38,400 bytes",
+            file=sys.stderr,
+        )
+        return 2
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
     run_dir = args.workdir.expanduser().resolve() / f"{stamp}-{os.getpid()}"
@@ -822,9 +957,12 @@ def run_regression(args: argparse.Namespace) -> int:
                 automation_script(
                     role,
                     ring_trigger,
-                    origin_result_frame=5000 if args.origin_ready else 9000,
+                    origin_result_frame=5000 if args.origin_ready else 16500,
                     answer_result_offset=(4800 if args.verify_stored_page else 3600),
                     origin_ready=args.origin_ready,
+                    recipient_first=args.recipient_first,
+                    recipient_last=args.recipient_last,
+                    origin_screen_raw=args.origin_screen_raw,
                 ),
                 encoding="utf-8",
             )

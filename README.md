@@ -15,6 +15,18 @@ notes.
 deterministic touchscreen script; see
 [how the demo is recorded](docs/demo.md).*
 
+## Two DataRovers, one Beam, and one fax
+
+![Sam Altman Beams his name card and sends a parody job invitation by fax to Danila Sukharev](docs/media/datarover-beam-fax-demo.gif)
+
+Two real emulator instances discover each other over IrDA, transfer Sam's
+name card, then connect their built-in software modems and send a two-page
+fax. The invitation is explicitly marked as a parody for this historical
+device. The complete scenario—including the native 2 bpp page, modem link,
+checks, and GIF recording—is reproducible with
+[`tools/paired_demo.py`](tools/paired_demo.py); see the
+[recording notes](docs/demo.md#paired-beam-and-fax-demo).
+
 ## What works
 
 The emulator boots the original DataRover 840 ROM into the interactive Magic
@@ -110,7 +122,7 @@ Technical deep dives:
 
 ```
 docs/       RE notes and acceptance maps
-docs/media/ the README animation (the only committed recording)
+docs/media/ the committed README animations and their source media
 tools/      automated regression harnesses and analysis scripts
 tests/      unit tests for the tools, with captured serial fixtures
 roms/       optional git-ignored compatibility path; persistent assets live in the sibling asset tree

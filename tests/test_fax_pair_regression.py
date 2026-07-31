@@ -23,10 +23,18 @@ class ScriptTests(unittest.TestCase):
             "press(205, 146)",
             "press(157, 157)",
             "press(345, 177)",
-            'emu.keypost("5551212")',
+            'emu.keypost("6505551212")',
+            "press(421, 143)",
             'emu.keypost("Fax")',
             'emu.keypost("Peer")',
+            "press(347, 111)",
             "press(326, 210)",
+            "press(307, 135)",
+            "press(451, 264)",
+            "press(102, 300)",
+            "press(50, 104)",
+            "press(137, 183)",
+            "press(235, 110)",
         ):
             self.assertIn(action, script)
         self.assertIn('snapshot("fax-addressed.png")', script)
@@ -48,7 +56,22 @@ class ScriptTests(unittest.TestCase):
 
         self.assertIn("press(326, 210)", script)
         self.assertIn('snapshot("fax-addressed.png")', script)
-        self.assertNotIn('emu.keypost("5551212")', script)
+        self.assertNotIn('emu.keypost("6505551212")', script)
+
+    def test_demo_origin_injects_page_and_names_recipient(self) -> None:
+        script = fax_pair.automation_script(
+            "origin",
+            Path("/tmp/ring.trigger"),
+            recipient_first="Danila",
+            recipient_last="Sukharev",
+            origin_screen_raw=Path("/tmp/invitation.2bpp"),
+        )
+
+        self.assertIn('emu.keypost("Danila")', script)
+        self.assertIn('emu.keypost("Sukharev")', script)
+        self.assertIn('local origin_screen_path = "/tmp/invitation.2bpp"', script)
+        self.assertIn("assert(#pixels == 38400", script)
+        self.assertIn('snapshot("fax-source-page.png")', script)
 
     def test_both_roles_trace_image_and_fax_paths(self) -> None:
         for role in ("origin", "answer"):
@@ -72,14 +95,19 @@ class ScriptTests(unittest.TestCase):
 
         for action in (
             "press(34, 302)",
+            "press(395, 23)",
+            "press(54, 99)",
             "press(205, 91)",
             "press(155, 57)",
             "press(92, 230)",
+            "press(248, 11)",
+            "press(238, 263)",
         ):
             self.assertIn(action, script)
-        self.assertIn('snapshot("03-inbox.png")', script)
-        self.assertIn('snapshot("04-fax-stationery.png")', script)
-        self.assertIn('snapshot("05-fax-page.png")', script)
+        self.assertIn('snapshot("04-inbox.png")', script)
+        self.assertIn('snapshot("05-fax-stationery.png")', script)
+        self.assertIn('snapshot("07-duplicate-name-card.png")', script)
+        self.assertIn('snapshot("08-fax-page.png")', script)
 
 
 class ResultTests(unittest.TestCase):

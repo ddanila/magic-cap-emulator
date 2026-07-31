@@ -116,6 +116,7 @@ def automation_script(
     first_start = 4800
     last_start = first_start + 100 + len(first_name) * NAME_KEY_INTERVAL
     done_frame = last_start + (len(last_name) + 1) * NAME_KEY_INTERVAL
+    ready_frame = done_frame + 2200
     first_steps = name_key_steps(first_name, first_start)
     last_steps = name_key_steps(last_name, last_start)
     watch_setup = (
@@ -143,30 +144,40 @@ def automation_script(
         else "if frames == 1220 then press(240, 160)"
     )
     item_x = 135 if item == "name-card" else 335
+    yes_steps = "\n".join(
+        f"    elseif frames == {done_frame + offset} then press(237, 100)\n"
+        f"    elseif frames == {done_frame + offset + 60} then release()"
+        for offset in (400, 700, 1000, 1300, 1600)
+    )
+    personalize_steps = f"""{yes_steps}
+    elseif frames == {done_frame + 2000} then press(371, 194)
+    elseif frames == {done_frame + 2060} then release()"""
     sender_steps = (
-        f"""    elseif frames == 7300 then press({item_x}, 170)
-    elseif frames == 7320 then release()
-    elseif frames == 7500 then press(181, 301)
-    elseif frames == 7520 then release()
-    elseif frames == 7800 then press(265, 146)
-    elseif frames == 7820 then release()
-    elseif frames == 8400 then
+        f"""    elseif frames == 9000 then press({item_x}, 170)
+    elseif frames == 9020 then release()
+    elseif frames == 9200 then press(181, 301)
+    elseif frames == 9220 then release()
+    elseif frames == 9500 then press(265, 146)
+    elseif frames == 9520 then release()
+    elseif frames == 10100 then
         screen:snapshot("beam-peer-discovery.png")
-    elseif frames == 8420 then press(170, 90)
-    elseif frames == 8440 then release()
-    elseif frames == 8520 then press(300, 217)
-    elseif frames == 8540 then release()
-    elseif frames == 8620 then
+    elseif frames == 10120 then press(170, 90)
+    elseif frames == 10140 then release()
+    elseif frames == 10220 then press(300, 217)
+    elseif frames == 10240 then release()
+    elseif frames == 10320 then
         screen:snapshot("beam-recipient-selected.png")
-    elseif frames == 8700 then press(369, 190)
-    elseif frames == 8720 then release()
-    elseif frames == 9100 then
+    elseif frames == 10500 then press(369, 190)
+    elseif frames == 10520 then release()
+    elseif frames == 10700 then press(369, 190)
+    elseif frames == 10720 then release()
+    elseif frames == 11600 then
         screen:snapshot("beam-transfer-result.png")
 """
         if sender
-        else """    elseif frames == 8400 then
+        else """    elseif frames == 10100 then
         screen:snapshot("beam-peer-listener.png")
-    elseif frames == 9100 then
+    elseif frames == 11600 then
         screen:snapshot("beam-received-result.png")
 """
     )
@@ -229,14 +240,11 @@ emu.register_frame_done(function()
 {last_steps}
     elseif frames == {done_frame} then press(428, 144)
     elseif frames == {done_frame + 20} then release()
-    elseif frames == {done_frame + 400} then press(237, 89)
-    elseif frames == {done_frame + 420} then release()
-    elseif frames == {done_frame + 700} then press(371, 194)
-    elseif frames == {done_frame + 720} then release()
-    elseif frames == 7200 then
+{personalize_steps}
+    elseif frames == {ready_frame} then
         screen:snapshot("owner-setup-complete.png")
-    elseif frames == 7250 then irda_carrier:set_value(1)
-    elseif frames == 7270 then irda_carrier:set_value(0)
+    elseif frames == {ready_frame + 50} then irda_carrier:set_value(1)
+    elseif frames == {ready_frame + 70} then irda_carrier:set_value(0)
 {sender_steps.rstrip()}
     elseif frames == 8000 then irda_carrier:set_value(1)
     elseif frames == 8020 then irda_carrier:set_value(0)
@@ -261,8 +269,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--mame", type=Path, default=DEFAULT_MAME)
     parser.add_argument("--rompath", type=Path, default=DEFAULT_ROMPATH)
     parser.add_argument("--workdir", type=Path, default=DEFAULT_WORKDIR)
-    parser.add_argument("--frames", type=int, default=9200)
+    parser.add_argument("--frames", type=int, default=11800)
     parser.add_argument("--timeout", type=float, default=900)
+    parser.add_argument("--sender-first", default="alice")
+    parser.add_argument("--sender-last", default="sender")
+    parser.add_argument("--receiver-first", default="bob")
+    parser.add_argument("--receiver-last", default="receiver")
+    parser.add_argument(
+        "--record",
+        action="store_true",
+        help="record each native LCD stream as a MAME MNG",
+    )
     parser.add_argument(
         "--item",
         choices=("name-card", "notebook"),
@@ -283,6 +300,7 @@ def _command(
     run_dir: Path,
     lua_path: Path,
     debug_counters: bool,
+    record: bool = False,
 ) -> list[str]:
     command = [
         str(mame),
@@ -314,6 +332,8 @@ def _command(
     ]
     if debug_counters:
         command.extend(["-debug", "-debugger", "none"])
+    if record:
+        command.extend(["-mngwrite", str(run_dir / "recording.mng")])
     return command
 
 
@@ -402,11 +422,16 @@ def decode_sir_frames(data: bytes) -> list[bytes]:
     return frames
 
 
-def item_payload_present(item: str, data: bytes) -> bool:
+def item_payload_present(
+    item: str, data: bytes, sender_name: str = "alice Sender"
+) -> bool:
     """Distinguish the two serialized item bodies in the sender stream."""
     if item == "notebook":
         return b"Note Card" in data
-    return data.count(b"alice Sender") >= 3 and b"Note Card" not in data
+    return (
+        data.lower().count(sender_name.lower().encode()) >= 3
+        and b"Note Card" not in data
+    )
 
 
 def image_region_changed(first: Path, second: Path, box: tuple[int, ...]) -> bool:
@@ -433,8 +458,8 @@ def run_regression(args: argparse.Namespace) -> int:
     root.mkdir(parents=True)
     peers: list[Peer] = []
     specs = (
-        ("sender", "alice", "sender", True),
-        ("receiver", "bob", "receiver", False),
+        ("sender", args.sender_first, args.sender_last, True),
+        ("receiver", args.receiver_first, args.receiver_last, False),
     )
     selector = selectors.DefaultSelector()
 
@@ -463,6 +488,7 @@ def run_regression(args: argparse.Namespace) -> int:
                     run_dir,
                     lua_path,
                     args.debug_counters,
+                    args.record,
                 ),
                 cwd=mame.parent,
                 stdout=subprocess.PIPE,
@@ -554,16 +580,18 @@ def run_regression(args: argparse.Namespace) -> int:
             receiver_frames = decode_sir_frames(receiver_data)
             if len(sender_frames) < 10 or len(receiver_frames) < 2:
                 failures.append("IrDA streams did not contain complete SIR frames")
-            if b"bob Receiver" not in receiver_data:
+            sender_name = f"{args.sender_first} {args.sender_last}"
+            receiver_name = f"{args.receiver_first} {args.receiver_last}"
+            if receiver_name.lower().encode() not in receiver_data.lower():
                 failures.append("sender did not discover the receiver by name")
-            if b"alice Sender" not in sender_data:
+            if sender_name.lower().encode() not in sender_data.lower():
                 failures.append("receiver did not identify the sender")
             if (
-                b"Dear bob," not in sender_data
+                f"Dear {args.receiver_first.lower()},".encode() not in sender_data
                 or b"The following item was received via beam:" not in sender_data
             ):
                 failures.append("sender did not transmit the Beam envelope")
-            if not item_payload_present(args.item, sender_data):
+            if not item_payload_present(args.item, sender_data, sender_name):
                 failures.append(f"sender did not transmit the {args.item} item body")
             expected_snapshots = (
                 root / "sender" / "snapshots" / "beam-peer-discovery.png",

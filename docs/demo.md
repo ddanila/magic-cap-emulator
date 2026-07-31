@@ -102,8 +102,56 @@ make the GIF small and watchable:
 Reference numbers for the committed tour: 8001 frames captured, 175 kept,
 480×320, 39.7 s, 228 KB.
 
+## Paired Beam and fax demo
+
+[`tools/paired_demo.py`](../tools/paired_demo.py) records a second,
+two-DataRover scenario:
+
+1. Sam Altman's DataRover discovers Danila Sukharev's device over IrDA and
+   Beams Sam's name card.
+2. Sam's device displays a clearly marked parody job invitation and opens the
+   real Magic Cap Fax workflow.
+3. The built-in software modems dial, ring, negotiate, and transfer the
+   rendered screen to Danila's DataRover.
+4. Danila receives the page through the normal Phone Status **receive fax**
+   action and retained In-box storage.
+
+The invitation says **PARODY DEMO — NOT A REAL OFFER**. Its signature comes
+from Wikimedia Commons'
+[Sam Altman autograph SVG](https://commons.wikimedia.org/wiki/File:Sam_altman_autograph_2024.svg),
+which Commons identifies as public domain under its signature policy. The
+unaltered source SVG is committed at
+[`docs/media/sam-altman-signature.svg`](media/sam-altman-signature.svg).
+
+Run the complete workflow and produce the committed side-by-side GIF with:
+
+```sh
+python3 tools/paired_demo.py
+```
+
+The tool builds the invitation at native 480×320 resolution, converts it to
+the DataRover's real 2 bpp framebuffer layout, runs the existing Beam and
+paired-fax acceptances with recording enabled, decodes the four MAME MNG
+streams, and combines them into
+[`docs/media/datarover-beam-fax-demo.gif`](media/datarover-beam-fax-demo.gif).
+The recording starts after owner setup, at the two desktops, rather than
+replaying first-boot calibration.
+
+Reference numbers for the committed paired demo: 14,424 captured LCD frames,
+243 kept, 960×348, 91.0 s, 202 KB.
+
+Large MNG, PNG, NVRAM, line-audio, and protocol artifacts stay under
+`$MAGIC_CAP_ASSETS/runtime/paired-demo/`. A completed run can be re-rendered
+without repeating the emulation:
+
+```sh
+python3 tools/paired_demo.py \
+  --skip-runs "$MAGIC_CAP_ASSETS/runtime/paired-demo/<run>"
+```
+
 ## Artifacts
 
-Recordings live outside the repo under `$MAGIC_CAP_ASSETS/demo/` with the
-rest of the large assets; only the README animation
-([`docs/media/datarover-tour.gif`](media/datarover-tour.gif)) is committed.
+Recordings live outside the repo with the rest of the large assets. Only the
+two compact README animations are committed:
+[`datarover-tour.gif`](media/datarover-tour.gif) and
+[`datarover-beam-fax-demo.gif`](media/datarover-beam-fax-demo.gif).
