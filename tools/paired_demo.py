@@ -249,8 +249,10 @@ def main(argv: list[str] | None = None) -> int:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
         run_dir = args.workdir.expanduser().resolve() / f"{stamp}-{os.getpid()}"
         beam_work = run_dir / "beam"
+        owner_work = run_dir / "fax-answer-owner"
         fax_work = run_dir / "fax"
         beam_work.mkdir(parents=True)
+        owner_work.mkdir()
         fax_work.mkdir()
         _invitation_png, invitation_raw = make_invitation(run_dir)
 
@@ -266,17 +268,46 @@ def main(argv: list[str] | None = None) -> int:
                 "--workdir",
                 str(beam_work),
                 "--sender-first",
-                "sam",
+                "Sam",
                 "--sender-last",
-                "altman",
+                "Altman",
                 "--receiver-first",
-                "danila",
+                "Danila",
                 "--receiver-last",
-                "sukharev",
+                "Sukharev",
                 "--record",
             ]
         )
         beam_dir = latest_child(beam_work, before)
+
+        # The Beam receiver now owns Sam's card. Prepare the same Danila-owned
+        # device independently for Fax so the incoming sender identity does
+        # not trigger Magic Cap's duplicate-card conversation over page two.
+        before = set(owner_work.iterdir())
+        command(
+            [
+                sys.executable,
+                str(REPO_ROOT / "tools" / "beam_regression.py"),
+                "--mame",
+                str(args.mame),
+                "--rompath",
+                str(args.rompath),
+                "--workdir",
+                str(owner_work),
+                "--sender-first",
+                "Danila",
+                "--sender-last",
+                "Sukharev",
+                "--receiver-first",
+                "Demo",
+                "--receiver-last",
+                "Peer",
+                "--frames",
+                "9300",
+                "--setup-only",
+            ]
+        )
+        owner_dir = latest_child(owner_work, before)
 
         before = set(fax_work.iterdir())
         command(
@@ -290,7 +321,7 @@ def main(argv: list[str] | None = None) -> int:
                 "--workdir",
                 str(fax_work),
                 "--nvram-source",
-                str(beam_dir / "receiver" / "nvram"),
+                str(owner_dir / "sender" / "nvram"),
                 "--origin-nvram-source",
                 str(beam_dir / "sender" / "nvram"),
                 "--recipient-first",
@@ -299,7 +330,7 @@ def main(argv: list[str] | None = None) -> int:
                 "Sukharev",
                 "--origin-screen-raw",
                 str(invitation_raw),
-                "--verify-stored-page",
+                "--open-received-fax",
                 "--record",
             ]
         )
@@ -340,6 +371,8 @@ def main(argv: list[str] | None = None) -> int:
     paths = sorted(combined.glob("*.png"))
     runs = frame_runs(paths)
     delays = delays_ms(runs)
+    if delays:
+        delays[-1] = 5000
     args.output = args.output.expanduser().resolve()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     write_gif(runs, delays, args.output)

@@ -116,6 +116,13 @@ two-DataRover scenario:
 4. Danila receives the page through the normal Phone Status **receive fax**
    action and retained In-box storage.
 
+The DataRover ROM stores and identifies the received second page, but its Fax
+viewer currently exposes that transferred screen as a blank gray viewport.
+After Danila opens page two, the demo redisplays the same native 2 bpp source
+buffer for the final five-second reading beat. The modem negotiation, image
+transfer, two-page stationery, and In-box storage before that display step are
+all the real paired-emulator workflow.
+
 The invitation says **PARODY DEMO — NOT A REAL OFFER**. Its signature comes
 from Wikimedia Commons'
 [Sam Altman autograph SVG](https://commons.wikimedia.org/wiki/File:Sam_altman_autograph_2024.svg),
@@ -137,8 +144,8 @@ streams, and combines them into
 The recording starts after owner setup, at the two desktops, rather than
 replaying first-boot calibration.
 
-Reference numbers for the committed paired demo: 14,424 captured LCD frames,
-243 kept, 960×348, 91.0 s, 202 KB.
+Reference numbers for the committed paired demo: 17,832 captured LCD frames,
+264 kept, 960×348, 112.6 s, 242 KB.
 
 Large MNG, PNG, NVRAM, line-audio, and protocol artifacts stay under
 `$MAGIC_CAP_ASSETS/runtime/paired-demo/`. A completed run can be re-rendered

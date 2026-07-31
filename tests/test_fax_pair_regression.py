@@ -25,8 +25,8 @@ class ScriptTests(unittest.TestCase):
             "press(345, 177)",
             'emu.keypost("6505551212")',
             "press(421, 143)",
-            'emu.keypost("Fax")',
-            'emu.keypost("Peer")',
+            'emu.keypost("Setup")',
+            'emu.keypost("Contact")',
             "press(347, 111)",
             "press(326, 210)",
             "press(307, 135)",
@@ -39,6 +39,9 @@ class ScriptTests(unittest.TestCase):
             self.assertIn(action, script)
         self.assertIn('snapshot("fax-addressed.png")', script)
         self.assertIn('snapshot("fax-origin-active.png")', script)
+        self.assertIn("frames == 9500 then press(345, 177)", script)
+        self.assertIn('emu.keypost("Fax")', script)
+        self.assertEqual(script.count('emu.keypost("Fax")'), 1)
 
     def test_answer_uses_byte_gate_ring_and_receive_fax(self) -> None:
         script = fax_pair.automation_script("answer", Path("/tmp/ring.trigger"))
@@ -48,6 +51,20 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(script.count("ring:set_value(0)"), 1)
         self.assertIn("press(220, 156)", script)
         self.assertIn('snapshot("fax-answer-active.png")', script)
+
+    def test_demo_answer_opens_and_reads_received_page(self) -> None:
+        script = fax_pair.automation_script(
+            "answer", Path("/tmp/ring.trigger"), open_received_fax=True
+        )
+
+        self.assertIn("ring_start + 4900 then", script)
+        self.assertIn("press(205, 91)", script)
+        self.assertIn("press(155, 57)", script)
+        self.assertIn("press(92, 230)", script)
+        self.assertIn("press(248, 11)", script)
+        self.assertIn("ring_start + 5900 then", script)
+        self.assertIn("load_screen()", script)
+        self.assertIn('snapshot("fax-received-invitation.png")', script)
 
     def test_origin_ready_shortcut_still_presses_visible_send(self) -> None:
         script = fax_pair.automation_script(
@@ -101,7 +118,7 @@ class ScriptTests(unittest.TestCase):
             "press(155, 57)",
             "press(92, 230)",
             "press(248, 11)",
-            "press(238, 263)",
+            "press(451, 254)",
         ):
             self.assertIn(action, script)
         self.assertIn('snapshot("04-inbox.png")', script)

@@ -92,14 +92,25 @@ def name_key_steps(text: str, start_frame: int) -> str:
     if not text or unsupported:
         detail = ", ".join(repr(item) for item in unsupported)
         raise ValueError(f"names must contain letters a-z only: {detail}")
+    actions: list[tuple[int, tuple[int, int]]] = []
+    if text[0].isupper():
+        actions.append((0, (39, 302)))
+        actions.append((1, KEY_POSITIONS[text[0].lower()]))
+        actions.extend(
+            (index + 1, KEY_POSITIONS[character.lower()])
+            for index, character in enumerate(text[1:], start=1)
+        )
+    else:
+        actions.extend(
+            (index, KEY_POSITIONS[character.lower()])
+            for index, character in enumerate(text)
+        )
     return "".join(
-        f"    elseif frames == {start_frame + index * NAME_KEY_INTERVAL} "
-        f"then press({KEY_POSITIONS[character.lower()][0]}, "
-        f"{KEY_POSITIONS[character.lower()][1]})\n"
+        f"    elseif frames == {start_frame + offset * NAME_KEY_INTERVAL} "
+        f"then press({position[0]}, {position[1]})\n"
         f"    elseif frames == "
-        f"{start_frame + 20 + index * NAME_KEY_INTERVAL} "
-        "then release()\n"
-        for index, character in enumerate(text)
+        f"{start_frame + offset * NAME_KEY_INTERVAL + 20} then release()\n"
+        for offset, position in actions
     ).rstrip()
 
 
@@ -114,8 +125,12 @@ def automation_script(
 ) -> str:
     """Drive owner setup and beam either a name card or Notebook page."""
     first_start = 4800
-    last_start = first_start + 100 + len(first_name) * NAME_KEY_INTERVAL
-    done_frame = last_start + (len(last_name) + 1) * NAME_KEY_INTERVAL
+    first_extra = NAME_KEY_INTERVAL if first_name[0].isupper() else 0
+    last_extra = NAME_KEY_INTERVAL if last_name[0].isupper() else 0
+    last_start = first_start + 100 + len(first_name) * NAME_KEY_INTERVAL + first_extra
+    done_frame = (
+        last_start + (len(last_name) + 1) * NAME_KEY_INTERVAL + last_extra
+    )
     ready_frame = done_frame + 2200
     first_steps = name_key_steps(first_name, first_start)
     last_steps = name_key_steps(last_name, last_start)
@@ -270,6 +285,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--rompath", type=Path, default=DEFAULT_ROMPATH)
     parser.add_argument("--workdir", type=Path, default=DEFAULT_WORKDIR)
     parser.add_argument("--frames", type=int, default=11800)
+    parser.add_argument(
+        "--setup-only",
+        action="store_true",
+        help="prepare and retain personalized owner NVRAM without a Beam transfer",
+    )
     parser.add_argument("--timeout", type=float, default=900)
     parser.add_argument("--sender-first", default="alice")
     parser.add_argument("--sender-last", default="sender")
@@ -449,8 +469,11 @@ def run_regression(args: argparse.Namespace) -> int:
     if not mame.is_file() or not rompath.is_dir():
         print("error: MAME executable or ROM path is missing", file=sys.stderr)
         return 2
-    if args.frames < 9020:
-        print("error: --frames must be at least 9020", file=sys.stderr)
+    minimum_frames = 8500 if args.setup_only else 9020
+    if args.frames < minimum_frames:
+        print(
+            f"error: --frames must be at least {minimum_frames}", file=sys.stderr
+        )
         return 2
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
@@ -571,6 +594,21 @@ def run_regression(args: argparse.Namespace) -> int:
             if not ((uart_a | uart_b) & PULSED_MODE_BIT):
                 failures.append(f"{peer.role} never selected a pulsed UART")
 
+        if args.setup_only:
+            expected = tuple(
+                root / role / "snapshots" / "owner-setup-complete.png"
+                for role in ("sender", "receiver")
+            )
+            if not all(path.is_file() for path in expected):
+                failures.append("owner setup snapshots are incomplete")
+            if failures:
+                print("FAIL: " + "; ".join(failures), file=sys.stderr)
+                print(f"Artifacts: {root}")
+                return 1
+            print("PASS: personalized owner NVRAM prepared for both devices")
+            print(f"Artifacts: {root}")
+            return 0
+
         if not all(peer.ir_tx for peer in peers):
             failures.append("IrDA traffic did not flow in both directions")
         else:
@@ -587,7 +625,8 @@ def run_regression(args: argparse.Namespace) -> int:
             if sender_name.lower().encode() not in sender_data.lower():
                 failures.append("receiver did not identify the sender")
             if (
-                f"Dear {args.receiver_first.lower()},".encode() not in sender_data
+                f"dear {args.receiver_first.lower()},".encode()
+                not in sender_data.lower()
                 or b"The following item was received via beam:" not in sender_data
             ):
                 failures.append("sender did not transmit the Beam envelope")

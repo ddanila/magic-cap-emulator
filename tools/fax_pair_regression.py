@@ -286,6 +286,7 @@ def automation_script(
     recipient_first: str = "Fax",
     recipient_last: str = "Peer",
     origin_screen_raw: Path | None = None,
+    open_received_fax: bool = False,
 ) -> str:
     """Drive the visible origin or answer workflow and trace its fax path."""
     if role not in ("origin", "answer"):
@@ -346,11 +347,11 @@ __LOAD_SCREEN_STEP__
     elseif frames == 3150 then press(421, 143)
     elseif frames == 3210 then release()
     elseif frames == 3300 then snapshot("fax-recipient-first-name.png")
-    elseif frames == 3450 then emu.keypost("Fax")
+    elseif frames == 3450 then emu.keypost("Setup")
     elseif frames == 3700 then press(370, 102)
     elseif frames == 3760 then release()
     elseif frames == 3780 then snapshot("fax-recipient-last-name.png")
-    elseif frames == 3800 then emu.keypost("Peer")
+    elseif frames == 3800 then emu.keypost("Contact")
     elseif frames == 4150 then press(428, 143)
     elseif frames == 4210 then release()
     elseif frames == 4300 then snapshot("fax-recipient-created.png")
@@ -379,7 +380,7 @@ __LOAD_SCREEN_STEP__
     elseif frames == 8100 then snapshot("fax-home-location-created.png")
 __RELOAD_SCREEN_STEP__
 
-    -- With Home now available, recreate the Fax and dial without the tutorial.
+    -- With Home now available, create the real recipient exactly once.
     elseif frames == 8500 then press(181, 301)
     elseif frames == 8560 then release()
     elseif frames == 8800 then press(205, 146)
@@ -391,10 +392,10 @@ __RELOAD_SCREEN_STEP__
     elseif frames == 9850 then emu.keypost("5551212")
     elseif frames == 10150 then press(421, 143)
     elseif frames == 10210 then release()
-    elseif frames == 10450 then emu.keypost("Fax")
+    elseif frames == 10450 then emu.keypost("__RECIPIENT_FIRST__")
     elseif frames == 10700 then press(370, 102)
     elseif frames == 10760 then release()
-    elseif frames == 10800 then emu.keypost("Peer")
+    elseif frames == 10800 then emu.keypost("__RECIPIENT_LAST__")
     elseif frames == 11150 then press(428, 143)
     elseif frames == 11210 then release()
     elseif frames == 11500 then press(347, 111)
@@ -410,8 +411,8 @@ __RELOAD_SCREEN_STEP__
     origin_steps = (
         origin_steps.replace("__LOAD_SCREEN_STEP__", load_screen_step.rstrip())
         .replace("__RELOAD_SCREEN_STEP__", reload_screen_step.rstrip())
-        .replace('emu.keypost("Fax")', f'emu.keypost("{recipient_first}")')
-        .replace('emu.keypost("Peer")', f'emu.keypost("{recipient_last}")')
+        .replace("__RECIPIENT_FIRST__", recipient_first)
+        .replace("__RECIPIENT_LAST__", recipient_last)
     )
     origin_ready_steps = """
     -- Diagnostic shortcut for retained state already at the addressed Fax.
@@ -421,7 +422,33 @@ __RELOAD_SCREEN_STEP__
     elseif frames == 2000 then snapshot("fax-origin-active.png")
     end
 """
-    answer_steps = """
+    answer_open_steps = """
+    elseif ring_start > 0 and frames == ring_start + 4900 then
+      press(205, 91)
+    elseif ring_start > 0 and frames == ring_start + 4920 then
+      release()
+    elseif ring_start > 0 and frames == ring_start + 5050 then
+      press(155, 57)
+    elseif ring_start > 0 and frames == ring_start + 5070 then
+      release()
+    elseif ring_start > 0 and frames == ring_start + 5250 then
+      snapshot("fax-received-stationery.png")
+    elseif ring_start > 0 and frames == ring_start + 5350 then
+      press(92, 230)
+    elseif ring_start > 0 and frames == ring_start + 5370 then
+      release()
+    elseif ring_start > 0 and frames == ring_start + 5550 then
+      snapshot("fax-received-cover-page.png")
+    elseif ring_start > 0 and frames == ring_start + 5650 then
+      press(248, 11)
+    elseif ring_start > 0 and frames == ring_start + 5670 then
+      release()
+    elseif ring_start > 0 and frames == ring_start + 5900 then
+      load_screen()
+    elseif ring_start > 0 and frames == ring_start + 6100 then
+      snapshot("fax-received-invitation.png")
+""" if open_received_fax else ""
+    answer_steps = f"""
     if ring_start == 0 then
       local trigger_file = io.open(ring_trigger_path, "r")
       if trigger_file ~= nil then
@@ -442,6 +469,7 @@ __RELOAD_SCREEN_STEP__
       release()
     elseif ring_start > 0 and frames == ring_start + 1500 then
       snapshot("fax-answer-active.png")
+{answer_open_steps.rstrip()}
     end
 """
     if role == "origin":
@@ -658,7 +686,7 @@ emu.register_frame_done(function()
   elseif frames == 4600 then press(248, 11)
   elseif frames == 4620 then release()
   elseif frames == 5000 then screen:snapshot("07-duplicate-name-card.png")
-  elseif frames == 5200 then press(238, 263)
+  elseif frames == 5200 then press(451, 254)
   elseif frames == 5220 then release()
   elseif frames == 5500 then screen:snapshot("08-fax-page.png")
   elseif frames == {result_frame} then
@@ -826,6 +854,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="record each native LCD stream as a MAME MNG",
     )
+    parser.add_argument(
+        "--open-received-fax",
+        action="store_true",
+        help="open the received fax through the In box and hold on page two",
+    )
     parser.add_argument("--system", default="datarover840")
     parser.add_argument(
         "--ring-trigger-bytes",
@@ -958,11 +991,16 @@ def run_regression(args: argparse.Namespace) -> int:
                     role,
                     ring_trigger,
                     origin_result_frame=5000 if args.origin_ready else 16500,
-                    answer_result_offset=(4800 if args.verify_stored_page else 3600),
+                    answer_result_offset=(
+                        6400
+                        if args.open_received_fax
+                        else (4800 if args.verify_stored_page else 3600)
+                    ),
                     origin_ready=args.origin_ready,
                     recipient_first=args.recipient_first,
                     recipient_last=args.recipient_last,
                     origin_screen_raw=args.origin_screen_raw,
+                    open_received_fax=args.open_received_fax,
                 ),
                 encoding="utf-8",
             )
@@ -1037,7 +1075,9 @@ def run_regression(args: argparse.Namespace) -> int:
 
         for role, process in processes.items():
             try:
-                output, _ = process.communicate(timeout=600)
+                output, _ = process.communicate(
+                    timeout=900 if args.open_received_fax else 600
+                )
             except subprocess.TimeoutExpired:
                 trigger_error.append(f"{role} timed out after 600 seconds")
                 process.kill()
