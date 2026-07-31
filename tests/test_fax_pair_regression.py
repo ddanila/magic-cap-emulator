@@ -39,6 +39,7 @@ class ScriptTests(unittest.TestCase):
             self.assertIn(action, script)
         self.assertIn('snapshot("fax-addressed.png")', script)
         self.assertIn('snapshot("fax-origin-active.png")', script)
+        self.assertIn("frames == 17000 then press(414, 84)", script)
         self.assertIn("frames == 9500 then press(345, 177)", script)
         self.assertIn('emu.keypost("Fax")', script)
         self.assertEqual(script.count('emu.keypost("Fax")'), 1)

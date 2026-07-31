@@ -406,6 +406,12 @@ __RELOAD_SCREEN_STEP__
     elseif frames == 12200 then press(326, 210)
     elseif frames == 12260 then release()
     elseif frames == 13000 then snapshot("fax-origin-active.png")
+    elseif frames == 17000 then press(414, 84)
+    elseif frames == 17020 then release()
+    elseif frames == 17500 then press(414, 84)
+    elseif frames == 17520 then release()
+    elseif frames == 18000 then press(414, 84)
+    elseif frames == 18020 then release()
     end
 """
     origin_steps = (

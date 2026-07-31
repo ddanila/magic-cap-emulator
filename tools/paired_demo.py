@@ -197,6 +197,7 @@ def paired_frames(
     destination: Path,
     sequence: int,
     title: str,
+    freeze_left_tail: int = 0,
 ) -> int:
     destination.mkdir(exist_ok=True)
     count = max(len(left), len(right))
@@ -204,7 +205,10 @@ def paired_frames(
     label_font = font(15, bold=True)
     title_font = font(13, bold=True)
     for index in range(start, count):
-        with Image.open(left[min(index, len(left) - 1)]) as left_image:
+        left_index = min(index, len(left) - 1)
+        if freeze_left_tail and index >= count - freeze_left_tail:
+            left_index = 0
+        with Image.open(left[left_index]) as left_image:
             with Image.open(right[min(index, len(right) - 1)]) as right_image:
                 canvas = Image.new("L", (960, 348), 255)
                 canvas.paste(left_image.convert("L"), (0, 28))
@@ -367,6 +371,7 @@ def main(argv: list[str] | None = None) -> int:
         combined,
         sequence,
         "Built-in modem fax",
+        freeze_left_tail=300,
     )
     paths = sorted(combined.glob("*.png"))
     runs = frame_runs(paths)

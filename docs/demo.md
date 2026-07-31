@@ -121,7 +121,9 @@ viewer currently exposes that transferred screen as a blank gray viewport.
 After Danila opens page two, the demo redisplays the same native 2 bpp source
 buffer for the final five-second reading beat. The modem negotiation, image
 transfer, two-page stationery, and In-box storage before that display step are
-all the real paired-emulator workflow.
+all the real paired-emulator workflow. During that final reading beat, Sam's
+half is held on the last clean Desk view so the ROM's late post-call status
+alert does not obscure the completed demo.
 
 The invitation says **PARODY DEMO — NOT A REAL OFFER**. Its signature comes
 from Wikimedia Commons'
@@ -144,8 +146,8 @@ streams, and combines them into
 The recording starts after owner setup, at the two desktops, rather than
 replaying first-boot calibration.
 
-Reference numbers for the committed paired demo: 17,832 captured LCD frames,
-264 kept, 960×348, 112.6 s, 242 KB.
+Reference numbers for the committed paired demo: 17,844 captured LCD frames,
+264 kept, 960×348, 110.1 s, 235 KB.
 
 Large MNG, PNG, NVRAM, line-audio, and protocol artifacts stay under
 `$MAGIC_CAP_ASSETS/runtime/paired-demo/`. A completed run can be re-rendered

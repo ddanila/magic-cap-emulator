@@ -92,26 +92,7 @@ def name_key_steps(text: str, start_frame: int) -> str:
     if not text or unsupported:
         detail = ", ".join(repr(item) for item in unsupported)
         raise ValueError(f"names must contain letters a-z only: {detail}")
-    actions: list[tuple[int, tuple[int, int]]] = []
-    if text[0].isupper():
-        actions.append((0, (39, 302)))
-        actions.append((1, KEY_POSITIONS[text[0].lower()]))
-        actions.extend(
-            (index + 1, KEY_POSITIONS[character.lower()])
-            for index, character in enumerate(text[1:], start=1)
-        )
-    else:
-        actions.extend(
-            (index, KEY_POSITIONS[character.lower()])
-            for index, character in enumerate(text)
-        )
-    return "".join(
-        f"    elseif frames == {start_frame + offset * NAME_KEY_INTERVAL} "
-        f"then press({position[0]}, {position[1]})\n"
-        f"    elseif frames == "
-        f"{start_frame + offset * NAME_KEY_INTERVAL + 20} then release()\n"
-        for offset, position in actions
-    ).rstrip()
+    return f'    elseif frames == {start_frame} then emu.keypost("{text}")'
 
 
 def automation_script(
@@ -125,12 +106,8 @@ def automation_script(
 ) -> str:
     """Drive owner setup and beam either a name card or Notebook page."""
     first_start = 4800
-    first_extra = NAME_KEY_INTERVAL if first_name[0].isupper() else 0
-    last_extra = NAME_KEY_INTERVAL if last_name[0].isupper() else 0
-    last_start = first_start + 100 + len(first_name) * NAME_KEY_INTERVAL + first_extra
-    done_frame = (
-        last_start + (len(last_name) + 1) * NAME_KEY_INTERVAL + last_extra
-    )
+    last_start = first_start + 100 + len(first_name) * NAME_KEY_INTERVAL
+    done_frame = last_start + (len(last_name) + 1) * NAME_KEY_INTERVAL
     ready_frame = done_frame + 2200
     first_steps = name_key_steps(first_name, first_start)
     last_steps = name_key_steps(last_name, last_start)
@@ -620,9 +597,9 @@ def run_regression(args: argparse.Namespace) -> int:
                 failures.append("IrDA streams did not contain complete SIR frames")
             sender_name = f"{args.sender_first} {args.sender_last}"
             receiver_name = f"{args.receiver_first} {args.receiver_last}"
-            if receiver_name.lower().encode() not in receiver_data.lower():
+            if receiver_name.encode() not in receiver_data:
                 failures.append("sender did not discover the receiver by name")
-            if sender_name.lower().encode() not in sender_data.lower():
+            if sender_name.encode() not in sender_data:
                 failures.append("receiver did not identify the sender")
             if (
                 f"dear {args.receiver_first.lower()},".encode()

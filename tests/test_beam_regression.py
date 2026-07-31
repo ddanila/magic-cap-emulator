@@ -22,16 +22,11 @@ SPEC.loader.exec_module(beam)
 class NameAutomationTests(unittest.TestCase):
     def test_generates_paced_keyboard_taps(self) -> None:
         steps = beam.name_key_steps("az", 1000)
-        self.assertIn("frames == 1000 then press(33, 234)", steps)
-        self.assertIn("frames == 1100 then press(48, 269)", steps)
-        self.assertIn("frames == 1120 then release()", steps)
+        self.assertEqual(steps, '    elseif frames == 1000 then emu.keypost("az")')
 
     def test_capitalizes_a_name_with_the_onscreen_caps_key(self) -> None:
         steps = beam.name_key_steps("Sam", 1000)
-        self.assertIn("frames == 1000 then press(39, 302)", steps)
-        self.assertIn("frames == 1100 then press(76, 234)", steps)
-        self.assertIn("frames == 1200 then press(33, 234)", steps)
-        self.assertNotIn("frames == 1200 then press(39, 302)", steps)
+        self.assertEqual(steps, '    elseif frames == 1000 then emu.keypost("Sam")')
 
     def test_rejects_non_letter_names(self) -> None:
         with self.assertRaisesRegex(ValueError, "letters a-z only"):
