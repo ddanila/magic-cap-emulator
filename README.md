@@ -1,88 +1,36 @@
 # DataRover 840 / Magic Cap Emulator
 
-The first emulator for the [General Magic DataRover 840](https://pdamuseum.eu/pda/datarover840/)
-— the last and best Magic Cap communicator (1998), running Magic Cap 3.1 on a
-MIPS CPU. The emulator is built as a MAME driver (fork:
-[ddanila/mame](https://github.com/ddanila/mame), `custom` branch); this
-repository holds the reverse-engineering notes, analysis tooling, and
-regression harnesses.
+The first emulator for the
+[General Magic DataRover 840](https://pdamuseum.eu/pda/datarover840/), a 1998
+MIPS handheld running Magic Cap 3.1.
+
+The emulator is a MAME driver, developed in the `custom` branch of
+[ddanila/mame](https://github.com/ddanila/mame). This companion repository
+contains the setup tools, automated regressions, and reverse-engineering
+notes.
 
 ![The emulated DataRover 840 booting Magic Cap 3.1 and touring the desk, Stamps drawer, Hallway, Downtown and the Internet Center](docs/media/datarover-tour.gif)
 
-*A real recording of the emulated machine at its native 480×320, driven by a
-deterministic touchscreen script: boot → desk → Stamps → Hallway → the
-painting → Downtown → the Internet Center → Internet Mail rules. Static scenes
-are shortened; the animations play at their recorded speed. How it is made:
-[`docs/demo.md`](docs/demo.md).*
+*Magic Cap 3.1 at its native 480×320 resolution. The tour is driven by a
+deterministic touchscreen script; see
+[how the demo is recorded](docs/demo.md).*
 
-The emulated machine boots ROM build 3.1.2j to the interactive Magic Cap
-workbench: touchscreen, persistent storage, suspend/wake and retained
-power-on password protection, speaker output
-and microphone sound-stamp recording/playback, persistent system-sound
-reassignment through Magic Hat coupons, live AC charging with LCD/Magic
-Bus power-rail effects and configurable
-automatic shutoff, both PC Card slots, package installation over serial PCLink,
-IrDA beaming of name cards and Notebook pages between two emulated
-communicators, Web Browser 4.0 fetching local HTTP over
-both live PC Card PPP and the original EtherLink III driver, and deterministic
-native `https://` dispatch through Web Browser 3.5's TLS proxy Rule and Crypto
-Ancienne all work, each covered by an automated regression. The ordered Magic
-Bus chain also supports no-reset keyboard/SCTG tail attachment, addressed
-detachment and reinsertion while retaining working keyboard traffic. Blank,
-formatted, and authentic Simulator 1.x storage cards are also recognized; full
-built-in-storage backup/restore passes, and `Translation.pkg` copies a real
-1.x `new items` package into 3.1 Built-in storage without changing its source. A
-guarded loopback launcher also lets that corrected browser visit public HTTPS
-sites; see
-[the live-browsing instructions](docs/oldvcr-tls.md#browsing-the-live-web).
-The visible Telephone can enter `580`, reach its active call screen, drive
-the ROM's software DTMF generator, PhoneServer, DAA and dual DMA path, and
-have the automatic exchange decode its sampled output as `580`. The incoming
-side also qualifies a held ring envelope through the real ROM detector,
-notifies the phone and fax clients, and opens Phone Status with its
-**receive fax** and **answer** choices. Selecting **receive fax** now uses that
-live call context, opens the Receiving fax progress window, runs the ROM's fax
-modem and HDLC paths, and emits non-silent line PCM. The visible outbound Fax
-workflow creates and selects a recipient, renders the current screen, dials
-`5551212`, initializes fax mode, and starts telecom DMA. A full-duplex PCM
-bridge carries both streams between independent DataRovers; its combined test
-exchange mode supplies central-office dial tone before joining peer PCM. A
-clocked two-DataRover regression now runs both visible Fax workflows, exchanges
-fax and HDLC in both directions, and sustains error-free sender/receiver image
-data while the answerer visibly shows `Receiving page 1`. Its extended
-acceptance relaunches the retained receiver, finds the new fax in the In box,
-opens its one-page stationery, and renders `Fax page 1`.
-The same half-DMA process clock also lets the shipping generic V.32
-originating and answering roles negotiate matching rates, enter HDLC mode and
-complete the LAPM SABME/UA handshake. The real Internet Center dial-up actor
-also receives that LAPM-connect status, sends its first PPP bytes through the
-ROM modem, negotiates LCP with an answer-side peer, accepts an IPCP peer
-address, completes IPCP with its assigned `10.0.2.15` guest address, and sends
-a randomized IPv4/TCP SYN to `10.0.2.2:8080`. The answer peer derives the
-matching SYN-ACK, reassembles Magic Cap's split `GET / HTTP/1.0`, and returns
-a checksum-valid `HTTP/1.0 200 OK` response through the answer ROM. Web
-Browser renders `Magic Cap built-in modem works.` and then completes the
-deterministic connection's orderly four-way TCP close. A bounded host adapter
-can instead fetch an explicitly configured HTTP(S) URL, normalize its small
-response to HTTP/1.0, and carry that host-supplied body through the same path.
-It can also wait for Magic Cap's live request, map its path and query onto an
-explicit host base URL, forward its `Accept` and `User-Agent` headers, and
-return the fetched body through the modem. Responses up to 16 KiB are split at
-the MSS advertised by Magic Cap, advanced by cumulative TCP acknowledgements,
-and closed only after the browser has had time to consume the final segment.
-A source-built raw-IPv4 adapter now connects the same answer-ROM PPP path to
-rootless libslirp. It preserves PPP frames split across ROM reads, removes
-Ethernet padding, applies the receive-window limit required by the period TCP
-stack, and carries arbitrary TCP/UDP flows instead of synthesizing one
-connection. The product acceptance follows an HTTP redirect across two TCP
-connections and OCR-verifies the second page. The helper executable is built
-outside Git under `$MAGIC_CAP_ASSETS/runtime/build`; only its source is kept.
-The full status table, closed implementation roadmap, and evidence-limited
-hardware boundaries are in [`PLAN.md`](PLAN.md); the machine's
-hardware, history, and verification approach are in
-[`docs/background.md`](docs/background.md).
+## What works
 
-## Installation
+The emulator boots the original DataRover 840 ROM into the interactive Magic
+Cap workbench. Highlights include:
+
+- touchscreen, persistent storage, suspend/wake, batteries, and sound;
+- PC Cards, serial PCLink package installation, and IrDA beaming;
+- the built-in telephone and fax paths, including two-emulator calls;
+- networking through PC Card modem, EtherLink III, and the built-in modem;
+- automated regressions for the implemented hardware and user workflows.
+
+For the complete subsystem-by-subsystem status and known hardware boundaries,
+see [`PLAN.md`](PLAN.md). For the machine's history and the project's
+verification approach, see [`docs/background.md`](docs/background.md).
+
+## Quick start
 
 Full host prerequisites (macOS and Debian/Ubuntu package lists) and every
 regression command are in [`docs/mame-bringup.md`](docs/mame-bringup.md).
@@ -113,40 +61,43 @@ cd ../magic-cap-emulator
 tools/start_manual.sh
 ```
 
-At the welcome screen, touch it, then tap the three calibration targets
-(upper-left, lower-right, center) to reach the workbench. **End** is the
-power button.
+## First boot
 
-Nothing depends on where you keep the checkouts. The tools locate this repo
-from their own path, expect the MAME fork as a sibling (`../mame`; override
-per tool with `--mame`, or `MAME_DIR` for `start_manual.sh`), and keep every
-persistent input and generated artifact in the sibling `../magic-cap-assets`
-tree — set the `MAGIC_CAP_ASSETS` environment variable to move it anywhere
-else. Command examples in `docs/` assume the repository root as the working
-directory and write the asset tree as `$MAGIC_CAP_ASSETS`.
+At the welcome screen, click the display, then click the three calibration
+targets: upper-left, lower-right, and center. This opens the Magic Cap
+workbench. **End** is the power button.
+
+By default, the tools expect the MAME fork at `../mame` and keep ROMs,
+persistent state, and generated artifacts in `../magic-cap-assets`. Both
+locations are configurable; see the
+[full setup guide](docs/mame-bringup.md).
 
 ## Documentation
 
-| Doc | Contents |
-|---|---|
-| [`background.md`](docs/background.md) | The machine, the ROM, prior art, simulators, resources, verification philosophy |
-| [`developer-archives.md`](docs/developer-archives.md) | Public developer sources, adopted evidence, checksums and roadmap impact |
-| [`mame-bringup.md`](docs/mame-bringup.md) | Host setup, build, run, and the full regression suite |
-| [`local-tooling-handoff.md`](docs/local-tooling-handoff.md) | Optional Ghidra and reproducible Python analysis environment |
-| [`rom-layout.md`](docs/rom-layout.md) | ROM/SDK provenance, checksums, asset mirror, image format |
-| [`memory-map.md`](docs/memory-map.md) | Memory map, Dino peripheral block, Magic Bus, Glacier |
-| [`betty-registers.md`](docs/betty-registers.md) | Betty SIB ASIC registers, sound and telecom DMA |
-| [`tx39-cpu.md`](docs/tx39-cpu.md) | TX39/R3900 CPU audit, arithmetic extensions, and cache model |
-| [`power-wake.md`](docs/power-wake.md) | Power, sleep/wake path, batteries, AC and cover inputs |
-| [`pclink.md`](docs/pclink.md) | Recovered PCLink wire format and package-install regression |
-| [`modem.md`](docs/modem.md) | PC Card modem, Slirp PPP, Web Browser 4.0 acceptance |
-| [`builtin-modem.md`](docs/builtin-modem.md) | Built-in software modem and V.32 DSP boundary |
-| [`etherlink.md`](docs/etherlink.md) | 3Com 3C589 PC Card and HTTP over the original driver |
-| [`oldvcr-tls.md`](docs/oldvcr-tls.md) | Kaiser's field report and the proxy-assisted TLS regression |
-| [`irda.md`](docs/irda.md) | IrDA SIR transport and the two-machine Beam regression |
-| [`dev-rom.md`](docs/dev-rom.md) | 1998 development ROMs and the OS's own test suites |
-| [`user-guide.md`](docs/user-guide.md) | Product-guide acceptance map and coverage matrix |
-| [`demo.md`](docs/demo.md) | Recording the README animation |
+Start with:
+
+- [Project background](docs/background.md) — the hardware, ROM, history, and
+  verification philosophy.
+- [Setup and verification](docs/mame-bringup.md) — prerequisites, building,
+  running, and the regression suite.
+- [Status and plan](PLAN.md) — detailed implementation coverage and known
+  boundaries.
+- [User-guide coverage](docs/user-guide.md) — product workflows exercised by
+  the emulator.
+
+Technical deep dives:
+
+- **Core hardware:** [ROM layout](docs/rom-layout.md),
+  [memory map and Magic Bus](docs/memory-map.md),
+  [Betty ASIC](docs/betty-registers.md), [TX39 CPU](docs/tx39-cpu.md), and
+  [power management](docs/power-wake.md).
+- **Connectivity:** [PCLink](docs/pclink.md), [IrDA](docs/irda.md),
+  [PC Card modem](docs/modem.md), [built-in modem](docs/builtin-modem.md),
+  [EtherLink III](docs/etherlink.md), and
+  [TLS browsing](docs/oldvcr-tls.md).
+- **Research and development:** [developer archives](docs/developer-archives.md),
+  [development ROMs](docs/dev-rom.md), and
+  [local analysis tooling](docs/local-tooling-handoff.md).
 
 ## Repo layout
 
